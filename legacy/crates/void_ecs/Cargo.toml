@@ -1,0 +1,23 @@
+[package]
+name = "void_ecs"
+version.workspace = true
+edition.workspace = true
+description = "Archetype-based Entity Component System with dynamic registration"
+
+[features]
+default = ["std"]
+std = []
+simd-queries = []  # SIMD-accelerated queries
+parallel = []      # Parallel system execution
+
+[dependencies]
+void_core = { workspace = true, features = ["hot-reload"] }
+void_math = { workspace = true, features = ["serde"] }
+void_memory = { workspace = true }
+void_structures = { workspace = true }
+parking_lot = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+bincode = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

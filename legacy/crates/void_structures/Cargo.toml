@@ -1,0 +1,14 @@
+[package]
+name = "void_structures"
+version.workspace = true
+edition.workspace = true
+description = "Lock-free and high-performance data structures"
+
+[features]
+default = ["std"]
+std = []
+
+[dependencies]
+void_core = { workspace = true }
+void_memory = { workspace = true }
+crossbeam-utils = { workspace = true }

@@ -1,0 +1,44 @@
+[package]
+name = "void_asset_server"
+version.workspace = true
+edition.workspace = true
+description = "Real-time asset injection and hot-reload server for Metaverse Engine"
+
+[features]
+default = ["file-watcher"]
+file-watcher = ["notify"]
+remote = ["tokio", "tokio-tungstenite", "futures-util", "url"]
+
+[dependencies]
+void_asset = { workspace = true }
+void_render = { workspace = true }
+
+# File watching
+notify = { workspace = true, optional = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Image loading
+image = { workspace = true }
+
+# 3D model loading
+gltf = { workspace = true }
+
+# Concurrency
+parking_lot = { workspace = true }
+crossbeam-channel = { workspace = true }
+
+# Logging
+log = { workspace = true }
+
+# GPU types
+wgpu = { workspace = true }
+bytemuck = { workspace = true }
+
+# Remote asset source (optional)
+tokio = { workspace = true, optional = true }
+tokio-tungstenite = { workspace = true, optional = true }
+futures-util = { workspace = true, optional = true }
+url = { workspace = true, optional = true }

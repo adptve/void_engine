@@ -1,0 +1,17 @@
+[package]
+name = "void_graph"
+version.workspace = true
+edition.workspace = true
+description = "Visual scripting system compatible with Unreal Blueprint concepts"
+
+[features]
+default = ["std"]
+std = []
+compile = []  # Enable graph-to-bytecode compilation
+
+[dependencies]
+void_core = { workspace = true }
+void_structures = { workspace = true }
+void_ecs = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

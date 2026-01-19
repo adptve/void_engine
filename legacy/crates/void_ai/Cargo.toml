@@ -1,0 +1,13 @@
+[package]
+name = "void_ai"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "AI and navigation system for Void Engine"
+
+[dependencies]
+void_core = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]

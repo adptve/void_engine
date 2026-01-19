@@ -1,0 +1,9 @@
+[package]
+name = "void_event"
+version.workspace = true
+edition.workspace = true
+description = "Lock-free event system with priority support"
+
+[dependencies]
+void_core = { workspace = true }
+void_structures = { workspace = true }

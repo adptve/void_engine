@@ -1,0 +1,30 @@
+[package]
+name = "void_combat"
+version.workspace = true
+edition.workspace = true
+description = "Combat system with health, damage, and weapons for Void Engine"
+
+[features]
+default = []
+
+[dependencies]
+# Core engine types
+void_core = { workspace = true }
+void_ecs = { workspace = true }
+void_math = { workspace = true }
+void_event = { workspace = true }
+void_physics = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+
+# Thread-safe containers
+parking_lot = { workspace = true }
+
+# Logging
+log = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+[dev-dependencies]

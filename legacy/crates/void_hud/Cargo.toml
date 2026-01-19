@@ -1,0 +1,13 @@
+[package]
+name = "void_hud"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "HUD and UI elements for Void Engine"
+
+[dependencies]
+void_core = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]

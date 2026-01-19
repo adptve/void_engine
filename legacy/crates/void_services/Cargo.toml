@@ -1,0 +1,60 @@
+[package]
+name = "void_services"
+version = "0.1.0"
+edition = "2021"
+description = "System services layer for Void Engine (assets, network, audio, sessions)"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+# Workspace dependencies
+void_core = { path = "../void_core" }
+void_ir = { path = "../void_ir" }
+
+# Concurrency
+parking_lot = "0.12"
+crossbeam-channel = "0.5"
+
+# Async
+tokio = { version = "1.35", features = ["rt-multi-thread", "sync", "time", "fs", "io-util", "net"] }
+
+# WebSocket (using rustls for musl compatibility - no OpenSSL needed)
+tokio-tungstenite = { version = "0.24", default-features = false, features = ["connect", "rustls-tls-native-roots"] }
+futures-util = "0.3"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+bincode = "1.3"
+
+# Compression
+lz4_flex = "0.11"
+
+# UUID for entity/world IDs
+uuid = { version = "1.6", features = ["v4", "serde"] }
+
+# URL parsing
+url = "2.5"
+
+# Async trait
+async-trait = "0.1"
+
+# Logging
+log = "0.4"
+
+# Error handling
+thiserror = "1.0"
+
+# Path utilities
+base64 = "0.22"
+
+# Audio (optional, for real audio playback)
+rodio = { version = "0.19", optional = true }
+
+[features]
+default = []
+network = []
+# Audio playback backend using rodio/cpal
+audio-backend = ["dep:rodio"]
+
+[dev-dependencies]
+tokio = { version = "1.35", features = ["rt-multi-thread", "macros"] }

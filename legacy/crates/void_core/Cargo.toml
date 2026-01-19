@@ -1,0 +1,14 @@
+[package]
+name = "void_core"
+version.workspace = true
+edition.workspace = true
+description = "Core primitives for the Metaverse Engine - zero external dependencies"
+
+[features]
+default = ["std"]
+std = []
+hot-reload = ["std"]
+profiling = []
+
+[dependencies]
+# Zero external dependencies - only std

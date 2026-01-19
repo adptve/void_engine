@@ -1,0 +1,39 @@
+[package]
+name = "void_cpp"
+version.workspace = true
+edition.workspace = true
+description = "C++ native scripting support via FFI for Void Engine"
+
+[features]
+default = ["hot-reload"]
+hot-reload = ["notify"]
+
+[dependencies]
+# Dynamic library loading
+libloading = "0.8"
+
+# Serialization for state preservation
+serde = { workspace = true }
+bincode = { workspace = true }
+
+# Thread-safe containers
+parking_lot = { workspace = true }
+
+# Logging
+log = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# File watching for hot-reload
+notify = { workspace = true, optional = true }
+
+# Core engine types
+void_core = { workspace = true }
+void_ecs = { workspace = true }
+void_math = { workspace = true }
+void_event = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.10"
+toml = "0.8"

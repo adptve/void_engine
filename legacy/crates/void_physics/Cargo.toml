@@ -1,0 +1,37 @@
+[package]
+name = "void_physics"
+version.workspace = true
+edition.workspace = true
+description = "Physics system using Rapier 3D for Void Engine"
+
+[features]
+default = []
+debug-render = []
+
+[dependencies]
+# Physics engine
+rapier3d = { version = "0.22", features = ["simd-stable"] }
+
+# Core engine types
+void_core = { workspace = true }
+void_ecs = { workspace = true }
+void_math = { workspace = true }
+void_event = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+
+# Thread-safe containers
+parking_lot = { workspace = true }
+
+# Logging
+log = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Channels for event handling
+crossbeam-channel = { workspace = true }
+
+[dev-dependencies]
+approx = "0.5"

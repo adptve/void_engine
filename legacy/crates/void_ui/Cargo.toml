@@ -1,0 +1,14 @@
+[package]
+name = "void_ui"
+version.workspace = true
+edition.workspace = true
+description = "Immediate-mode UI toolkit with theming support for the Metaverse Engine"
+
+[features]
+default = ["std"]
+std = []
+
+[dependencies]
+void_math = { workspace = true }
+wgpu = { workspace = true }
+bytemuck = { workspace = true }

@@ -1,0 +1,14 @@
+[package]
+name = "void_memory"
+version.workspace = true
+edition.workspace = true
+description = "Custom memory allocators for the Metaverse Engine"
+
+[features]
+default = ["std"]
+std = []
+tracking = []  # Enable memory tracking/profiling
+
+[dependencies]
+void_core = { workspace = true }
+parking_lot = { workspace = true }

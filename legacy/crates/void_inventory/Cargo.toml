@@ -1,0 +1,13 @@
+[package]
+name = "void_inventory"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Inventory and item system for Void Engine"
+
+[dependencies]
+void_core = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
