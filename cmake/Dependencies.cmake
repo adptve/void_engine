@@ -84,6 +84,26 @@ FetchContent_Declare(
 )
 
 # ============================================================================
+# dr_libs - Single-file audio decoders (dr_wav, dr_flac, dr_mp3)
+# ============================================================================
+FetchContent_Declare(
+    dr_libs
+    GIT_REPOSITORY https://github.com/mackron/dr_libs.git
+    GIT_TAG        master
+    GIT_SHALLOW    TRUE
+)
+
+# ============================================================================
+# minimp3 - Minimalistic MP3 decoder
+# ============================================================================
+FetchContent_Declare(
+    minimp3
+    GIT_REPOSITORY https://github.com/lieff/minimp3.git
+    GIT_TAG        master
+    GIT_SHALLOW    TRUE
+)
+
+# ============================================================================
 # Make dependencies available
 # ============================================================================
 function(void_fetch_dependencies)
@@ -121,6 +141,22 @@ function(void_fetch_dependencies)
     set(TINYGLTF_BUILD_LOADER_EXAMPLE OFF CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(tinygltf)
     set(TINYGLTF_SOURCE_DIR ${tinygltf_SOURCE_DIR} PARENT_SCOPE)
+
+    # dr_libs (header-only audio decoders)
+    FetchContent_MakeAvailable(dr_libs)
+    if(NOT TARGET dr_libs)
+        add_library(dr_libs INTERFACE)
+        target_include_directories(dr_libs INTERFACE ${dr_libs_SOURCE_DIR})
+    endif()
+    set(DR_LIBS_SOURCE_DIR ${dr_libs_SOURCE_DIR} PARENT_SCOPE)
+
+    # minimp3 (header-only MP3 decoder)
+    FetchContent_MakeAvailable(minimp3)
+    if(NOT TARGET minimp3)
+        add_library(minimp3 INTERFACE)
+        target_include_directories(minimp3 INTERFACE ${minimp3_SOURCE_DIR})
+    endif()
+    set(MINIMP3_SOURCE_DIR ${minimp3_SOURCE_DIR} PARENT_SCOPE)
 
     message(STATUS "Dependencies fetched successfully")
 endfunction()

@@ -542,6 +542,75 @@ TextInputResult TextInput::draw(UiContext& ctx, std::uint64_t id, float x, float
         result.focused = true;
     }
 
+    // Handle keyboard input when focused
+    if (result.focused) {
+        // Handle text input
+        const auto& input = ctx.text_input();
+        if (!input.empty()) {
+            // Check max length
+            if (config.max_length == 0 || result.text.length() + input.length() <= config.max_length) {
+                result.text += input;
+                result.changed = true;
+            }
+        }
+
+        // Handle backspace
+        if (ctx.is_key_pressed(UiContext::Key::Backspace) && !result.text.empty()) {
+            // Handle UTF-8: find last character start
+            std::size_t pos = result.text.length();
+            while (pos > 0) {
+                --pos;
+                // UTF-8 continuation bytes start with 10xxxxxx
+                auto byte = static_cast<unsigned char>(result.text[pos]);
+                if ((byte & 0xC0) != 0x80) {
+                    // Found start of character
+                    break;
+                }
+            }
+            result.text.erase(pos);
+            result.changed = true;
+        }
+
+        // Handle delete key
+        if (ctx.is_key_pressed(UiContext::Key::Delete) && !result.text.empty()) {
+            // For simplicity, delete acts same as backspace (no cursor position tracking)
+            std::size_t pos = result.text.length();
+            while (pos > 0) {
+                --pos;
+                auto byte = static_cast<unsigned char>(result.text[pos]);
+                if ((byte & 0xC0) != 0x80) {
+                    break;
+                }
+            }
+            result.text.erase(pos);
+            result.changed = true;
+        }
+
+        // Handle enter/submit
+        if (ctx.is_key_pressed(UiContext::Key::Enter)) {
+            result.submitted = true;
+            if (!config.multiline) {
+                ctx.clear_focus();
+                result.focused = false;
+            }
+        }
+
+        // Handle escape to unfocus
+        if (ctx.is_key_pressed(UiContext::Key::Escape)) {
+            ctx.clear_focus();
+            result.focused = false;
+        }
+
+        // Handle Ctrl+A to select all (clear and prepare for new input)
+        if (ctx.is_ctrl_down() && ctx.is_key_pressed(UiContext::Key::A)) {
+            // For now, just select all by clearing (simple implementation)
+            // A full implementation would need selection state
+        }
+
+        // Handle Ctrl+V paste (platform-specific, not implemented here)
+        // Would require clipboard access which is platform-dependent
+    }
+
     // Draw background
     Color bg_color = result.focused ? theme.colors.input_bg.brighten(0.05f)
                                     : theme.colors.input_bg;
@@ -555,17 +624,36 @@ TextInputResult TextInput::draw(UiContext& ctx, std::uint64_t id, float x, float
     float text_x = x + padding;
     float text_y = y + padding;
 
-    if (text.empty() && !config.placeholder.empty()) {
+    if (result.text.empty() && !config.placeholder.empty()) {
         ctx.draw_text(config.placeholder, text_x, text_y, theme.colors.text_dim, scale);
     } else {
         std::string display_text = config.password
-            ? std::string(text.length(), '*')
-            : text;
-        ctx.draw_text(display_text, text_x, text_y, theme.colors.text, scale);
+            ? std::string(result.text.length(), '*')
+            : result.text;
 
-        // Draw cursor if focused
+        // Clip text if too wide (show end of text when editing)
+        float max_text_w = input_w - padding * 2 - 4.0f; // Leave room for cursor
+        float text_w = ctx.measure_text(display_text, scale);
+        std::string visible_text = display_text;
+
+        if (text_w > max_text_w && result.focused) {
+            // Show the end of the text when focused and text is too long
+            while (!visible_text.empty() && ctx.measure_text(visible_text, scale) > max_text_w) {
+                // Remove first UTF-8 character
+                std::size_t char_len = 1;
+                auto first_byte = static_cast<unsigned char>(visible_text[0]);
+                if ((first_byte & 0xF8) == 0xF0) char_len = 4;
+                else if ((first_byte & 0xF0) == 0xE0) char_len = 3;
+                else if ((first_byte & 0xE0) == 0xC0) char_len = 2;
+                visible_text.erase(0, char_len);
+            }
+        }
+
+        ctx.draw_text(visible_text, text_x, text_y, theme.colors.text, scale);
+
+        // Draw cursor if focused (blinking effect based on time would be nice but not essential)
         if (result.focused) {
-            float cursor_x = text_x + ctx.measure_text(display_text, scale);
+            float cursor_x = text_x + ctx.measure_text(visible_text, scale);
             ctx.draw_rect(cursor_x, text_y, 2.0f, text_h, theme.colors.text);
         }
     }

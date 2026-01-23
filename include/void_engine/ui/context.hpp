@@ -234,6 +234,79 @@ public:
     [[nodiscard]] bool is_clicked(const Rect& rect, std::uint32_t button = 0) const;
 
     // =========================================================================
+    // Keyboard Input
+    // =========================================================================
+
+    /// Key codes (matching GLFW/common conventions)
+    enum class Key : std::uint32_t {
+        Unknown = 0,
+        Space = 32,
+        Apostrophe = 39, Comma = 44, Minus = 45, Period = 46, Slash = 47,
+        Num0 = 48, Num1, Num2, Num3, Num4, Num5, Num6, Num7, Num8, Num9 = 57,
+        Semicolon = 59, Equal = 61,
+        A = 65, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z = 90,
+        LeftBracket = 91, Backslash = 92, RightBracket = 93, GraveAccent = 96,
+        Escape = 256, Enter = 257, Tab = 258, Backspace = 259,
+        Insert = 260, Delete = 261, Right = 262, Left = 263, Down = 264, Up = 265,
+        PageUp = 266, PageDown = 267, Home = 268, End = 269,
+        CapsLock = 280, ScrollLock = 281, NumLock = 282, PrintScreen = 283, Pause = 284,
+        F1 = 290, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12 = 301,
+        LeftShift = 340, LeftControl = 341, LeftAlt = 342, LeftSuper = 343,
+        RightShift = 344, RightControl = 345, RightAlt = 346, RightSuper = 347,
+        KeyCount = 512
+    };
+
+    /// Key modifier flags
+    enum class KeyMod : std::uint32_t {
+        None = 0,
+        Shift = 1 << 0,
+        Control = 1 << 1,
+        Alt = 1 << 2,
+        Super = 1 << 3,
+        CapsLock = 1 << 4,
+        NumLock = 1 << 5
+    };
+
+    /// Set key state
+    void set_key(Key key, bool pressed);
+
+    /// Set modifier state
+    void set_modifiers(std::uint32_t mods);
+
+    /// Check if key is currently down
+    [[nodiscard]] bool is_key_down(Key key) const;
+
+    /// Check if key was just pressed this frame
+    [[nodiscard]] bool is_key_pressed(Key key) const;
+
+    /// Check if key was just released this frame
+    [[nodiscard]] bool is_key_released(Key key) const;
+
+    /// Get current modifier state
+    [[nodiscard]] std::uint32_t modifiers() const { return m_modifiers; }
+
+    /// Check if shift is held
+    [[nodiscard]] bool is_shift_down() const { return (m_modifiers & static_cast<std::uint32_t>(KeyMod::Shift)) != 0; }
+
+    /// Check if control is held
+    [[nodiscard]] bool is_ctrl_down() const { return (m_modifiers & static_cast<std::uint32_t>(KeyMod::Control)) != 0; }
+
+    /// Check if alt is held
+    [[nodiscard]] bool is_alt_down() const { return (m_modifiers & static_cast<std::uint32_t>(KeyMod::Alt)) != 0; }
+
+    /// Add text input character (UTF-8 codepoint)
+    void add_text_input(std::uint32_t codepoint);
+
+    /// Add text input string
+    void add_text_input(const std::string& text);
+
+    /// Get text input for this frame
+    [[nodiscard]] const std::string& text_input() const { return m_text_input; }
+
+    /// Clear text input
+    void clear_text_input();
+
+    // =========================================================================
     // Widget ID Management
     // =========================================================================
 
@@ -291,10 +364,16 @@ private:
     // Clipping
     std::stack<Rect> m_clip_stack;
 
-    // Input
+    // Mouse Input
     Point m_mouse_pos{0.0f, 0.0f};
     std::array<bool, 8> m_mouse_down{};
     std::array<bool, 8> m_mouse_down_prev{};
+
+    // Keyboard Input
+    std::array<bool, static_cast<std::size_t>(Key::KeyCount)> m_key_down{};
+    std::array<bool, static_cast<std::size_t>(Key::KeyCount)> m_key_down_prev{};
+    std::uint32_t m_modifiers = 0;
+    std::string m_text_input;
 
     // Widget IDs
     std::stack<std::uint64_t> m_id_stack;

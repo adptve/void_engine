@@ -36,6 +36,8 @@ UiContext::UiContext()
     , m_font(BitmapFont::create_builtin()) {
     m_mouse_down.fill(false);
     m_mouse_down_prev.fill(false);
+    m_key_down.fill(false);
+    m_key_down_prev.fill(false);
 }
 
 UiContext::~UiContext() = default;
@@ -67,8 +69,12 @@ void UiContext::begin_frame() {
 }
 
 void UiContext::end_frame() {
-    // Store previous mouse state for pressed/released detection
+    // Store previous input state for pressed/released detection
     m_mouse_down_prev = m_mouse_down;
+    m_key_down_prev = m_key_down;
+
+    // Clear text input for next frame
+    m_text_input.clear();
 }
 
 // =============================================================================
@@ -404,6 +410,72 @@ bool UiContext::is_hovered(const Rect& rect) const {
 
 bool UiContext::is_clicked(const Rect& rect, std::uint32_t button) const {
     return is_hovered(rect) && is_mouse_pressed(button);
+}
+
+// =============================================================================
+// Keyboard Input
+// =============================================================================
+
+void UiContext::set_key(Key key, bool pressed) {
+    auto idx = static_cast<std::size_t>(key);
+    if (idx < m_key_down.size()) {
+        m_key_down[idx] = pressed;
+    }
+}
+
+void UiContext::set_modifiers(std::uint32_t mods) {
+    m_modifiers = mods;
+}
+
+bool UiContext::is_key_down(Key key) const {
+    auto idx = static_cast<std::size_t>(key);
+    if (idx < m_key_down.size()) {
+        return m_key_down[idx];
+    }
+    return false;
+}
+
+bool UiContext::is_key_pressed(Key key) const {
+    auto idx = static_cast<std::size_t>(key);
+    if (idx < m_key_down.size()) {
+        return m_key_down[idx] && !m_key_down_prev[idx];
+    }
+    return false;
+}
+
+bool UiContext::is_key_released(Key key) const {
+    auto idx = static_cast<std::size_t>(key);
+    if (idx < m_key_down.size()) {
+        return !m_key_down[idx] && m_key_down_prev[idx];
+    }
+    return false;
+}
+
+void UiContext::add_text_input(std::uint32_t codepoint) {
+    // Convert UTF-32 codepoint to UTF-8
+    if (codepoint < 0x80) {
+        m_text_input += static_cast<char>(codepoint);
+    } else if (codepoint < 0x800) {
+        m_text_input += static_cast<char>(0xC0 | (codepoint >> 6));
+        m_text_input += static_cast<char>(0x80 | (codepoint & 0x3F));
+    } else if (codepoint < 0x10000) {
+        m_text_input += static_cast<char>(0xE0 | (codepoint >> 12));
+        m_text_input += static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
+        m_text_input += static_cast<char>(0x80 | (codepoint & 0x3F));
+    } else if (codepoint < 0x110000) {
+        m_text_input += static_cast<char>(0xF0 | (codepoint >> 18));
+        m_text_input += static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F));
+        m_text_input += static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
+        m_text_input += static_cast<char>(0x80 | (codepoint & 0x3F));
+    }
+}
+
+void UiContext::add_text_input(const std::string& text) {
+    m_text_input += text;
+}
+
+void UiContext::clear_text_input() {
+    m_text_input.clear();
 }
 
 // =============================================================================

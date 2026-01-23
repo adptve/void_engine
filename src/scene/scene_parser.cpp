@@ -239,9 +239,16 @@ EntityData parse_entity(const toml::table* tbl) {
     if (auto name = (*tbl)["name"].value<std::string>()) {
         result.name = *name;
     }
-    if (auto mesh = (*tbl)["mesh"].value<std::string>()) {
-        result.mesh = *mesh;
+
+    // Mesh can be a simple string "cube" or a table { path = "models/Fox.glb" }
+    if (auto mesh_str = (*tbl)["mesh"].value<std::string>()) {
+        result.mesh = *mesh_str;
+    } else if (auto mesh_tbl = (*tbl)["mesh"].as_table()) {
+        if (auto path = (*mesh_tbl)["path"].value<std::string>()) {
+            result.mesh = *path;
+        }
     }
+
     if (auto layer = (*tbl)["layer"].value<std::string>()) {
         result.layer = *layer;
     }

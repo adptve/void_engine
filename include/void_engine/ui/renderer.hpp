@@ -226,6 +226,10 @@ private:
     return std::make_unique<NullUiRenderer>();
 }
 
+/// Create an OpenGL renderer
+/// @note Requires an active OpenGL context
+[[nodiscard]] std::unique_ptr<IUiRenderer> create_opengl_renderer();
+
 // Note: GPU-specific renderers would be created by passing device/queue handles
 // Example: create_wgpu_renderer(WGPUDevice device, WGPUQueue queue, WGPUTextureFormat format)
 

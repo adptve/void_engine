@@ -3,9 +3,14 @@
 
 #include <void_engine/ui/theme.hpp>
 
+#include <toml++/toml.hpp>
+
 #include <algorithm>
+#include <chrono>
+#include <filesystem>
 #include <fstream>
 #include <mutex>
+#include <unordered_map>
 
 namespace void_ui {
 
@@ -358,6 +363,8 @@ struct ThemeRegistry::Impl {
     // Watch state
     std::string watch_path;
     bool watching = false;
+    std::unordered_map<std::string, std::filesystem::file_time_type> file_times;
+    std::chrono::steady_clock::time_point last_poll_time;
 
     // Callback
     ThemeChangedCallback on_theme_changed;
@@ -372,6 +379,7 @@ struct ThemeRegistry::Impl {
         themes["solarized_light"] = Theme::solarized_light();
 
         current_theme = themes["dark"];
+        last_poll_time = std::chrono::steady_clock::now();
     }
 };
 
@@ -485,18 +493,140 @@ bool ThemeRegistry::is_transitioning() const {
     return m_impl->transition_duration > 0.0f && !m_impl->transition_target.empty();
 }
 
+// Helper to parse Color from TOML array [r, g, b, a]
+static Color parse_color(const toml::array* arr) {
+    if (!arr || arr->size() < 3) return Color{};
+    Color c;
+    c.r = arr->get(0)->value_or(0.0f);
+    c.g = arr->get(1)->value_or(0.0f);
+    c.b = arr->get(2)->value_or(0.0f);
+    c.a = arr->size() >= 4 ? arr->get(3)->value_or(1.0f) : 1.0f;
+    return c;
+}
+
+// Helper to serialize Color to TOML array
+static toml::array color_to_toml(const Color& c) {
+    return toml::array{c.r, c.g, c.b, c.a};
+}
+
 bool ThemeRegistry::load_theme_from_file(const std::string& path) {
-    // TODO: Implement JSON theme loading
-    // For now, just return false
-    (void)path;
-    return false;
+    try {
+        auto tbl = toml::parse_file(path);
+
+        Theme theme;
+        theme.name = tbl["name"].value_or<std::string>("custom");
+
+        // Parse colors
+        if (auto colors = tbl["colors"].as_table()) {
+            auto& c = theme.colors;
+            if (auto v = colors->get_as<toml::array>("panel_bg")) c.panel_bg = parse_color(v);
+            if (auto v = colors->get_as<toml::array>("panel_border")) c.panel_border = parse_color(v);
+            if (auto v = colors->get_as<toml::array>("text")) c.text = parse_color(v);
+            if (auto v = colors->get_as<toml::array>("text_dim")) c.text_dim = parse_color(v);
+            if (auto v = colors->get_as<toml::array>("success")) c.success = parse_color(v);
+            if (auto v = colors->get_as<toml::array>("warning")) c.warning = parse_color(v);
+            if (auto v = colors->get_as<toml::array>("error")) c.error = parse_color(v);
+            if (auto v = colors->get_as<toml::array>("info")) c.info = parse_color(v);
+            if (auto v = colors->get_as<toml::array>("accent")) c.accent = parse_color(v);
+            if (auto v = colors->get_as<toml::array>("button_bg")) c.button_bg = parse_color(v);
+            if (auto v = colors->get_as<toml::array>("button_hover")) c.button_hover = parse_color(v);
+            if (auto v = colors->get_as<toml::array>("button_pressed")) c.button_pressed = parse_color(v);
+            if (auto v = colors->get_as<toml::array>("button_disabled")) c.button_disabled = parse_color(v);
+            if (auto v = colors->get_as<toml::array>("input_bg")) c.input_bg = parse_color(v);
+            if (auto v = colors->get_as<toml::array>("input_border")) c.input_border = parse_color(v);
+            if (auto v = colors->get_as<toml::array>("input_focus")) c.input_focus = parse_color(v);
+            if (auto v = colors->get_as<toml::array>("scrollbar_bg")) c.scrollbar_bg = parse_color(v);
+            if (auto v = colors->get_as<toml::array>("scrollbar_thumb")) c.scrollbar_thumb = parse_color(v);
+            if (auto v = colors->get_as<toml::array>("scrollbar_thumb_hover")) c.scrollbar_thumb_hover = parse_color(v);
+            if (auto v = colors->get_as<toml::array>("selection")) c.selection = parse_color(v);
+            if (auto v = colors->get_as<toml::array>("highlight")) c.highlight = parse_color(v);
+        }
+
+        // Parse style values
+        if (auto style = tbl["style"].as_table()) {
+            theme.text_scale = style->get("text_scale")->value_or(1.0f);
+            theme.line_height = style->get("line_height")->value_or(1.4f);
+            theme.padding = style->get("padding")->value_or(8.0f);
+            theme.border_radius = style->get("border_radius")->value_or(4.0f);
+            theme.border_width = style->get("border_width")->value_or(1.0f);
+            theme.animation_duration = style->get("animation_duration")->value_or(0.15f);
+            theme.scrollbar_width = style->get("scrollbar_width")->value_or(8.0f);
+        }
+
+        // Register the theme
+        register_theme(theme.name, std::move(theme));
+
+        // Track file modification time for hot-reload
+        {
+            std::lock_guard lock(m_impl->mutex);
+            std::error_code ec;
+            auto mtime = std::filesystem::last_write_time(path, ec);
+            if (!ec) {
+                m_impl->file_times[path] = mtime;
+            }
+        }
+
+        return true;
+    } catch (const toml::parse_error&) {
+        return false;
+    } catch (const std::exception&) {
+        return false;
+    }
 }
 
 bool ThemeRegistry::save_theme_to_file(const std::string& name, const std::string& path) const {
-    // TODO: Implement JSON theme saving
-    (void)name;
-    (void)path;
-    return false;
+    const Theme* theme = get_theme(name);
+    if (!theme) return false;
+
+    try {
+        toml::table tbl;
+        tbl.insert("name", theme->name);
+
+        // Colors table
+        toml::table colors;
+        const auto& c = theme->colors;
+        colors.insert("panel_bg", color_to_toml(c.panel_bg));
+        colors.insert("panel_border", color_to_toml(c.panel_border));
+        colors.insert("text", color_to_toml(c.text));
+        colors.insert("text_dim", color_to_toml(c.text_dim));
+        colors.insert("success", color_to_toml(c.success));
+        colors.insert("warning", color_to_toml(c.warning));
+        colors.insert("error", color_to_toml(c.error));
+        colors.insert("info", color_to_toml(c.info));
+        colors.insert("accent", color_to_toml(c.accent));
+        colors.insert("button_bg", color_to_toml(c.button_bg));
+        colors.insert("button_hover", color_to_toml(c.button_hover));
+        colors.insert("button_pressed", color_to_toml(c.button_pressed));
+        colors.insert("button_disabled", color_to_toml(c.button_disabled));
+        colors.insert("input_bg", color_to_toml(c.input_bg));
+        colors.insert("input_border", color_to_toml(c.input_border));
+        colors.insert("input_focus", color_to_toml(c.input_focus));
+        colors.insert("scrollbar_bg", color_to_toml(c.scrollbar_bg));
+        colors.insert("scrollbar_thumb", color_to_toml(c.scrollbar_thumb));
+        colors.insert("scrollbar_thumb_hover", color_to_toml(c.scrollbar_thumb_hover));
+        colors.insert("selection", color_to_toml(c.selection));
+        colors.insert("highlight", color_to_toml(c.highlight));
+        tbl.insert("colors", std::move(colors));
+
+        // Style table
+        toml::table style;
+        style.insert("text_scale", theme->text_scale);
+        style.insert("line_height", theme->line_height);
+        style.insert("padding", theme->padding);
+        style.insert("border_radius", theme->border_radius);
+        style.insert("border_width", theme->border_width);
+        style.insert("animation_duration", theme->animation_duration);
+        style.insert("scrollbar_width", theme->scrollbar_width);
+        tbl.insert("style", std::move(style));
+
+        // Write to file
+        std::ofstream file(path);
+        if (!file.is_open()) return false;
+        file << tbl;
+        return true;
+    } catch (const std::exception&) {
+        return false;
+    }
 }
 
 void ThemeRegistry::watch_directory(const std::string& path) {
@@ -512,8 +642,105 @@ void ThemeRegistry::stop_watching() {
 }
 
 void ThemeRegistry::poll_changes() {
-    // TODO: Implement file watching
-    // For now, no-op
+    namespace fs = std::filesystem;
+
+    // Get watch state under lock
+    std::string watch_path;
+    std::chrono::steady_clock::time_point last_poll;
+    {
+        std::lock_guard lock(m_impl->mutex);
+        if (!m_impl->watching || m_impl->watch_path.empty()) {
+            return;
+        }
+
+        // Rate limit polling to once per 500ms
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now - m_impl->last_poll_time);
+        if (elapsed.count() < 500) {
+            return;
+        }
+        m_impl->last_poll_time = now;
+        watch_path = m_impl->watch_path;
+    }
+
+    // Collect files to process (without holding lock)
+    struct FileToProcess {
+        std::string path;
+        fs::file_time_type mtime;
+        bool is_new;
+    };
+    std::vector<FileToProcess> files_to_process;
+
+    try {
+        std::error_code ec;
+        for (const auto& entry : fs::directory_iterator(watch_path, ec)) {
+            if (ec) break;
+            if (!entry.is_regular_file()) continue;
+
+            const auto& path = entry.path();
+            if (path.extension() != ".toml") continue;
+
+            std::string path_str = path.string();
+            auto current_mtime = fs::last_write_time(path, ec);
+            if (ec) continue;
+
+            // Check if file is new or modified
+            std::lock_guard lock(m_impl->mutex);
+            auto it = m_impl->file_times.find(path_str);
+            if (it == m_impl->file_times.end()) {
+                files_to_process.push_back({path_str, current_mtime, true});
+            } else if (it->second != current_mtime) {
+                it->second = current_mtime;
+                files_to_process.push_back({path_str, current_mtime, false});
+            }
+        }
+    } catch (const std::exception&) {
+        return;
+    }
+
+    // Process files without holding lock
+    for (const auto& file : files_to_process) {
+        if (load_theme_from_file(file.path)) {
+            // Get theme name and check if it's the active theme
+            std::string theme_name;
+            try {
+                auto tbl = toml::parse_file(file.path);
+                theme_name = tbl["name"].value_or<std::string>("");
+            } catch (...) {
+                continue;
+            }
+
+            // If this was the active theme, refresh it
+            std::lock_guard lock(m_impl->mutex);
+            if (!theme_name.empty() && theme_name == m_impl->active_theme_name) {
+                auto it = m_impl->themes.find(theme_name);
+                if (it != m_impl->themes.end()) {
+                    m_impl->current_theme = it->second;
+                    if (m_impl->on_theme_changed) {
+                        m_impl->on_theme_changed(theme_name);
+                    }
+                }
+            }
+        }
+    }
+
+    // Check for deleted files
+    try {
+        std::lock_guard lock(m_impl->mutex);
+        std::error_code ec;
+        std::vector<std::string> to_remove;
+        for (const auto& [path_str, _] : m_impl->file_times) {
+            if (!fs::exists(path_str, ec)) {
+                to_remove.push_back(path_str);
+            }
+        }
+        for (const auto& path_str : to_remove) {
+            m_impl->file_times.erase(path_str);
+        }
+    } catch (const std::exception&) {
+        // Silently ignore errors
+    }
 }
 
 void ThemeRegistry::set_theme_changed_callback(ThemeChangedCallback callback) {
