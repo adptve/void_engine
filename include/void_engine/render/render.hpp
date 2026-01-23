@@ -18,6 +18,7 @@
 
 #include "fwd.hpp"
 #include "resource.hpp"
+#include "texture.hpp"
 #include "mesh.hpp"
 #include "instancing.hpp"
 #include "material.hpp"
@@ -28,6 +29,7 @@
 #include "compositor.hpp"
 #include "spatial.hpp"
 #include "debug.hpp"
+#include "gl_renderer.hpp"
 
 namespace void_render {
 

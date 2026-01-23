@@ -64,6 +64,26 @@ FetchContent_Declare(
 )
 
 # ============================================================================
+# stb - Single-file public domain libraries (image loading, etc.)
+# ============================================================================
+FetchContent_Declare(
+    stb
+    GIT_REPOSITORY https://github.com/nothings/stb.git
+    GIT_TAG        master
+    GIT_SHALLOW    TRUE
+)
+
+# ============================================================================
+# tinygltf - Header-only glTF 2.0 loader
+# ============================================================================
+FetchContent_Declare(
+    tinygltf
+    GIT_REPOSITORY https://github.com/syoyo/tinygltf.git
+    GIT_TAG        v2.9.3
+    GIT_SHALLOW    TRUE
+)
+
+# ============================================================================
 # Make dependencies available
 # ============================================================================
 function(void_fetch_dependencies)
@@ -85,6 +105,22 @@ function(void_fetch_dependencies)
     set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(glfw)
+
+    # stb (header-only image library)
+    FetchContent_MakeAvailable(stb)
+    # Create an interface library for stb
+    if(NOT TARGET stb)
+        add_library(stb INTERFACE)
+        target_include_directories(stb INTERFACE ${stb_SOURCE_DIR})
+    endif()
+    set(STB_SOURCE_DIR ${stb_SOURCE_DIR} PARENT_SCOPE)
+
+    # tinygltf (header-only glTF loader)
+    set(TINYGLTF_HEADER_ONLY ON CACHE BOOL "" FORCE)
+    set(TINYGLTF_INSTALL OFF CACHE BOOL "" FORCE)
+    set(TINYGLTF_BUILD_LOADER_EXAMPLE OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(tinygltf)
+    set(TINYGLTF_SOURCE_DIR ${tinygltf_SOURCE_DIR} PARENT_SCOPE)
 
     message(STATUS "Dependencies fetched successfully")
 endfunction()

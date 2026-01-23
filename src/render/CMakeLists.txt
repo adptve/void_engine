@@ -5,7 +5,19 @@ find_package(OpenGL REQUIRED)
 void_add_module(NAME void_render
     SOURCES
         stub.cpp
+        backend.cpp
         gl_renderer.cpp
+        texture.cpp
+        shadow_renderer.cpp
+        instancing.cpp
+        render_graph.cpp
+        post_process.cpp
+        spatial.cpp
+        debug_renderer.cpp
+        gltf_loader.cpp
+        lod.cpp
+        temporal_effects.cpp
+        animation.cpp
     DEPENDENCIES
         void_core
         void_ir
@@ -27,6 +39,20 @@ target_link_libraries(void_render
         OpenGL::GL
         glm::glm
 )
+
+# Add stb for image loading (header-only)
+if(TARGET stb)
+    target_link_libraries(void_render PRIVATE stb)
+elseif(DEFINED STB_SOURCE_DIR)
+    target_include_directories(void_render PRIVATE ${STB_SOURCE_DIR})
+endif()
+
+# Add tinygltf for model loading (header-only)
+if(TARGET tinygltf)
+    target_link_libraries(void_render PRIVATE tinygltf)
+elseif(DEFINED TINYGLTF_SOURCE_DIR)
+    target_include_directories(void_render PRIVATE ${TINYGLTF_SOURCE_DIR})
+endif()
 
 # Vulkan backend
 if(VOID_HAS_VULKAN)
