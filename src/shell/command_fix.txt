@@ -1,0 +1,16 @@
+Fix needed in command.cpp:
+
+Line 223: Change
+    CommandId id = next_id_++;
+To:
+    CommandId id{next_id_++};
+
+Line 285: Change
+    if (id == 0) {
+To:
+    if (!id) {
+
+Line 351: Change
+    return it != name_to_id_.end() ? it->second : 0;
+To:
+    return it != name_to_id_.end() ? it->second : CommandId{};

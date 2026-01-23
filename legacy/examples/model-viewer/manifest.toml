@@ -1,0 +1,234 @@
+# =============================================================================
+# Model Viewer - Package Configuration
+# =============================================================================
+# Demonstrates all 18 phases of the Void GUI renderer capabilities
+
+[package]
+name = "model-viewer"
+display_name = "3D Model Viewer"
+version = "2.0.0"
+description = "Interactive 3D model viewer with PBR materials, advanced lighting, shadows, animations, LOD, streaming, and debug visualization"
+author = "Void Engine Team"
+license = "MIT"
+keywords = ["3d", "pbr", "viewer", "model", "materials", "animation", "lod", "streaming", "shadows"]
+categories = ["demo", "tools", "visualization"]
+
+# =============================================================================
+# Application Configuration
+# =============================================================================
+
+[app]
+app_type = "tool"
+scene = "scene.toml"
+
+# =============================================================================
+# Render Layers
+# =============================================================================
+# Layers define the rendering pipeline order
+
+[[app.layers]]
+name = "shadow"
+type = "shadow"
+priority = -200
+blend = "replace"
+
+[[app.layers]]
+name = "sky"
+type = "content"
+priority = -100
+blend = "replace"
+
+[[app.layers]]
+name = "grid"
+type = "content"
+priority = -10
+blend = "normal"
+
+[[app.layers]]
+name = "world"
+type = "content"
+priority = 0
+blend = "normal"
+
+[[app.layers]]
+name = "transparent"
+type = "content"
+priority = 20
+blend = "normal"
+
+[[app.layers]]
+name = "particles"
+type = "overlay"
+priority = 50
+blend = "additive"
+
+[[app.layers]]
+name = "ui"
+type = "overlay"
+priority = 100
+blend = "normal"
+
+[[app.layers]]
+name = "debug"
+type = "overlay"
+priority = 200
+blend = "normal"
+
+# =============================================================================
+# Custom Render Passes (Phase 13)
+# =============================================================================
+# Shadow cascade passes for directional light
+
+[[app.render_passes]]
+name = "shadow_cascade_0"
+type = "shadow"
+priority = -200
+enabled = true
+
+[app.render_passes.config]
+resolution = [2048, 2048]
+format = "depth32float"
+clear_depth = 1.0
+entity_filter = "shadow_casters"
+
+[app.render_passes.dependencies]
+requires = []
+provides = ["shadow_map_0"]
+
+[[app.render_passes]]
+name = "shadow_cascade_1"
+type = "shadow"
+priority = -199
+enabled = true
+
+[app.render_passes.config]
+resolution = [1024, 1024]
+format = "depth32float"
+
+[[app.render_passes]]
+name = "shadow_cascade_2"
+type = "shadow"
+priority = -198
+enabled = true
+
+[app.render_passes.config]
+resolution = [512, 512]
+format = "depth32float"
+
+# =============================================================================
+# LOD System Configuration (Phase 15)
+# =============================================================================
+
+[app.lod]
+enabled = true
+mode = "distance"
+default_mode = "cross_fade"
+cross_fade_duration = 0.3
+dither_pattern = "bayer8"
+hysteresis = 0.15
+update_frequency = 60.0
+
+# =============================================================================
+# Scene Streaming Configuration (Phase 16)
+# =============================================================================
+
+[app.streaming]
+enabled = false                      # Disabled for simple model viewer
+chunk_size = 64.0
+load_distance = 256.0
+unload_distance = 320.0
+max_concurrent_loads = 4
+max_memory_mb = 256
+preload_neighbors = true
+priority_bias = "camera_direction"
+
+[app.streaming.recycling]
+enabled = true
+pool_size = 500
+cooldown_frames = 60
+
+# =============================================================================
+# Precision Management (Phase 17)
+# =============================================================================
+
+[app.precision]
+enabled = false                      # Disabled for small scene
+origin_rebase_threshold = 5000.0
+camera_relative_rendering = false
+double_precision_physics = false
+coordinate_system = "right_handed"
+
+# =============================================================================
+# Debug and Introspection (Phase 18)
+# =============================================================================
+
+[app.debug]
+enabled = false                      # Toggle with F3
+show_stats_overlay = false
+stats_position = "top_left"
+
+[app.debug.visualization]
+bounds = false
+normals = false
+wireframe = false
+light_volumes = false
+shadow_cascades = false
+lod_colors = false
+chunk_boundaries = false
+collision_shapes = false
+skeleton = false
+velocity_vectors = false
+
+[app.debug.appearance]
+bounds_color = [0.0, 1.0, 0.0, 0.5]
+normal_color = [0.0, 0.5, 1.0, 1.0]
+normal_length = 0.1
+line_width = 1.0
+font_size = 14
+
+# =============================================================================
+# Spatial Query Settings (Phase 14)
+# =============================================================================
+
+[app.spatial]
+structure = "bvh"
+rebuild_threshold = 0.3
+max_depth = 16
+min_objects_per_node = 4
+
+# =============================================================================
+# Permissions
+# =============================================================================
+
+[app.permissions]
+scripts = false                      # Declarative scene, no scripts needed
+
+# =============================================================================
+# Resource Limits
+# =============================================================================
+
+[app.resources]
+max_entities = 1000
+max_memory = 268435456               # 256 MB
+max_layers = 8
+max_cpu_ms = 16.0
+max_draw_calls = 5000
+max_triangles = 10000000             # 10M triangles
+max_lights = 128
+max_shadow_casters = 4
+
+# =============================================================================
+# Asset Configuration
+# =============================================================================
+
+[assets]
+include = ["textures/", "models/"]
+compression = 6
+
+# =============================================================================
+# Platform Requirements
+# =============================================================================
+
+[platform]
+min_version = "2.0.0"
+required_features = ["webgpu"]

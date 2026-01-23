@@ -1,0 +1,207 @@
+# Weapon Definitions for Dungeon Crawler
+# Demonstrates void_combat weapon system (doc 24)
+
+# =============================================================================
+# PLAYER MELEE WEAPONS
+# =============================================================================
+
+[[weapons]]
+name = "rusty_sword"
+type = "melee"
+
+[weapons.melee]
+damage = 15
+damage_type = "physical"
+range = 2.0
+arc = 90
+swing_time = 0.4
+combo_window = 0.6
+combo_count = 3
+
+[weapons.melee.combo_multipliers]
+hit_1 = 1.0
+hit_2 = 1.2
+hit_3 = 1.5
+
+[weapons.effects]
+swing_sound = "audio/sfx/sword_swing.wav"
+hit_sound = "audio/sfx/sword_hit_flesh.wav"
+hit_effect = "effects/blood_splatter.toml"
+
+[[weapons]]
+name = "iron_sword"
+type = "melee"
+
+[weapons.melee]
+damage = 25
+damage_type = "physical"
+range = 2.2
+arc = 100
+swing_time = 0.35
+combo_window = 0.7
+combo_count = 3
+
+[weapons.effects]
+swing_sound = "audio/sfx/sword_swing.wav"
+hit_sound = "audio/sfx/sword_hit_flesh.wav"
+hit_effect = "effects/blood_splatter.toml"
+trail_effect = "effects/sword_trail.toml"
+
+[[weapons]]
+name = "fire_sword"
+type = "melee"
+
+[weapons.melee]
+damage = 35
+damage_type = "fire"
+range = 2.2
+arc = 110
+swing_time = 0.35
+combo_window = 0.7
+combo_count = 3
+
+[weapons.melee.status_effect]
+type = "burning"
+chance = 0.3
+duration = 3.0
+damage_per_tick = 5
+tick_rate = 0.5
+
+[weapons.effects]
+swing_sound = "audio/sfx/fire_sword_swing.wav"
+hit_sound = "audio/sfx/fire_hit.wav"
+hit_effect = "effects/fire_burst.toml"
+trail_effect = "effects/fire_trail.toml"
+idle_effect = "effects/fire_sword_glow.toml"
+
+[[weapons]]
+name = "demon_slayer"
+type = "melee"
+
+[weapons.melee]
+damage = 60
+damage_type = "physical"
+range = 2.5
+arc = 120
+swing_time = 0.3
+combo_window = 0.8
+combo_count = 4
+
+[weapons.melee.bonus_damage]
+vs_demons = 2.0  # Double damage against demon-tagged enemies
+
+[weapons.effects]
+swing_sound = "audio/sfx/legendary_swing.wav"
+hit_sound = "audio/sfx/legendary_hit.wav"
+hit_effect = "effects/holy_burst.toml"
+trail_effect = "effects/holy_trail.toml"
+idle_effect = "effects/demon_slayer_glow.toml"
+
+# =============================================================================
+# ENEMY WEAPONS
+# =============================================================================
+
+[[weapons]]
+name = "bone_sword"
+type = "melee"
+
+[weapons.melee]
+damage = 12
+damage_type = "physical"
+range = 1.8
+arc = 80
+swing_time = 0.5
+combo_window = 0.0
+combo_count = 1
+
+[weapons.effects]
+swing_sound = "audio/sfx/bone_swing.wav"
+hit_sound = "audio/sfx/bone_hit.wav"
+
+[[weapons]]
+name = "bone_bow"
+type = "projectile"
+
+[weapons.projectile]
+prefab = "prefabs/bone_arrow.toml"
+speed = 30.0
+damage = 18
+damage_type = "physical"
+gravity_scale = 0.1
+lifetime = 5.0
+fire_rate = 0.8
+
+[weapons.effects]
+fire_sound = "audio/sfx/bow_fire.wav"
+
+[[weapons]]
+name = "demon_claws"
+type = "melee"
+
+[weapons.melee]
+damage = 45
+damage_type = "fire"
+range = 3.0
+arc = 140
+swing_time = 0.6
+combo_window = 1.0
+combo_count = 2
+
+[weapons.melee.status_effect]
+type = "burning"
+chance = 0.5
+duration = 5.0
+damage_per_tick = 10
+tick_rate = 0.5
+
+[weapons.effects]
+swing_sound = "audio/sfx/demon_claw_swing.wav"
+hit_sound = "audio/sfx/demon_claw_hit.wav"
+hit_effect = "effects/demon_fire.toml"
+
+# =============================================================================
+# RANGED WEAPONS (for player expansion)
+# =============================================================================
+
+[[weapons]]
+name = "crossbow"
+type = "projectile"
+
+[weapons.projectile]
+prefab = "prefabs/crossbow_bolt.toml"
+speed = 50.0
+damage = 30
+damage_type = "physical"
+gravity_scale = 0.05
+lifetime = 8.0
+fire_rate = 0.5
+
+[weapons.effects]
+fire_sound = "audio/sfx/crossbow_fire.wav"
+reload_sound = "audio/sfx/crossbow_reload.wav"
+
+[[weapons]]
+name = "fire_staff"
+type = "projectile"
+
+[weapons.projectile]
+prefab = "prefabs/fireball.toml"
+speed = 25.0
+damage = 40
+damage_type = "fire"
+splash_radius = 3.0
+splash_damage_falloff = "linear"
+gravity_scale = 0.0
+lifetime = 5.0
+fire_rate = 0.3
+mana_cost = 15
+
+[weapons.projectile.status_effect]
+type = "burning"
+chance = 0.6
+duration = 4.0
+damage_per_tick = 8
+
+[weapons.effects]
+fire_sound = "audio/sfx/fireball_cast.wav"
+muzzle_flash = "effects/fire_muzzle.toml"

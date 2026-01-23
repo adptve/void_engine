@@ -1,0 +1,53 @@
+SHELL MODULE FIXES NEEDED AFTER VS CODE RESTART
+================================================
+
+The following files are locked by VS Code and need fixes:
+
+src/shell/command.cpp
+---------------------
+1. Line 223: Change `CommandId id = next_id_++;` to `CommandId id{next_id_++};`
+2. Line 285: Change `if (id == 0)` to `if (!id)`
+3. Line 351: Change `return it != name_to_id_.end() ? it->second : 0;` to
+             `return it != name_to_id_.end() ? it->second : CommandId{};`
+4. Line 355: Change `return find_id(name) != 0;` to `return static_cast<bool>(find_id(name));`
+5. Line 431: Change `AliasId id = next_alias_id_++;` to `AliasId id{next_alias_id_++};`
+
+src/shell/session.cpp
+---------------------
+This file has MAJOR API mismatches - the implementation uses outdated types/methods.
+A complete rewrite is needed to match the current headers. Key issues:
+
+1. Line 517: `std::to_string(id)` - SessionId needs `.value` accessor
+   Change: `std::to_string(id.value)`
+
+2. Line 611: `parser_.last_error()` doesn't exist
+   Change to: `parser_.error_message()`
+
+3. Lines 624, 627, 683, 686: `cmd.chain == CommandChain::And/Or`
+   - ParsedCommand doesn't have `chain` member
+   - Should use CommandLine::connectors instead
+
+4. Line 667: `cmd.pipeline` doesn't exist
+   - ParsedCommand has `pipe_to` instead
+
+5. Lines 738, 743: Iteration over args and flags
+   - CommandArgs doesn't have begin/end (not iterable)
+   - ParsedCommand doesn't have `flags` member
+   - Use `cmd.args.positional()` for iteration
+
+6. Lines 765-785: redirect_stdout, append_stdout, redirect_stdin don't exist
+   - ParsedCommand has `redirects` vector instead
+
+7. Lines 551-552, 574-575: Environment and History copy issues
+   - These classes have std::mutex members (not copyable)
+   - Need to define proper move constructors/assignments
+
+The session.cpp file needs a complete rewrite to match the current API in:
+- src/shell/types.hpp (ParsedCommand, CommandLine structures)
+- src/shell/parser.hpp (Parser class methods)
+- src/shell/session.hpp (Environment, History classes)
+
+ALREADY FIXED (before lock):
+- Added std::hash<AliasId> specialization to fwd.hpp
+- Added set_id() method to IShape interface in shape.hpp
+- Rewrote physics/body.cpp to match body.hpp

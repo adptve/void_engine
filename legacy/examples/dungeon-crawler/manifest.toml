@@ -1,0 +1,146 @@
+# Dungeon Crawler - Game Logic Systems Demo
+# Demonstrates: Physics, Combat, Triggers, Inventory, Audio, State, HUD, AI
+
+[package]
+name = "dungeon-crawler"
+display_name = "Dungeon Crawler"
+version = "1.0.0"
+description = "A complete game demo showcasing all Void Engine game logic systems: physics, combat, triggers, inventory, audio, game state, HUD, and AI navigation"
+author = "Void Engine Team"
+license = "MIT"
+keywords = ["game", "demo", "physics", "combat", "ai", "inventory"]
+categories = ["demo", "game", "showcase"]
+
+[app]
+app_type = "game"
+scene = "scene.toml"
+entry = "scripts/main.cpp"
+initial_scene = "scenes/level1.toml"
+
+# Rendering layers
+[[app.layers]]
+name = "world"
+type = "content"
+priority = 0
+blend = "replace"
+
+[[app.layers]]
+name = "effects"
+type = "content"
+priority = 50
+blend = "additive"
+
+[[app.layers]]
+name = "ui"
+type = "overlay"
+priority = 100
+blend = "normal"
+
+[app.permissions]
+scripts = true
+physics = true
+audio = true
+save_load = true
+
+[app.resources]
+max_entities = 1000
+max_memory = 134217728  # 128 MB
+max_layers = 4
+max_cpu_ms = 16.0
+
+# =============================================================================
+# Physics Configuration (void_physics)
+# =============================================================================
+[physics]
+enabled = true
+gravity = [0, -9.81, 0]
+fixed_timestep = 0.016667  # 60 Hz
+max_substeps = 4
+
+[physics.layers]
+layers = ["default", "player", "enemies", "projectiles", "triggers", "pickups"]
+
+[physics.collision_matrix]
+player = ["default", "enemies", "projectiles", "triggers", "pickups"]
+enemies = ["default", "player", "projectiles", "triggers"]
+projectiles = ["default", "enemies"]
+triggers = ["player", "enemies"]
+pickups = ["player"]
+
+# =============================================================================
+# Audio Configuration (void_audio)
+# =============================================================================
+[audio]
+master_volume = 1.0
+music_volume = 0.7
+sfx_volume = 1.0
+ambient_volume = 0.6
+
+[audio.music]
+track = "audio/music/dungeon_ambient.ogg"
+loop = true
+fade_in = 2.0
+crossfade = 3.0
+
+[audio.channels]
+master = { volume = 1.0 }
+music = { volume = 0.7, parent = "master" }
+sfx = { volume = 1.0, parent = "master" }
+ambient = { volume = 0.6, parent = "master" }
+voice = { volume = 0.9, parent = "master" }
+
+# =============================================================================
+# Game State Configuration (void_gamestate)
+# =============================================================================
+[state]
+[state.variables]
+score = { type = "int", default = 0, persist = true }
+player_gold = { type = "int", default = 0, persist = true }
+enemies_killed = { type = "int", default = 0, persist = true }
+keys_collected = { type = "int", default = 0, persist = true }
+current_checkpoint = { type = "string", default = "start", persist = true }
+difficulty = { type = "float", default = 1.0, persist = true }
+boss_defeated = { type = "bool", default = false, persist = true }
+
+[state.save]
+auto_save = true
+auto_save_interval = 300
+save_slot_count = 3
+save_on_checkpoint = true
+
+# =============================================================================
+# HUD Configuration (void_hud)
+# =============================================================================
+[ui.hud]
+enabled = true
+layout = "ui/game_hud.toml"
+
+# =============================================================================
+# Navigation Configuration (void_ai)
+# =============================================================================
+[navigation]
+navmesh = "navmesh/level1.nav"
+agent_radius = 0.4
+agent_height = 1.8
+step_height = 0.3
+max_slope = 45
+
+[navigation.areas]
+default = { cost = 1.0 }
+water = { cost = 2.0 }
+danger = { cost = 5.0 }
+blocked = { cost = -1 }
+
+# =============================================================================
+# Assets
+# =============================================================================
+[assets]
+include = ["assets/", "scenes/", "items/", "weapons/", "ai/", "ui/", "audio/", "scripts/"]
+compression = 6
+
+[scripts]
+language = "cpp"
+
+[platform]
+min_version = "1.0.0"
+required_features = ["webgpu", "physics", "audio"]

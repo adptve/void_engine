@@ -1,0 +1,31 @@
+# ============================================================================
+# PLASMA AMMO - Item Definition
+# ============================================================================
+
+[item]
+id = "plasma_ammo"
+name = "Plasma Cells"
+description = "Standard energy cells for plasma-based weapons"
+icon = "ui/icons/ammo_plasma.png"
+category = "ammo"
+rarity = "common"
+stackable = true
+max_stack = 500
+ammo_type = "plasma"
+value = 2
+
+[item.use_effect]
+type = "add_ammo"
+ammo_type = "plasma"
+# Amount determined by pickup quantity
+
+[item.pickup_visuals]
+mesh = "pickups/ammo_cell.glb"
+scale = 0.5
+glow_color = [0.3, 0.6, 1, 1]
+glow_intensity = 1.5
+
+[item.pickup_animation]
+bob = true
+bob_height = 0.12
+bob_speed = 2.2

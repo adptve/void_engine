@@ -1,0 +1,289 @@
+# =============================================================================
+# Avatar Demo - Interactive Animated Characters
+# =============================================================================
+# Features Fox and Soldier models with procedural animations
+
+[scene]
+name = "Avatar Demo"
+description = "Interactive scene with animated characters"
+version = "1.0.0"
+
+# =============================================================================
+# Camera
+# =============================================================================
+
+[[cameras]]
+name = "main_camera"
+active = true
+type = "perspective"
+
+[cameras.transform]
+position = [0.0, 1.5, 4.0]
+target = [0.0, 0.5, 0.0]
+up = [0.0, 1.0, 0.0]
+
+[cameras.perspective]
+fov = 50.0
+near = 0.1
+far = 500.0
+aspect = "auto"
+
+# =============================================================================
+# Lighting
+# =============================================================================
+
+[[lights]]
+name = "sun"
+type = "directional"
+enabled = true
+
+[lights.directional]
+direction = [0.3, -0.8, 0.5]
+color = [1.0, 0.95, 0.9]
+intensity = 2.5
+cast_shadows = true
+
+[[lights]]
+name = "fill"
+type = "directional"
+enabled = true
+
+[lights.directional]
+direction = [-0.5, -0.3, -0.7]
+color = [0.6, 0.7, 0.9]
+intensity = 0.8
+cast_shadows = false
+
+[[lights]]
+name = "back_rim"
+type = "directional"
+enabled = true
+
+[lights.directional]
+direction = [0.0, -0.2, -1.0]
+color = [0.8, 0.85, 1.0]
+intensity = 0.5
+cast_shadows = false
+
+# =============================================================================
+# Environment
+# =============================================================================
+
+[environment]
+ambient_intensity = 0.15
+
+[environment.sky]
+zenith_color = [0.2, 0.4, 0.8]
+horizon_color = [0.6, 0.75, 0.95]
+ground_color = [0.2, 0.18, 0.15]
+sun_size = 0.02
+sun_intensity = 30.0
+sun_falloff = 3.0
+
+# =============================================================================
+# Shadows
+# =============================================================================
+
+[shadows]
+enabled = true
+resolution = 2048
+bias = 0.002
+normal_bias = 0.01
+
+[shadows.cascades]
+count = 2
+split_lambda = 0.5
+blend_distance = 0.1
+
+[[shadows.cascades.levels]]
+distance = 10.0
+resolution = 2048
+
+[[shadows.cascades.levels]]
+distance = 30.0
+resolution = 1024
+
+# =============================================================================
+# Input Configuration
+# =============================================================================
+
+[input]
+mouse_sensitivity = 0.003
+invert_y = false
+
+[input.camera]
+orbit_sensitivity = 0.005
+pan_sensitivity = 0.01
+zoom_sensitivity = 1.0
+min_distance = 1.0
+max_distance = 20.0
+zoom_scroll = true
+invert_x = false
+invert_y = false
+
+# =============================================================================
+# Entities
+# =============================================================================
+
+# Ground plane
+[[entities]]
+name = "ground"
+mesh = "plane"
+layer = "environment"
+
+[entities.transform]
+position = [0.0, 0.0, 0.0]
+rotation = [0.0, 0.0, 0.0]
+scale = [10.0, 1.0, 10.0]
+
+[entities.material]
+base_color = [0.25, 0.22, 0.18, 1.0]
+metallic = 0.0
+roughness = 0.9
+
+# Fox character (with rotation animation)
+[[entities]]
+name = "fox"
+mesh = { path = "models/Fox.glb" }
+layer = "characters"
+
+[entities.transform]
+position = [-1.5, 0.0, 0.0]
+rotation = [0.0, 45.0, 0.0]
+scale = [0.02, 0.02, 0.02]
+
+[entities.animation]
+type = "rotate"
+axis = [0.0, 1.0, 0.0]
+speed = 1.0
+
+[entities.pickable]
+enabled = true
+highlight_on_hover = true
+
+# Soldier character (with slow rotation)
+[[entities]]
+name = "soldier"
+mesh = { path = "models/Soldier.glb" }
+layer = "characters"
+
+[entities.transform]
+position = [1.5, 0.0, 0.0]
+rotation = [-90.0, -45.0, 0.0]
+scale = [0.01, 0.01, 0.01]
+
+[entities.animation]
+type = "rotate"
+axis = [0.0, 1.0, 0.0]
+speed = 0.5
+
+[entities.pickable]
+enabled = true
+highlight_on_hover = true
+
+# Decorative cube 1
+[[entities]]
+name = "cube1"
+mesh = "cube"
+layer = "props"
+
+[entities.transform]
+position = [-3.0, 0.3, -2.0]
+rotation = [0.0, 30.0, 0.0]
+scale = [0.6, 0.6, 0.6]
+
+[entities.material]
+base_color = [0.8, 0.3, 0.2, 1.0]
+metallic = 0.0
+roughness = 0.4
+
+[entities.animation]
+type = "rotate"
+axis = [0.0, 1.0, 0.0]
+speed = 0.5
+
+# Decorative cube 2
+[[entities]]
+name = "cube2"
+mesh = "cube"
+layer = "props"
+
+[entities.transform]
+position = [3.0, 0.25, -1.5]
+rotation = [0.0, -20.0, 0.0]
+scale = [0.5, 0.5, 0.5]
+
+[entities.material]
+base_color = [0.2, 0.5, 0.8, 1.0]
+metallic = 0.2
+roughness = 0.3
+
+[entities.animation]
+type = "rotate"
+axis = [0.0, 1.0, 0.0]
+speed = -0.4
+
+# Golden sphere
+[[entities]]
+name = "sphere1"
+mesh = "sphere"
+layer = "props"
+
+[entities.transform]
+position = [0.0, 0.4, -3.0]
+rotation = [0.0, 0.0, 0.0]
+scale = [0.4, 0.4, 0.4]
+
+[entities.material]
+base_color = [0.9, 0.85, 0.2, 1.0]
+metallic = 0.9
+roughness = 0.15
+
+[entities.animation]
+type = "pulse"
+min_scale = 0.9
+max_scale = 1.1
+frequency = 0.8
+
+[entities.pickable]
+enabled = true
+highlight_on_hover = true
+
+# =============================================================================
+# Picking Configuration
+# =============================================================================
+
+[picking]
+enabled = true
+method = "gpu"
+
+[picking.gpu]
+buffer_size = [256, 256]
+read_delay_frames = 1
+
+# =============================================================================
+# Debug
+# =============================================================================
+
+[debug]
+show_stats = true
+show_wireframe = false
+show_bounds = false
+show_grid = true
+
+[debug.stats]
+position = "top_left"
+font_size = 14
+show_fps = true
+show_frame_time = true
+show_draw_calls = true
+
+[debug.visualization]
+normals = false
+tangents = false
+uvs = false
+
+[debug.controls]
+toggle_stats = "F3"
+toggle_wireframe = "F4"
+toggle_bounds = "F5"

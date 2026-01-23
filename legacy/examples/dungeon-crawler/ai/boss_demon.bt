@@ -1,0 +1,247 @@
+# Boss Demon Behavior Tree
+# Demonstrates complex boss AI with phases and special attacks (doc 29)
+#
+# Behavior: Multi-phase boss fight with increasing aggression
+
+[behavior_tree]
+name = "BossDemon"
+description = "Demon Lord boss with multiple combat phases"
+
+[root]
+type = "selector"
+
+# =============================================================================
+# PHASE 3: Enraged (below 25% health)
+# =============================================================================
+[[root.children]]
+type = "sequence"
+name = "phase_3_enraged"
+
+[[root.children.children]]
+type = "condition"
+name = "low_health"
+check = "health_percent < 0.25"
+
+[[root.children.children]]
+type = "decorator"
+name = "set_enraged"
+decorator_type = "run_once"
+
+[[root.children.children.children]]
+type = "action"
+name = "enrage_roar"
+action = "PlayAnimation"
+params = { animation = "enrage_roar", block_until_complete = true }
+
+[[root.children.children]]
+type = "selector"
+name = "enraged_attacks"
+
+# Berserk combo
+[[root.children.children.children]]
+type = "sequence"
+name = "berserk_combo"
+
+[[root.children.children.children.children]]
+type = "condition"
+check = "distance_to_target < 4.0"
+
+[[root.children.children.children.children]]
+type = "action"
+name = "berserk_attack"
+action = "MeleeCombo"
+params = { combo_id = "berserk_fury", count = 5, speed_multiplier = 1.5 }
+
+# Desperate fire nova
+[[root.children.children.children]]
+type = "sequence"
+name = "fire_nova"
+
+[[root.children.children.children.children]]
+type = "condition"
+check = "ability_ready('fire_nova')"
+
+[[root.children.children.children.children]]
+type = "action"
+action = "CastAbility"
+params = { ability = "fire_nova", radius = 8.0, damage = 60 }
+
+# Aggressive chase
+[[root.children.children.children]]
+type = "action"
+name = "aggressive_chase"
+action = "ChaseTarget"
+params = { speed = 7.0, animation = "run_angry" }
+
+# =============================================================================
+# PHASE 2: Aggressive (25-60% health)
+# =============================================================================
+[[root.children]]
+type = "sequence"
+name = "phase_2_aggressive"
+
+[[root.children.children]]
+type = "condition"
+name = "medium_health"
+check = "health_percent < 0.6 AND health_percent >= 0.25"
+
+[[root.children.children]]
+type = "selector"
+name = "aggressive_attacks"
+
+# Leap attack
+[[root.children.children.children]]
+type = "sequence"
+name = "leap_attack"
+
+[[root.children.children.children.children]]
+type = "condition"
+check = "distance_to_target > 5.0 AND distance_to_target < 15.0"
+
+[[root.children.children.children.children]]
+type = "condition"
+check = "ability_ready('leap_attack')"
+
+[[root.children.children.children.children]]
+type = "action"
+action = "LeapAttack"
+params = { target = "player", damage = 50, slam_radius = 3.0 }
+
+# Fire breath
+[[root.children.children.children]]
+type = "sequence"
+name = "fire_breath"
+
+[[root.children.children.children.children]]
+type = "condition"
+check = "distance_to_target < 8.0"
+
+[[root.children.children.children.children]]
+type = "condition"
+check = "ability_ready('fire_breath')"
+
+[[root.children.children.children.children]]
+type = "action"
+action = "CastAbility"
+params = { ability = "fire_breath", cone_angle = 60, range = 10.0, duration = 2.0 }
+
+# Power attack combo
+[[root.children.children.children]]
+type = "sequence"
+name = "power_combo"
+
+[[root.children.children.children.children]]
+type = "condition"
+check = "distance_to_target < 4.0"
+
+[[root.children.children.children.children]]
+type = "action"
+action = "MeleeCombo"
+params = { combo_id = "power_slam", count = 3 }
+
+# Chase
+[[root.children.children.children]]
+type = "action"
+name = "chase"
+action = "ChaseTarget"
+params = { speed = 5.5, animation = "run" }
+
+# =============================================================================
+# PHASE 1: Normal (60-100% health)
+# =============================================================================
+[[root.children]]
+type = "sequence"
+name = "phase_1_normal"
+
+[[root.children.children]]
+type = "condition"
+name = "has_target"
+check = "target != null"
+
+[[root.children.children]]
+type = "selector"
+name = "normal_combat"
+
+# Summon minions (once per phase)
+[[root.children.children.children]]
+type = "sequence"
+name = "summon_minions"
+
+[[root.children.children.children.children]]
+type = "condition"
+check = "ability_ready('summon_skeletons')"
+
+[[root.children.children.children.children]]
+type = "condition"
+check = "active_minions < 3"
+
+[[root.children.children.children.children]]
+type = "action"
+action = "PlayAnimation"
+params = { animation = "summon", block_until_complete = true }
+
+[[root.children.children.children.children]]
+type = "action"
+action = "SpawnMinions"
+params = { prefab = "skeleton_warrior", count = 3, radius = 5.0 }
+
+# Fireball ranged attack
+[[root.children.children.children]]
+type = "sequence"
+name = "fireball_attack"
+
+[[root.children.children.children.children]]
+type = "condition"
+check = "distance_to_target > 6.0"
+
+[[root.children.children.children.children]]
+type = "condition"
+check = "ability_ready('fireball')"
+
+[[root.children.children.children.children]]
+type = "action"
+action = "CastProjectile"
+params = { projectile = "demon_fireball", target = "player", lead_target = true }
+
+# Basic melee
+[[root.children.children.children]]
+type = "sequence"
+name = "basic_melee"
+
+[[root.children.children.children.children]]
+type = "condition"
+check = "distance_to_target < 4.0"
+
+[[root.children.children.children.children]]
+type = "action"
+action = "MeleeAttack"
+params = { attack_id = "claw_swipe" }
+
+# Approach target
+[[root.children.children.children]]
+type = "action"
+name = "approach"
+action = "ChaseTarget"
+params = { speed = 4.0, animation = "walk_menacing" }
+
+# =============================================================================
+# IDLE: Waiting for combat
+# =============================================================================
+[[root.children]]
+type = "sequence"
+name = "idle_sequence"
+
+[[root.children.children]]
+type = "action"
+name = "boss_idle"
+action = "Idle"
+params = { animation = "idle_menacing", face_player = true }
+
+# =============================================================================
+# BLACKBOARD VARIABLES
+# =============================================================================
+[blackboard]
+target = null
+active_minions = 0
+phase = 1
+enrage_triggered = false

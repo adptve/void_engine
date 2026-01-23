@@ -1,0 +1,72 @@
+# ============================================================================
+# POWER SURGE CORE - Item Definition
+# ============================================================================
+# A legendary power-up that grants devastating weapon enhancement
+# ============================================================================
+
+[item]
+id = "power_surge_core"
+name = "Power Surge Core"
+description = "Ancient energy source that supercharges your weapons. +150% damage, +25% fire rate, improved accuracy for 15 seconds!"
+icon = "ui/icons/power_surge.png"
+category = "consumable"
+rarity = "legendary"
+stackable = false
+value = 0  # Cannot be sold
+
+# The core effect when collected
+[item.use_effect]
+type = "buff"
+status = "power_surge"
+duration = 15.0
+
+# Multiple effects applied
+[[item.use_effects]]
+type = "buff"
+status = "power_surge"
+duration = 15.0
+
+[[item.use_effects]]
+type = "weapon_swap"
+from_weapon = "plasma_rifle"
+to_weapon = "plasma_rifle_powered"
+duration = 15.0  # Swap back after duration
+
+[[item.use_effects]]
+type = "visual"
+screen_effect = "effects/power_surge_screen.toml"
+duration = 0.5
+
+[[item.use_effects]]
+type = "audio"
+sound = "sounds/powerups/surge_activate.wav"
+sound_loop = "sounds/powerups/surge_loop.wav"
+sound_end = "sounds/powerups/surge_end.wav"
+
+[[item.use_effects]]
+type = "ui"
+show_element = "powerup_panel"
+duration = 15.0
+
+# Visual configuration for world pickup
+[item.pickup_visuals]
+mesh = "pickups/power_core.glb"
+scale = 0.7
+glow_color = [1, 0.85, 0.3, 1]
+glow_intensity = 3.0
+particle_effect = "effects/energy_orb.toml"
+
+# Animation for pickup in world
+[item.pickup_animation]
+bob = true
+bob_height = 0.25
+bob_speed = 1.8
+rotate = true
+rotate_speed = 60
+
+# Audio when nearby
+[item.proximity_audio]
+clip = "sounds/powerups/core_hum.wav"
+volume = 0.4
+range = 8.0
+loop = true

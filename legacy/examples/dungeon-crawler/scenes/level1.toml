@@ -1,0 +1,715 @@
+# Dungeon Crawler - Level 1: The Ancient Halls
+# Demonstrates all game logic systems from docs/input-formats/21-29
+
+[scene]
+name = "The Ancient Halls"
+ambient_light = [0.1, 0.08, 0.12]
+fog_color = [0.05, 0.03, 0.08]
+fog_density = 0.02
+
+# =============================================================================
+# PLAYER ENTITY (Physics, Combat, Inventory)
+# =============================================================================
+[[entities]]
+name = "player"
+tags = ["player", "damageable"]
+
+[entities.transform]
+position = [0, 1, 0]
+rotation = [0, 0, 0]
+scale = [1, 1, 1]
+
+[entities.mesh]
+source = "assets/models/player.glb"
+
+# Physics body (void_physics - doc 23)
+[entities.physics]
+enabled = true
+body_type = "dynamic"
+mass = 70.0
+gravity_scale = 1.0
+
+[entities.physics.collider]
+shape = "capsule"
+radius = 0.4
+height = 1.8
+offset = [0, 0.9, 0]
+
+[entities.physics.material]
+friction = 0.5
+restitution = 0.0
+
+[entities.physics.constraints]
+freeze_rotation = [true, false, true]
+
+# Health component (void_combat - doc 24)
+[entities.health]
+max_health = 100
+current_health = 100
+invulnerable = false
+invulnerability_time = 0.5
+
+[entities.health.resistances]
+physical = 1.0
+fire = 1.0
+ice = 1.0
+poison = 1.0
+
+[entities.health.events]
+on_damage = "OnPlayerDamage"
+on_heal = "OnPlayerHeal"
+on_death = "OnPlayerDeath"
+
+[entities.health.feedback]
+show_damage_numbers = true
+hit_flash_color = [1, 0, 0, 0.5]
+hit_flash_duration = 0.1
+
+# Inventory (void_inventory - doc 25)
+[entities.inventory]
+slots = 20
+equipment_slots = ["head", "chest", "legs", "feet", "main_hand", "off_hand", "accessory1", "accessory2"]
+drop_on_death = false
+
+[entities.inventory.starting_items]
+items = [
+    { id = "health_potion", quantity = 3 },
+    { id = "torch", quantity = 5 },
+    { id = "rusty_sword", quantity = 1 }
+]
+
+# Weapon slot
+[entities.weapon]
+equipped = "rusty_sword"
+
+# Audio (void_audio - doc 26)
+[entities.audio]
+[entities.audio.sounds]
+footstep = "audio/sfx/footstep_stone.wav"
+jump = "audio/sfx/jump.wav"
+hurt = "audio/sfx/player_hurt.wav"
+death = "audio/sfx/player_death.wav"
+
+# =============================================================================
+# ENVIRONMENT - Static Geometry with Physics
+# =============================================================================
+[[entities]]
+name = "floor"
+tags = ["environment"]
+
+[entities.transform]
+position = [0, 0, 0]
+
+[entities.mesh]
+source = "assets/models/dungeon_floor.glb"
+
+[entities.physics]
+enabled = true
+body_type = "static"
+
+[entities.physics.collider]
+shape = "box"
+size = [50, 1, 50]
+offset = [0, -0.5, 0]
+
+# Pushable crate with physics
+[[entities]]
+name = "crate_01"
+tags = ["physics_object", "destructible"]
+
+[entities.transform]
+position = [5, 0.5, 3]
+
+[entities.mesh]
+source = "assets/models/wooden_crate.glb"
+
+[entities.physics]
+enabled = true
+body_type = "dynamic"
+mass = 20.0
+
+[entities.physics.collider]
+shape = "box"
+size = [1, 1, 1]
+
+[entities.physics.material]
+friction = 0.6
+restitution = 0.2
+
+[entities.physics.events]
+on_collision_enter = "OnCrateCollision"
+
+[entities.health]
+max_health = 50
+on_death = "OnCrateDestroyed"
+
+# Moving platform (kinematic)
+[[entities]]
+name = "moving_platform"
+tags = ["platform"]
+
+[entities.transform]
+position = [15, 2, 0]
+
+[entities.mesh]
+source = "assets/models/stone_platform.glb"
+
+[entities.physics]
+enabled = true
+body_type = "kinematic"
+
+[entities.physics.collider]
+shape = "box"
+size = [4, 0.5, 4]
+
+# =============================================================================
+# TRIGGER VOLUMES (void_triggers - doc 22)
+# =============================================================================
+
+# Death zone - instant kill
+[[triggers]]
+name = "death_zone"
+shape = "box"
+size = [100, 10, 100]
+position = [0, -20, 0]
+layer_mask = ["player", "enemies"]
+on_enter = "OnDeathZone"
+
+[triggers.data]
+damage_type = "true"
+instant_kill = true
+
+# Checkpoint trigger
+[[triggers]]
+name = "checkpoint_01"
+shape = "box"
+size = [3, 4, 3]
+position = [20, 2, 0]
+layer_mask = ["player"]
+one_shot = false
+on_enter = "OnCheckpoint"
+
+[triggers.data]
+checkpoint_id = "checkpoint_01"
+spawn_position = [20, 1, 2]
+spawn_rotation = [0, 180, 0]
+
+[triggers.debug]
+visible = true
+color = [0, 1, 0, 0.3]
+
+# Damage zone - lava pit
+[[triggers]]
+name = "lava_pit"
+shape = "box"
+size = [8, 2, 8]
+position = [30, -1, 10]
+layer_mask = ["player", "enemies"]
+tag_filter = ["damageable"]
+cooldown = 0.5
+on_enter = "OnLavaDamage"
+on_stay = "OnLavaDamage"
+on_exit = "OnLavaExit"
+
+[triggers.data]
+damage_per_tick = 15
+damage_type = "fire"
+apply_dot = true
+dot_duration = 3.0
+
+# Enemy spawn trigger
+[[triggers]]
+name = "ambush_trigger"
+shape = "sphere"
+radius = 8.0
+position = [40, 1, 25]
+layer_mask = ["player"]
+one_shot = true
+on_enter = "OnAmbushTrigger"
+
+[triggers.data]
+spawn_points = ["spawn_point_01", "spawn_point_02", "spawn_point_03"]
+enemy_type = "skeleton_warrior"
+enemy_count = 3
+spawn_delay = 0.5
+
+# Boss arena trigger
+[[triggers]]
+name = "boss_arena_trigger"
+shape = "box"
+size = [20, 10, 20]
+position = [80, 5, 50]
+layer_mask = ["player"]
+one_shot = true
+on_enter = "OnBossArenaEnter"
+
+[triggers.data]
+boss_entity = "boss_demon"
+close_exits = true
+boss_music = "audio/music/boss_battle.ogg"
+
+# =============================================================================
+# PICKUPS (void_inventory - doc 25)
+# =============================================================================
+
+# Health pickup
+[[entities]]
+name = "health_pickup_01"
+tags = ["pickup"]
+
+[entities.transform]
+position = [10, 0.5, 5]
+
+[entities.mesh]
+source = "assets/models/health_orb.glb"
+
+[entities.pickup]
+item_id = "health_potion"
+quantity = 1
+auto_collect = true
+collect_radius = 1.5
+respawn = true
+respawn_time = 60.0
+
+[entities.pickup.events]
+on_collect = "OnHealthPickup"
+
+[entities.pickup.feedback]
+bob_animation = true
+bob_height = 0.2
+bob_speed = 2.0
+rotate = true
+rotate_speed = 90
+glow_color = [0, 1, 0, 1]
+collect_effect = "effects/pickup_sparkle.toml"
+collect_sound = "audio/sfx/pickup_health.wav"
+
+# Gold coin
+[[entities]]
+name = "gold_coin_01"
+tags = ["pickup", "treasure"]
+
+[entities.transform]
+position = [12, 0.3, 8]
+
+[entities.mesh]
+source = "assets/models/gold_coin.glb"
+
+[entities.pickup]
+item_id = "gold_coin"
+quantity = 10
+auto_collect = true
+collect_radius = 2.0
+respawn = false
+
+[entities.pickup.feedback]
+bob_animation = true
+bob_height = 0.15
+bob_speed = 3.0
+rotate = true
+rotate_speed = 180
+glow_color = [1, 0.85, 0, 1]
+collect_sound = "audio/sfx/coin_pickup.wav"
+
+# Key item (required for locked door)
+[[entities]]
+name = "dungeon_key"
+tags = ["pickup", "key_item"]
+
+[entities.transform]
+position = [25, 1, 15]
+
+[entities.mesh]
+source = "assets/models/golden_key.glb"
+
+[entities.pickup]
+item_id = "gold_key"
+quantity = 1
+auto_collect = false
+respawn = false
+
+[entities.pickup.events]
+on_collect = "OnKeyPickup"
+
+[entities.pickup.feedback]
+bob_animation = true
+glow_color = [1, 0.9, 0.3, 1]
+collect_effect = "effects/key_sparkle.toml"
+collect_sound = "audio/sfx/key_pickup.wav"
+
+# Weapon pickup
+[[entities]]
+name = "sword_pickup"
+tags = ["pickup", "weapon"]
+
+[entities.transform]
+position = [35, 0.8, 20]
+rotation = [0, 45, 15]
+
+[entities.mesh]
+source = "assets/models/iron_sword.glb"
+
+[entities.pickup]
+item_id = "iron_sword"
+quantity = 1
+auto_collect = false
+respawn = false
+
+[entities.pickup.feedback]
+rotate = false
+glow_color = [0.7, 0.7, 0.8, 1]
+collect_sound = "audio/sfx/weapon_pickup.wav"
+
+# =============================================================================
+# ENEMIES WITH AI (void_ai - doc 29, void_combat - doc 24)
+# =============================================================================
+
+# Patrolling skeleton warrior
+[[entities]]
+name = "skeleton_01"
+tags = ["enemy", "damageable"]
+
+[entities.transform]
+position = [15, 0, 10]
+
+[entities.mesh]
+source = "assets/models/skeleton_warrior.glb"
+
+[entities.physics]
+enabled = true
+body_type = "dynamic"
+mass = 50.0
+
+[entities.physics.collider]
+shape = "capsule"
+radius = 0.35
+height = 1.6
+
+# Health
+[entities.health]
+max_health = 60
+invulnerability_time = 0.2
+
+[entities.health.events]
+on_damage = "OnEnemyDamage"
+on_death = "OnEnemyDeath"
+
+[entities.health.feedback]
+show_damage_numbers = true
+hit_flash_color = [1, 1, 1, 0.8]
+
+# Weapon
+[entities.weapon]
+equipped = "bone_sword"
+
+# AI Configuration
+[entities.ai]
+enabled = true
+type = "state_machine"
+initial_state = "patrol"
+
+[entities.ai.states.idle]
+duration = 2.0
+animation = "idle"
+next_state = "patrol"
+
+[entities.ai.states.patrol]
+type = "patrol"
+waypoints = "patrol_path_01"
+speed = 2.5
+animation = "walk"
+
+[entities.ai.states.chase]
+type = "chase"
+target = "player"
+speed = 4.5
+animation = "run"
+give_up_distance = 20.0
+give_up_time = 5.0
+
+[entities.ai.states.attack]
+type = "attack"
+range = 2.0
+cooldown = 1.2
+animation = "attack"
+
+[entities.ai.states.search]
+type = "search"
+duration = 8.0
+search_radius = 5.0
+animation = "look_around"
+
+# State transitions
+[[entities.ai.transitions]]
+from = "patrol"
+to = "chase"
+condition = "can_see_player"
+
+[[entities.ai.transitions]]
+from = "chase"
+to = "attack"
+condition = "in_attack_range"
+
+[[entities.ai.transitions]]
+from = "attack"
+to = "chase"
+condition = "target_out_of_range"
+
+[[entities.ai.transitions]]
+from = "chase"
+to = "search"
+condition = "lost_target"
+
+[[entities.ai.transitions]]
+from = "search"
+to = "patrol"
+condition = "search_timeout"
+
+[[entities.ai.transitions]]
+from = "search"
+to = "chase"
+condition = "can_see_player"
+
+# Senses
+[entities.ai.senses.sight]
+enabled = true
+range = 15.0
+angle = 110
+detection_time = 0.3
+
+[entities.ai.senses.hearing]
+enabled = true
+range = 10.0
+
+[[entities.ai.senses.hearing.sounds]]
+type = "footstep"
+detection_range = 6.0
+
+[[entities.ai.senses.hearing.sounds]]
+type = "combat"
+detection_range = 15.0
+
+[entities.ai.senses.damage]
+enabled = true
+reveal_attacker = true
+
+# Audio
+[entities.audio]
+[entities.audio.sounds]
+footstep = "audio/sfx/skeleton_footstep.wav"
+attack = "audio/sfx/sword_swing.wav"
+hurt = "audio/sfx/skeleton_hurt.wav"
+death = "audio/sfx/skeleton_death.wav"
+alert = "audio/sfx/skeleton_alert.wav"
+
+# Ranged enemy - Skeleton Archer
+[[entities]]
+name = "skeleton_archer_01"
+tags = ["enemy", "damageable"]
+
+[entities.transform]
+position = [25, 3, 15]
+
+[entities.mesh]
+source = "assets/models/skeleton_archer.glb"
+
+[entities.physics]
+enabled = true
+body_type = "dynamic"
+mass = 45.0
+
+[entities.physics.collider]
+shape = "capsule"
+radius = 0.3
+height = 1.6
+
+[entities.health]
+max_health = 40
+
+[entities.weapon]
+equipped = "bone_bow"
+
+[entities.ai]
+enabled = true
+type = "behavior_tree"
+tree = "ai/skeleton_archer.bt"
+
+[entities.ai.senses.sight]
+enabled = true
+range = 25.0
+angle = 90
+
+# Boss enemy - Demon Lord
+[[entities]]
+name = "boss_demon"
+tags = ["enemy", "boss", "damageable"]
+enabled = false  # Activated by trigger
+
+[entities.transform]
+position = [80, 0, 50]
+
+[entities.mesh]
+source = "assets/models/demon_lord.glb"
+scale = [2, 2, 2]
+
+[entities.physics]
+enabled = true
+body_type = "dynamic"
+mass = 500.0
+
+[entities.physics.collider]
+shape = "capsule"
+radius = 1.0
+height = 4.0
+
+[entities.health]
+max_health = 1000
+
+[entities.health.resistances]
+physical = 0.8
+fire = 0.0
+ice = 1.5
+
+[entities.health.events]
+on_damage = "OnBossDamage"
+on_death = "OnBossDefeated"
+
+[entities.weapon]
+equipped = "demon_claws"
+
+[entities.ai]
+enabled = true
+type = "behavior_tree"
+tree = "ai/boss_demon.bt"
+
+# =============================================================================
+# WAYPOINT PATHS
+# =============================================================================
+
+[[waypoint_paths]]
+name = "patrol_path_01"
+loop = true
+
+[[waypoint_paths.points]]
+position = [15, 0, 10]
+wait_time = 2.0
+look_direction = [1, 0, 0]
+
+[[waypoint_paths.points]]
+position = [25, 0, 10]
+wait_time = 0.0
+
+[[waypoint_paths.points]]
+position = [25, 0, 20]
+wait_time = 2.0
+look_direction = [0, 0, 1]
+
+[[waypoint_paths.points]]
+position = [15, 0, 20]
+wait_time = 0.0
+
+# =============================================================================
+# COVER POINTS (for AI tactical behavior)
+# =============================================================================
+
+[[cover_points]]
+position = [20, 0, 12]
+normal = [0, 0, -1]
+height = "low"
+can_shoot_over = true
+
+[[cover_points]]
+position = [22, 0, 18]
+normal = [-1, 0, 0]
+height = "medium"
+can_shoot_around_left = true
+
+# =============================================================================
+# LIGHTS (for atmosphere)
+# =============================================================================
+
+[[entities]]
+name = "torch_01"
+tags = ["light", "interactable"]
+
+[entities.transform]
+position = [5, 2.5, 0]
+
+[entities.mesh]
+source = "assets/models/wall_torch.glb"
+
+[entities.light]
+type = "point"
+color = [1, 0.7, 0.4]
+intensity = 15.0
+range = 10.0
+shadows = true
+
+# Ambient looping sound
+[entities.audio.ambient]
+clip = "audio/ambient/torch_fire.wav"
+volume = 0.5
+loop = true
+spatial = true
+min_distance = 1.0
+max_distance = 8.0
+
+# =============================================================================
+# INTERACTABLE OBJECTS
+# =============================================================================
+
+# Locked door
+[[entities]]
+name = "locked_door"
+tags = ["door", "interactable"]
+
+[entities.transform]
+position = [50, 0, 25]
+
+[entities.mesh]
+source = "assets/models/iron_door.glb"
+
+[entities.physics]
+enabled = true
+body_type = "kinematic"
+
+[entities.physics.collider]
+shape = "box"
+size = [0.3, 3, 2]
+
+[entities.state]
+is_open = false
+is_locked = true
+required_key = "gold_key"
+
+[entities.interactable]
+prompt_text = "Press E to open (requires Gold Key)"
+interact_range = 2.0
+on_interact = "OnDoorInteract"
+
+# Chest with loot
+[[entities]]
+name = "treasure_chest"
+tags = ["interactable", "container"]
+
+[entities.transform]
+position = [45, 0, 30]
+
+[entities.mesh]
+source = "assets/models/treasure_chest.glb"
+
+[entities.state]
+is_open = false
+looted = false
+
+[entities.interactable]
+prompt_text = "Press E to open chest"
+interact_range = 2.0
+on_interact = "OnChestOpen"
+
+[entities.container]
+items = [
+    { id = "gold_coin", quantity = 50 },
+    { id = "health_potion", quantity = 2 },
+    { id = "fire_sword", quantity = 1 }
+]
