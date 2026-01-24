@@ -61,7 +61,16 @@
       "Bash(while read f)",
       "Bash(done)",
       "Bash(wc:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(for file in legacy/crates/void_kernel/src/*.rs legacy/crates/void_kernel/tests/*.rs)",
+      "Bash(do wc -l \"$file\")",
+      "Bash(sort:*)",
+      "Bash(for file in \"C:\\\\code\\\\github\\\\time3cap\\\\void_engine\\\\legacy\\\\crates\\\\void_runtime\\\\src\\\\*.rs\")",
+      "Bash(for file in includevoid_enginerender*.hpp)",
+      "Bash(for file in srcrender*.cpp)",
+      "Bash(for f in include/void_engine/ui/*.hpp src/ui/*.cpp)",
+      "Bash(for f in C:codegithubtime3capvoid_engineincludevoid_enginephysics*.hpp C:codegithubtime3capvoid_enginesrcphysics*.cpp)",
+      "Bash(do wc -l \"$f\")"
     ]
   }
 }
