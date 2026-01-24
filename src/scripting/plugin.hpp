@@ -92,6 +92,14 @@ public:
     // Event handling
     WasmResult<void> on_event(const std::string& event_name, std::span<const WasmValue> args);
 
+    // Lifecycle hooks
+    WasmResult<void> on_spawn(std::uint64_t entity_id);
+    WasmResult<void> on_destroy(std::uint64_t entity_id);
+    WasmResult<void> on_collision(std::uint64_t entity_a, std::uint64_t entity_b);
+    WasmResult<void> on_input(std::int32_t key_code, bool pressed);
+    WasmResult<void> on_message(std::uint64_t from_entity, std::int32_t msg_type, std::span<const WasmValue> data);
+    WasmResult<void> on_interact(std::uint64_t entity_a, std::uint64_t entity_b);
+
     // Function calls
     template <typename R, typename... Args>
     WasmResult<R> call(const std::string& function_name, Args... args);
@@ -101,6 +109,9 @@ public:
 
     // Error info
     [[nodiscard]] const std::string& error_message() const { return error_message_; }
+
+    // Source path for hot reload
+    [[nodiscard]] const std::filesystem::path& source_path() const { return source_path_; }
 
 private:
     /// Parse metadata from custom section
@@ -194,11 +205,23 @@ public:
     // ==========================================================================
 
     using LogCallback = std::function<void(int level, const std::string& message)>;
-    using EntityCallback = std::function<std::uint64_t()>;
+    using CreateEntityCallback = std::function<std::uint64_t()>;
+    using DestroyEntityCallback = std::function<void(std::uint64_t)>;
+    using EntityExistsCallback = std::function<bool(std::uint64_t)>;
+    using SetComponentCallback = std::function<void(std::uint64_t, const std::string&, WasmValue)>;
+    using GetComponentCallback = std::function<WasmValue(std::uint64_t, const std::string&)>;
+    using HasComponentCallback = std::function<bool(std::uint64_t, const std::string&)>;
+    using RemoveComponentCallback = std::function<void(std::uint64_t, const std::string&)>;
     using EventCallback = std::function<void(const std::string&, std::span<const WasmValue>)>;
 
     void set_log_callback(LogCallback cb) { log_callback_ = std::move(cb); }
-    void set_create_entity_callback(EntityCallback cb) { create_entity_callback_ = std::move(cb); }
+    void set_create_entity_callback(CreateEntityCallback cb) { create_entity_callback_ = std::move(cb); }
+    void set_destroy_entity_callback(DestroyEntityCallback cb) { destroy_entity_callback_ = std::move(cb); }
+    void set_entity_exists_callback(EntityExistsCallback cb) { entity_exists_callback_ = std::move(cb); }
+    void set_set_component_callback(SetComponentCallback cb) { set_component_callback_ = std::move(cb); }
+    void set_get_component_callback(GetComponentCallback cb) { get_component_callback_ = std::move(cb); }
+    void set_has_component_callback(HasComponentCallback cb) { has_component_callback_ = std::move(cb); }
+    void set_remove_component_callback(RemoveComponentCallback cb) { remove_component_callback_ = std::move(cb); }
     void set_event_callback(EventCallback cb) { event_callback_ = std::move(cb); }
 
 private:
@@ -207,7 +230,13 @@ private:
     std::chrono::steady_clock::time_point start_time_;
 
     LogCallback log_callback_;
-    EntityCallback create_entity_callback_;
+    CreateEntityCallback create_entity_callback_;
+    DestroyEntityCallback destroy_entity_callback_;
+    EntityExistsCallback entity_exists_callback_;
+    SetComponentCallback set_component_callback_;
+    GetComponentCallback get_component_callback_;
+    HasComponentCallback has_component_callback_;
+    RemoveComponentCallback remove_component_callback_;
     EventCallback event_callback_;
 };
 
@@ -269,6 +298,28 @@ public:
 
     /// @brief Broadcast an event to all plugins
     void broadcast_event(const std::string& event_name, std::span<const WasmValue> args = {});
+
+    // ==========================================================================
+    // Lifecycle Broadcasts
+    // ==========================================================================
+
+    /// @brief Broadcast spawn event
+    void broadcast_spawn(std::uint64_t entity_id);
+
+    /// @brief Broadcast destroy event
+    void broadcast_destroy(std::uint64_t entity_id);
+
+    /// @brief Broadcast collision event
+    void broadcast_collision(std::uint64_t entity_a, std::uint64_t entity_b);
+
+    /// @brief Broadcast input event
+    void broadcast_input(std::int32_t key_code, bool pressed);
+
+    /// @brief Broadcast message event
+    void broadcast_message(std::uint64_t from_entity, std::int32_t msg_type, std::span<const WasmValue> data);
+
+    /// @brief Broadcast interact event
+    void broadcast_interact(std::uint64_t entity_a, std::uint64_t entity_b);
 
     // ==========================================================================
     // Hot Reload

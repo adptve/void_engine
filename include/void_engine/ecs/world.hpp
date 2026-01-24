@@ -447,7 +447,122 @@ public:
         resources_.clear();
     }
 
+    // =========================================================================
+    // Hot-Reload Support
+    // =========================================================================
+
+    /// Add raw component data to entity (for snapshot restore)
+    /// @param entity Target entity
+    /// @param comp_id Component type ID
+    /// @param data Raw component data
+    /// @param size Data size in bytes
+    /// @return true if component was added
+    bool add_component_raw(Entity entity, ComponentId comp_id, const void* data, std::size_t size) {
+        if (!is_alive(entity)) {
+            return false;
+        }
+
+        const ComponentInfo* info = components_.get_info(comp_id);
+        if (!info || info->size != size) {
+            return false;
+        }
+
+        EntityLocation loc = locations_[entity.index];
+        Archetype* current_arch = archetypes_.get(loc.archetype_id);
+        if (!current_arch) {
+            return false;
+        }
+
+        // Check if archetype already has this component
+        if (current_arch->has_component(comp_id)) {
+            // Update existing - use clone_fn if available, else memcpy
+            void* dest = current_arch->get_component_raw(comp_id, loc.row);
+            if (dest) {
+                if (info->clone_fn) {
+                    // First destruct existing, then clone
+                    if (info->drop_fn) {
+                        info->drop_fn(dest);
+                    }
+                    info->clone_fn(data, dest);
+                } else {
+                    std::memcpy(dest, data, size);
+                }
+                return true;
+            }
+            return false;
+        }
+
+        // Need to move entity to new archetype with this component
+        return move_entity_add_component_raw(entity, loc, comp_id, data, size);
+    }
+
+    /// Update entity location directly (for snapshot restore)
+    void set_entity_location(Entity entity, EntityLocation location) {
+        if (entity.index >= locations_.size()) {
+            locations_.resize(entity.index + 1, EntityLocation::invalid());
+        }
+        locations_[entity.index] = location;
+    }
+
+    /// Get mutable locations vector (for snapshot restore)
+    [[nodiscard]] std::vector<EntityLocation>& locations() noexcept {
+        return locations_;
+    }
+
+    /// Get entity allocator (for snapshot restore)
+    [[nodiscard]] EntityAllocator& entity_allocator() noexcept {
+        return entities_;
+    }
+
+    /// Get mutable component registry (for snapshot restore)
+    [[nodiscard]] ComponentRegistry& component_registry_mut() noexcept {
+        return components_;
+    }
+
 private:
+    /// Move entity to new archetype with raw component data
+    bool move_entity_add_component_raw(Entity entity, EntityLocation old_loc,
+                                        ComponentId new_comp_id, const void* data, std::size_t size) {
+        Archetype* old_arch = archetypes_.get(old_loc.archetype_id);
+        if (!old_arch) return false;
+
+        // Build new component set
+        std::vector<ComponentId> new_components = old_arch->components();
+        new_components.push_back(new_comp_id);
+        std::sort(new_components.begin(), new_components.end());
+
+        // Get or create target archetype
+        ArchetypeId new_arch_id = archetypes_.get_or_create(new_components, components_);
+        Archetype* new_arch = archetypes_.get(new_arch_id);
+        if (!new_arch) return false;
+
+        // Prepare component data for new archetype
+        std::vector<const void*> component_data;
+        for (ComponentId comp_id : new_arch->components()) {
+            if (comp_id == new_comp_id) {
+                component_data.push_back(data);
+            } else {
+                component_data.push_back(old_arch->get_component_raw(comp_id, old_loc.row));
+            }
+        }
+
+        // Add to new archetype
+        size_type new_row = new_arch->add_entity(entity, component_data);
+
+        // Remove from old archetype
+        auto swapped = old_arch->remove_entity(old_loc.row);
+
+        // Update swapped entity's location
+        if (swapped.has_value()) {
+            locations_[swapped->index].row = old_loc.row;
+        }
+
+        // Update this entity's location
+        locations_[entity.index] = EntityLocation{new_arch_id, new_row};
+
+        return true;
+    }
+
     /// Move entity to a new archetype with an added component
     template<typename T>
     bool move_entity_add_component(Entity entity, EntityLocation old_loc,

@@ -6,6 +6,7 @@
 #include <void_engine/core/log.hpp>
 
 #include <algorithm>
+#include <fstream>
 
 #ifdef _WIN32
 #define NOMINMAX
@@ -22,6 +23,7 @@
 #else
 #include <dlfcn.h>
 #include <link.h>
+#include <elf.h>
 #endif
 
 namespace void_cpp {
@@ -165,13 +167,97 @@ std::vector<SymbolInfo> enumerate_symbols(void* handle) {
     SymCleanup(GetCurrentProcess());
 
 #else
-    // Unix: Use dl_iterate_phdr
-    // Note: This is limited - we can only get exported symbols easily
+    // Unix: Enumerate exported symbols using dlinfo and ELF parsing
+    struct link_map* map = nullptr;
+    if (dlinfo(handle, RTLD_DI_LINKMAP, &map) != 0 || !map) {
+        return symbols;
+    }
 
-    struct link_map* map;
-    if (dlinfo(handle, RTLD_DI_LINKMAP, &map) == 0) {
-        // Would need to parse ELF to get all symbols
-        // For now, this is a placeholder
+    // Get the library path from link_map
+    const char* lib_path = map->l_name;
+    if (!lib_path || lib_path[0] == '\0') {
+        return symbols;
+    }
+
+    // Parse ELF to get dynamic symbol table
+    std::ifstream file(lib_path, std::ios::binary);
+    if (!file) return symbols;
+
+    // Read ELF header
+    Elf64_Ehdr ehdr;
+    file.read(reinterpret_cast<char*>(&ehdr), sizeof(ehdr));
+
+    // Check ELF magic
+    if (ehdr.e_ident[0] != 0x7f || ehdr.e_ident[1] != 'E' ||
+        ehdr.e_ident[2] != 'L' || ehdr.e_ident[3] != 'F') {
+        return symbols;
+    }
+
+    // Read section headers
+    file.seekg(ehdr.e_shoff);
+    std::vector<Elf64_Shdr> shdrs(ehdr.e_shnum);
+    file.read(reinterpret_cast<char*>(shdrs.data()), ehdr.e_shnum * sizeof(Elf64_Shdr));
+
+    // Find .dynsym and .dynstr sections
+    const Elf64_Shdr* dynsym = nullptr;
+    const Elf64_Shdr* dynstr = nullptr;
+
+    for (const auto& shdr : shdrs) {
+        if (shdr.sh_type == SHT_DYNSYM) {
+            dynsym = &shdr;
+        }
+        if (shdr.sh_type == SHT_STRTAB && !dynstr) {
+            // First string table is usually .dynstr
+            dynstr = &shdr;
+        }
+    }
+
+    if (!dynsym || !dynstr) {
+        return symbols;
+    }
+
+    // Read symbol table
+    file.seekg(dynsym->sh_offset);
+    std::size_t num_symbols = dynsym->sh_size / sizeof(Elf64_Sym);
+
+    for (std::size_t i = 0; i < num_symbols; ++i) {
+        Elf64_Sym sym_entry;
+        file.read(reinterpret_cast<char*>(&sym_entry), sizeof(sym_entry));
+
+        // Skip undefined and local symbols
+        if (sym_entry.st_shndx == SHN_UNDEF) continue;
+        if (ELF64_ST_BIND(sym_entry.st_info) == STB_LOCAL) continue;
+
+        // Read symbol name
+        auto pos = file.tellg();
+        file.seekg(dynstr->sh_offset + sym_entry.st_name);
+
+        char name[512];
+        file.getline(name, sizeof(name), '\0');
+        file.seekg(pos);
+
+        if (name[0] == '\0') continue;
+
+        SymbolInfo sym;
+        sym.id = SymbolId::create(static_cast<std::uint32_t>(i), 0);
+        sym.name = name;
+        sym.demangled_name = name; // Could demangle with abi::__cxa_demangle
+        sym.size = sym_entry.st_size;
+
+        // Get address via dlsym
+        sym.address = dlsym(handle, name);
+
+        // Determine type
+        unsigned char type = ELF64_ST_TYPE(sym_entry.st_info);
+        if (type == STT_FUNC) {
+            sym.type = SymbolType::Function;
+        } else if (type == STT_OBJECT) {
+            sym.type = SymbolType::Variable;
+        } else {
+            sym.type = SymbolType::Unknown;
+        }
+
+        symbols.push_back(std::move(sym));
     }
 #endif
 
@@ -608,8 +694,142 @@ std::vector<std::filesystem::path> ModuleLoader::get_load_order(const std::files
 std::vector<std::string> ModuleLoader::get_dependencies(const std::filesystem::path& path) const {
     std::vector<std::string> deps;
 
-    // TODO: Parse import table / ELF dependencies
-    // This would require platform-specific implementation
+    if (!std::filesystem::exists(path)) {
+        return deps;
+    }
+
+#ifdef _WIN32
+    // Parse PE import table
+    std::ifstream file(path, std::ios::binary);
+    if (!file) return deps;
+
+    // Read DOS header
+    IMAGE_DOS_HEADER dos_header;
+    file.read(reinterpret_cast<char*>(&dos_header), sizeof(dos_header));
+    if (dos_header.e_magic != IMAGE_DOS_SIGNATURE) return deps;
+
+    // Read PE header
+    file.seekg(dos_header.e_lfanew);
+    DWORD pe_signature;
+    file.read(reinterpret_cast<char*>(&pe_signature), sizeof(pe_signature));
+    if (pe_signature != IMAGE_NT_SIGNATURE) return deps;
+
+    IMAGE_FILE_HEADER file_header;
+    file.read(reinterpret_cast<char*>(&file_header), sizeof(file_header));
+
+    // Read optional header to get import directory RVA
+    IMAGE_OPTIONAL_HEADER64 opt_header;
+    file.read(reinterpret_cast<char*>(&opt_header), sizeof(opt_header));
+
+    if (opt_header.NumberOfRvaAndSizes <= IMAGE_DIRECTORY_ENTRY_IMPORT) {
+        return deps;
+    }
+
+    DWORD import_rva = opt_header.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
+    if (import_rva == 0) return deps;
+
+    // Find section containing imports
+    std::vector<IMAGE_SECTION_HEADER> sections(file_header.NumberOfSections);
+    file.read(reinterpret_cast<char*>(sections.data()),
+              file_header.NumberOfSections * sizeof(IMAGE_SECTION_HEADER));
+
+    for (const auto& section : sections) {
+        if (import_rva >= section.VirtualAddress &&
+            import_rva < section.VirtualAddress + section.Misc.VirtualSize) {
+
+            DWORD import_offset = section.PointerToRawData + (import_rva - section.VirtualAddress);
+            file.seekg(import_offset);
+
+            // Read import descriptors
+            while (true) {
+                IMAGE_IMPORT_DESCRIPTOR desc;
+                file.read(reinterpret_cast<char*>(&desc), sizeof(desc));
+                if (desc.Name == 0) break;
+
+                // Read DLL name
+                DWORD name_offset = section.PointerToRawData + (desc.Name - section.VirtualAddress);
+                auto current_pos = file.tellg();
+                file.seekg(name_offset);
+
+                char dll_name[256];
+                file.getline(dll_name, sizeof(dll_name), '\0');
+                deps.push_back(dll_name);
+
+                file.seekg(current_pos);
+            }
+            break;
+        }
+    }
+
+#else
+    // Unix: Read ELF dynamic section using readelf-like parsing
+    std::ifstream file(path, std::ios::binary);
+    if (!file) return deps;
+
+    // Read ELF header
+    unsigned char e_ident[16];
+    file.read(reinterpret_cast<char*>(e_ident), 16);
+
+    // Check ELF magic
+    if (e_ident[0] != 0x7f || e_ident[1] != 'E' ||
+        e_ident[2] != 'L' || e_ident[3] != 'F') {
+        return deps;
+    }
+
+    bool is_64bit = (e_ident[4] == 2);
+    file.seekg(0);
+
+    if (is_64bit) {
+        Elf64_Ehdr ehdr;
+        file.read(reinterpret_cast<char*>(&ehdr), sizeof(ehdr));
+
+        // Read section headers to find .dynamic
+        file.seekg(ehdr.e_shoff);
+        std::vector<Elf64_Shdr> shdrs(ehdr.e_shnum);
+        file.read(reinterpret_cast<char*>(shdrs.data()), ehdr.e_shnum * sizeof(Elf64_Shdr));
+
+        // Find string table
+        Elf64_Shdr& shstrtab = shdrs[ehdr.e_shstrndx];
+
+        // Find .dynstr and .dynamic sections
+        const Elf64_Shdr* dynstr = nullptr;
+        const Elf64_Shdr* dynamic = nullptr;
+
+        for (const auto& shdr : shdrs) {
+            if (shdr.sh_type == SHT_STRTAB) {
+                // Could be .dynstr - check name
+                if (!dynstr) dynstr = &shdr;
+            }
+            if (shdr.sh_type == SHT_DYNAMIC) {
+                dynamic = &shdr;
+            }
+        }
+
+        if (dynamic && dynstr) {
+            // Read dynamic entries
+            file.seekg(dynamic->sh_offset);
+            std::size_t num_entries = dynamic->sh_size / sizeof(Elf64_Dyn);
+
+            for (std::size_t i = 0; i < num_entries; ++i) {
+                Elf64_Dyn dyn;
+                file.read(reinterpret_cast<char*>(&dyn), sizeof(dyn));
+
+                if (dyn.d_tag == DT_NULL) break;
+                if (dyn.d_tag == DT_NEEDED) {
+                    // Read library name from dynstr
+                    auto pos = file.tellg();
+                    file.seekg(dynstr->sh_offset + dyn.d_un.d_val);
+
+                    char name[256];
+                    file.getline(name, sizeof(name), '\0');
+                    deps.push_back(name);
+
+                    file.seekg(pos);
+                }
+            }
+        }
+    }
+#endif
 
     return deps;
 }

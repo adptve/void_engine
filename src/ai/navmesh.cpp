@@ -456,15 +456,190 @@ void NavMesh::clear() {
 }
 
 std::vector<std::uint8_t> NavMesh::serialize() const {
-    // Simple serialization - in production would use proper binary format
     std::vector<std::uint8_t> data;
-    // Placeholder - would serialize vertices, polygons, connections
+
+    // Helper to write data
+    auto write = [&data](const void* src, std::size_t size) {
+        const auto* bytes = static_cast<const std::uint8_t*>(src);
+        data.insert(data.end(), bytes, bytes + size);
+    };
+
+    auto write_u32 = [&write](std::uint32_t value) { write(&value, sizeof(value)); };
+    auto write_float = [&write](float value) { write(&value, sizeof(value)); };
+    auto write_vec3 = [&write_float](const void_math::Vec3& v) {
+        write_float(v.x);
+        write_float(v.y);
+        write_float(v.z);
+    };
+
+    // Magic number and version
+    write_u32(0x4E41564D); // "NAVM"
+    write_u32(1);          // Version
+
+    // Bounds
+    write_vec3(m_bounds_min);
+    write_vec3(m_bounds_max);
+
+    // Vertices
+    write_u32(static_cast<std::uint32_t>(m_vertices.size()));
+    for (const auto& v : m_vertices) {
+        write_vec3(v.position);
+        write_u32(v.index);
+    }
+
+    // Polygons
+    write_u32(static_cast<std::uint32_t>(m_polygons.size()));
+    for (const auto& poly : m_polygons) {
+        // Vertices
+        write_u32(static_cast<std::uint32_t>(poly.vertices.size()));
+        for (auto vi : poly.vertices) {
+            write_u32(vi);
+        }
+        // Neighbors
+        write_u32(static_cast<std::uint32_t>(poly.neighbors.size()));
+        for (auto ni : poly.neighbors) {
+            write_u32(ni);
+        }
+        // Properties
+        write_vec3(poly.center);
+        write_float(poly.area);
+        write_u32(poly.flags);
+        write_float(poly.cost);
+    }
+
+    // Off-mesh connections
+    write_u32(static_cast<std::uint32_t>(m_off_mesh_connections.size()));
+    for (const auto& conn : m_off_mesh_connections) {
+        write_vec3(conn.start);
+        write_vec3(conn.end);
+        write_float(conn.radius);
+        write_float(conn.cost);
+        write_u32(conn.flags);
+        write_u32(conn.bidirectional ? 1u : 0u);
+        write_u32(conn.user_id);
+    }
+
+    // Area costs
+    write_u32(static_cast<std::uint32_t>(m_area_costs.size()));
+    for (const auto& [area, cost] : m_area_costs) {
+        data.push_back(area);
+        write_float(cost);
+    }
+
+    // Total area
+    write_float(m_total_area);
+
     return data;
 }
 
-bool NavMesh::deserialize(const std::vector<std::uint8_t>& /*data*/) {
-    // Placeholder - would deserialize from binary data
-    return true;
+bool NavMesh::deserialize(const std::vector<std::uint8_t>& data) {
+    if (data.size() < 8) return false; // At least magic + version
+
+    std::size_t offset = 0;
+
+    // Helper to read data
+    auto read = [&data, &offset](void* dst, std::size_t size) -> bool {
+        if (offset + size > data.size()) return false;
+        std::memcpy(dst, data.data() + offset, size);
+        offset += size;
+        return true;
+    };
+
+    auto read_u32 = [&read]() -> std::uint32_t {
+        std::uint32_t value = 0;
+        read(&value, sizeof(value));
+        return value;
+    };
+    auto read_float = [&read]() -> float {
+        float value = 0;
+        read(&value, sizeof(value));
+        return value;
+    };
+    auto read_vec3 = [&read_float]() -> void_math::Vec3 {
+        return {read_float(), read_float(), read_float()};
+    };
+
+    // Magic number and version
+    std::uint32_t magic = read_u32();
+    if (magic != 0x4E41564D) return false; // "NAVM"
+
+    std::uint32_t version = read_u32();
+    if (version != 1) return false;
+
+    // Clear existing data
+    clear();
+
+    // Bounds
+    m_bounds_min = read_vec3();
+    m_bounds_max = read_vec3();
+
+    // Vertices
+    std::uint32_t vertex_count = read_u32();
+    m_vertices.reserve(vertex_count);
+    for (std::uint32_t i = 0; i < vertex_count; ++i) {
+        NavVertex v;
+        v.position = read_vec3();
+        v.index = read_u32();
+        m_vertices.push_back(v);
+    }
+
+    // Polygons
+    std::uint32_t poly_count = read_u32();
+    m_polygons.reserve(poly_count);
+    for (std::uint32_t i = 0; i < poly_count; ++i) {
+        NavPolygon poly;
+
+        // Vertices
+        std::uint32_t vert_count = read_u32();
+        poly.vertices.reserve(vert_count);
+        for (std::uint32_t v = 0; v < vert_count; ++v) {
+            poly.vertices.push_back(read_u32());
+        }
+
+        // Neighbors
+        std::uint32_t neighbor_count = read_u32();
+        poly.neighbors.reserve(neighbor_count);
+        for (std::uint32_t n = 0; n < neighbor_count; ++n) {
+            poly.neighbors.push_back(read_u32());
+        }
+
+        // Properties
+        poly.center = read_vec3();
+        poly.area = read_float();
+        poly.flags = read_u32();
+        poly.cost = read_float();
+
+        m_polygons.push_back(std::move(poly));
+    }
+
+    // Off-mesh connections
+    std::uint32_t conn_count = read_u32();
+    m_off_mesh_connections.reserve(conn_count);
+    for (std::uint32_t i = 0; i < conn_count; ++i) {
+        OffMeshConnection conn;
+        conn.start = read_vec3();
+        conn.end = read_vec3();
+        conn.radius = read_float();
+        conn.cost = read_float();
+        conn.flags = read_u32();
+        conn.bidirectional = read_u32() != 0;
+        conn.user_id = read_u32();
+        m_off_mesh_connections.push_back(conn);
+    }
+
+    // Area costs
+    std::uint32_t area_count = read_u32();
+    for (std::uint32_t i = 0; i < area_count; ++i) {
+        if (offset >= data.size()) return false;
+        std::uint8_t area = data[offset++];
+        float cost = read_float();
+        m_area_costs[area] = cost;
+    }
+
+    // Total area
+    m_total_area = read_float();
+
+    return offset <= data.size();
 }
 
 void NavMesh::update_bounds() {

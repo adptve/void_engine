@@ -300,7 +300,105 @@ void MSVCCompiler::detect_from_vcvars() {
 }
 
 void MSVCCompiler::detect_from_registry() {
-    // TODO: Implement registry-based detection for VS installation
+#ifdef _WIN32
+    // Try to find Visual Studio through vswhere.exe (VS 2017+)
+    // vswhere is installed with VS and provides JSON output for installed VS versions
+
+    // Common vswhere locations
+    std::vector<std::filesystem::path> vswhere_paths = {
+        "C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer\\vswhere.exe",
+        "C:\\Program Files\\Microsoft Visual Studio\\Installer\\vswhere.exe"
+    };
+
+    std::filesystem::path vswhere_path;
+    for (const auto& path : vswhere_paths) {
+        if (std::filesystem::exists(path)) {
+            vswhere_path = path;
+            break;
+        }
+    }
+
+    if (!vswhere_path.empty()) {
+        // Run vswhere to find latest VS installation
+        std::string cmd = "-latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath";
+        auto result = execute_process(vswhere_path.string(), cmd);
+
+        if (result.exit_code == 0 && !result.stdout_output.empty()) {
+            // Extract installation path
+            std::string install_path = result.stdout_output;
+            // Remove trailing whitespace/newlines
+            while (!install_path.empty() &&
+                   (install_path.back() == '\n' || install_path.back() == '\r' ||
+                    install_path.back() == ' ')) {
+                install_path.pop_back();
+            }
+
+            if (!install_path.empty() && std::filesystem::exists(install_path)) {
+                std::filesystem::path vc_tools = install_path;
+                vc_tools /= "VC\\Tools\\MSVC";
+
+                // Find latest version in VC/Tools/MSVC
+                if (std::filesystem::exists(vc_tools)) {
+                    std::filesystem::path latest_version;
+                    for (const auto& entry : std::filesystem::directory_iterator(vc_tools)) {
+                        if (entry.is_directory()) {
+                            if (latest_version.empty() || entry.path() > latest_version) {
+                                latest_version = entry.path();
+                            }
+                        }
+                    }
+
+                    if (!latest_version.empty()) {
+                        // Set cl.exe path
+                        std::filesystem::path cl = latest_version / "bin\\Hostx64\\x64\\cl.exe";
+                        if (std::filesystem::exists(cl)) {
+                            cl_path_ = cl;
+                            link_path_ = latest_version / "bin\\Hostx64\\x64\\link.exe";
+                            include_dirs_.push_back(latest_version / "include");
+                            lib_dirs_.push_back(latest_version / "lib\\x64");
+                            VOID_LOG_INFO("[MSVCCompiler] Found VS via vswhere: {}", cl.string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback: try legacy registry paths for older VS versions
+    if (cl_path_.empty()) {
+        HKEY hKey;
+        // Try VS 2019/2017 registry key
+        if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
+            "SOFTWARE\\WOW6432Node\\Microsoft\\VisualStudio\\SxS\\VS7",
+            0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+
+            char value[MAX_PATH];
+            DWORD size = sizeof(value);
+            DWORD type;
+
+            // Try to find VS 2019 (16.0) or 2017 (15.0)
+            const char* versions[] = {"16.0", "15.0", "14.0"};
+            for (const char* ver : versions) {
+                if (RegQueryValueExA(hKey, ver, nullptr, &type,
+                    reinterpret_cast<LPBYTE>(value), &size) == ERROR_SUCCESS) {
+
+                    std::filesystem::path vs_path = value;
+                    std::filesystem::path cl = vs_path / "VC\\bin\\amd64\\cl.exe";
+                    if (std::filesystem::exists(cl)) {
+                        cl_path_ = cl;
+                        link_path_ = vs_path / "VC\\bin\\amd64\\link.exe";
+                        include_dirs_.push_back(vs_path / "VC\\include");
+                        lib_dirs_.push_back(vs_path / "VC\\lib\\amd64");
+                        VOID_LOG_INFO("[MSVCCompiler] Found VS via registry: {}", cl.string());
+                        break;
+                    }
+                }
+                size = sizeof(value);
+            }
+            RegCloseKey(hKey);
+        }
+    }
+#endif
 }
 
 CppResult<CompileResult> MSVCCompiler::compile(

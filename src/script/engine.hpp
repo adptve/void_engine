@@ -255,6 +255,96 @@ public:
 
     [[nodiscard]] Stats stats() const;
 
+    // ==========================================================================
+    // Engine Integration Callbacks
+    // ==========================================================================
+
+    // Entity callbacks
+    using EntitySpawnCallback = std::function<void(std::uint64_t id, const std::string& name, const ValueMap& components)>;
+    using EntityDestroyCallback = std::function<void(std::uint64_t id)>;
+    using EntityExistsCallback = std::function<bool(std::uint64_t id)>;
+    using EntityCloneCallback = std::function<void(std::uint64_t src, std::uint64_t dst)>;
+    using GetComponentCallback = std::function<Value(std::uint64_t id, const std::string& type)>;
+    using SetComponentCallback = std::function<void(std::uint64_t id, const std::string& name, const Value& data)>;
+    using HasComponentCallback = std::function<bool(std::uint64_t id, const std::string& type)>;
+    using RemoveComponentCallback = std::function<bool(std::uint64_t id, const std::string& type)>;
+
+    // Transform callbacks
+    using GetPositionCallback = std::function<Value(std::uint64_t id)>;
+    using SetPositionCallback = std::function<void(std::uint64_t id, double x, double y, double z)>;
+    using GetRotationCallback = std::function<Value(std::uint64_t id)>;
+    using SetRotationCallback = std::function<void(std::uint64_t id, double x, double y, double z)>;
+    using GetScaleCallback = std::function<Value(std::uint64_t id)>;
+    using SetScaleCallback = std::function<void(std::uint64_t id, double x, double y, double z)>;
+
+    // Hierarchy callbacks
+    using GetParentCallback = std::function<std::uint64_t(std::uint64_t id)>;
+    using SetParentCallback = std::function<void(std::uint64_t id, std::uint64_t parent)>;
+    using GetChildrenCallback = std::function<Value(std::uint64_t id)>;
+
+    // Query callbacks
+    using FindEntityCallback = std::function<std::uint64_t(const std::string& name)>;
+    using FindEntitiesCallback = std::function<Value(const Value& filter)>;
+
+    // Layer callbacks
+    using CreateLayerCallback = std::function<void(std::uint64_t id, const std::string& name, const std::string& type)>;
+    using DestroyLayerCallback = std::function<void(std::uint64_t id)>;
+    using SetLayerVisibleCallback = std::function<void(std::uint64_t id, bool visible)>;
+    using GetLayerVisibleCallback = std::function<bool(std::uint64_t id)>;
+    using SetLayerOrderCallback = std::function<void(std::uint64_t id, std::int64_t order)>;
+
+    // Input callbacks
+    using GetKeyboardStateCallback = std::function<Value()>;
+    using GetMouseStateCallback = std::function<Value()>;
+
+    // Viewport callbacks
+    using GetViewportSizeCallback = std::function<Value()>;
+    using GetViewportAspectCallback = std::function<double()>;
+
+    // Patch callback
+    using EmitPatchCallback = std::function<void(const Value& patch)>;
+
+    // Setters for callbacks
+    void set_entity_spawn_callback(EntitySpawnCallback cb) { entity_spawn_callback_ = std::move(cb); }
+    void set_entity_destroy_callback(EntityDestroyCallback cb) { entity_destroy_callback_ = std::move(cb); }
+    void set_entity_exists_callback(EntityExistsCallback cb) { entity_exists_callback_ = std::move(cb); }
+    void set_entity_clone_callback(EntityCloneCallback cb) { entity_clone_callback_ = std::move(cb); }
+    void set_get_component_callback(GetComponentCallback cb) { get_component_callback_ = std::move(cb); }
+    void set_set_component_callback(SetComponentCallback cb) { set_component_callback_ = std::move(cb); }
+    void set_has_component_callback(HasComponentCallback cb) { has_component_callback_ = std::move(cb); }
+    void set_remove_component_callback(RemoveComponentCallback cb) { remove_component_callback_ = std::move(cb); }
+    void set_get_position_callback(GetPositionCallback cb) { get_position_callback_ = std::move(cb); }
+    void set_set_position_callback(SetPositionCallback cb) { set_position_callback_ = std::move(cb); }
+    void set_get_rotation_callback(GetRotationCallback cb) { get_rotation_callback_ = std::move(cb); }
+    void set_set_rotation_callback(SetRotationCallback cb) { set_rotation_callback_ = std::move(cb); }
+    void set_get_scale_callback(GetScaleCallback cb) { get_scale_callback_ = std::move(cb); }
+    void set_set_scale_callback(SetScaleCallback cb) { set_scale_callback_ = std::move(cb); }
+    void set_get_parent_callback(GetParentCallback cb) { get_parent_callback_ = std::move(cb); }
+    void set_set_parent_callback(SetParentCallback cb) { set_parent_callback_ = std::move(cb); }
+    void set_get_children_callback(GetChildrenCallback cb) { get_children_callback_ = std::move(cb); }
+    void set_find_entity_callback(FindEntityCallback cb) { find_entity_callback_ = std::move(cb); }
+    void set_find_entities_callback(FindEntitiesCallback cb) { find_entities_callback_ = std::move(cb); }
+    void set_create_layer_callback(CreateLayerCallback cb) { create_layer_callback_ = std::move(cb); }
+    void set_destroy_layer_callback(DestroyLayerCallback cb) { destroy_layer_callback_ = std::move(cb); }
+    void set_layer_visible_callback(SetLayerVisibleCallback set_cb, GetLayerVisibleCallback get_cb) {
+        set_layer_visible_callback_ = std::move(set_cb);
+        get_layer_visible_callback_ = std::move(get_cb);
+    }
+    void set_layer_order_callback(SetLayerOrderCallback cb) { set_layer_order_callback_ = std::move(cb); }
+    void set_keyboard_state_callback(GetKeyboardStateCallback cb) { get_keyboard_state_callback_ = std::move(cb); }
+    void set_mouse_state_callback(GetMouseStateCallback cb) { get_mouse_state_callback_ = std::move(cb); }
+    void set_viewport_callbacks(GetViewportSizeCallback size_cb, GetViewportAspectCallback aspect_cb) {
+        get_viewport_size_callback_ = std::move(size_cb);
+        get_viewport_aspect_callback_ = std::move(aspect_cb);
+    }
+    void set_emit_patch_callback(EmitPatchCallback cb) { emit_patch_callback_ = std::move(cb); }
+
+    // Frame data (set by engine before update)
+    void set_frame_data(float fps, float delta_time) {
+        current_fps_ = fps;
+        current_delta_time_ = delta_time;
+    }
+
 private:
     std::unordered_map<ScriptId, std::unique_ptr<ScriptAsset>> scripts_;
     std::unordered_map<std::string, ScriptId> script_names_;
@@ -270,6 +360,47 @@ private:
     bool hot_reload_enabled_ = false;
 
     inline static std::uint32_t next_script_id_ = 1;
+    std::uint64_t next_entity_id_ = 1;
+    std::uint64_t next_layer_id_ = 1;
+    std::uint64_t next_listener_id_ = 1;
+
+    float current_fps_ = 60.0f;
+    float current_delta_time_ = 1.0f / 60.0f;
+
+    // Event listeners
+    std::unordered_map<std::string, std::vector<std::pair<std::uint64_t, Value>>> event_listeners_;
+    std::unordered_map<std::string, std::vector<std::pair<std::uint64_t, Value>>> once_listeners_;
+
+    // Callbacks
+    EntitySpawnCallback entity_spawn_callback_;
+    EntityDestroyCallback entity_destroy_callback_;
+    EntityExistsCallback entity_exists_callback_;
+    EntityCloneCallback entity_clone_callback_;
+    GetComponentCallback get_component_callback_;
+    SetComponentCallback set_component_callback_;
+    HasComponentCallback has_component_callback_;
+    RemoveComponentCallback remove_component_callback_;
+    GetPositionCallback get_position_callback_;
+    SetPositionCallback set_position_callback_;
+    GetRotationCallback get_rotation_callback_;
+    SetRotationCallback set_rotation_callback_;
+    GetScaleCallback get_scale_callback_;
+    SetScaleCallback set_scale_callback_;
+    GetParentCallback get_parent_callback_;
+    SetParentCallback set_parent_callback_;
+    GetChildrenCallback get_children_callback_;
+    FindEntityCallback find_entity_callback_;
+    FindEntitiesCallback find_entities_callback_;
+    CreateLayerCallback create_layer_callback_;
+    DestroyLayerCallback destroy_layer_callback_;
+    SetLayerVisibleCallback set_layer_visible_callback_;
+    GetLayerVisibleCallback get_layer_visible_callback_;
+    SetLayerOrderCallback set_layer_order_callback_;
+    GetKeyboardStateCallback get_keyboard_state_callback_;
+    GetMouseStateCallback get_mouse_state_callback_;
+    GetViewportSizeCallback get_viewport_size_callback_;
+    GetViewportAspectCallback get_viewport_aspect_callback_;
+    EmitPatchCallback emit_patch_callback_;
 };
 
 // =============================================================================

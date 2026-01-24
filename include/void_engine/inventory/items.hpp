@@ -336,9 +336,11 @@ public:
     void add_modifier_pool(ItemRarity rarity, const std::vector<ItemModifier>& modifiers);
     const std::vector<ItemModifier>& get_modifier_pool(ItemRarity rarity) const;
 
+    /// @brief Apply random modifiers from pool to an item
+    void apply_random_modifiers(ItemInstance& item, std::uint32_t count);
+
 private:
     ItemInstanceId generate_id();
-    void apply_random_modifiers(ItemInstance& item, std::uint32_t count);
 
     ItemRegistry* m_registry{nullptr};
     std::uint64_t m_next_id{1};

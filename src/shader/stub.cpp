@@ -1,15 +1,24 @@
 /// @file stub.cpp
-/// @brief void_shader compilation unit
+/// @brief Minimal compilation unit for void_shader header-only module
 ///
-/// This file ensures the header-only void_shader library compiles correctly.
+/// void_shader is primarily header-only. This stub provides:
+/// - A compilation unit for CMake library target
+/// - Runtime initialization hook
+/// - Version information
 
 #include <void_engine/shader/shader.hpp>
 
 namespace void_shader {
 
-/// Initialization function (can be used for explicit template instantiation if needed)
+/// Get module version string
+const char* version() noexcept {
+    return "1.0.0";
+}
+
+/// Initialize the shader module
+/// Header-only module - no runtime initialization needed
 void init() {
-    // Header-only library - nothing to initialize
+    // Shader module is header-only with no global state requiring initialization
 }
 
 } // namespace void_shader

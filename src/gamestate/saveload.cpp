@@ -770,23 +770,92 @@ SaveData SaveManager::gather_save_data(const std::string& name, SaveType type) c
     data.metadata.game_version = m_game_version;
     data.metadata.level_name = m_current_level;
 
-    // Gather data from saveables
+    // Gather data from saveables - serialize each into custom_data
+    // Format: count (uint32) + [id_len (uint32) + id + version (uint32) + data_len (uint32) + data]...
+
+    std::uint32_t count = static_cast<std::uint32_t>(m_saveables.size());
+    data.custom_data.resize(sizeof(std::uint32_t));
+    std::memcpy(data.custom_data.data(), &count, sizeof(std::uint32_t));
+
     for (auto* saveable : m_saveables) {
-        if (saveable) {
-            auto bytes = saveable->serialize();
-            // Would store by ID in custom_data
-        }
+        if (!saveable) continue;
+
+        // Get saveable ID
+        std::string id = saveable->saveable_id();
+        std::uint32_t id_len = static_cast<std::uint32_t>(id.size());
+        data.custom_data.resize(data.custom_data.size() + sizeof(std::uint32_t));
+        std::memcpy(data.custom_data.data() + data.custom_data.size() - sizeof(std::uint32_t),
+                    &id_len, sizeof(std::uint32_t));
+        data.custom_data.insert(data.custom_data.end(), id.begin(), id.end());
+
+        // Get version
+        std::uint32_t version = saveable->save_version();
+        data.custom_data.resize(data.custom_data.size() + sizeof(std::uint32_t));
+        std::memcpy(data.custom_data.data() + data.custom_data.size() - sizeof(std::uint32_t),
+                    &version, sizeof(std::uint32_t));
+
+        // Get serialized data
+        auto bytes = saveable->serialize();
+        std::uint32_t data_len = static_cast<std::uint32_t>(bytes.size());
+        data.custom_data.resize(data.custom_data.size() + sizeof(std::uint32_t));
+        std::memcpy(data.custom_data.data() + data.custom_data.size() - sizeof(std::uint32_t),
+                    &data_len, sizeof(std::uint32_t));
+        data.custom_data.insert(data.custom_data.end(), bytes.begin(), bytes.end());
     }
 
     return data;
 }
 
 void SaveManager::apply_save_data(const SaveData& data) {
-    // Apply data to saveables
+    // Build a map from ID to saveable for quick lookup
+    std::unordered_map<std::string, ISaveable*> saveable_map;
     for (auto* saveable : m_saveables) {
         if (saveable) {
-            // Would retrieve by ID from custom_data
-            // saveable->deserialize(bytes, version);
+            saveable_map[saveable->saveable_id()] = saveable;
+        }
+    }
+
+    // Parse custom_data to restore saveable states
+    const auto& custom = data.custom_data;
+    if (custom.size() < sizeof(std::uint32_t)) return;
+
+    std::size_t pos = 0;
+
+    // Read saveable count
+    std::uint32_t count;
+    std::memcpy(&count, custom.data() + pos, sizeof(std::uint32_t));
+    pos += sizeof(std::uint32_t);
+
+    // Read each saveable's data
+    for (std::uint32_t i = 0; i < count && pos < custom.size(); ++i) {
+        // Read ID
+        if (pos + sizeof(std::uint32_t) > custom.size()) break;
+        std::uint32_t id_len;
+        std::memcpy(&id_len, custom.data() + pos, sizeof(std::uint32_t));
+        pos += sizeof(std::uint32_t);
+        if (pos + id_len > custom.size()) break;
+        std::string id(reinterpret_cast<const char*>(custom.data() + pos), id_len);
+        pos += id_len;
+
+        // Read version
+        if (pos + sizeof(std::uint32_t) > custom.size()) break;
+        std::uint32_t version;
+        std::memcpy(&version, custom.data() + pos, sizeof(std::uint32_t));
+        pos += sizeof(std::uint32_t);
+
+        // Read data
+        if (pos + sizeof(std::uint32_t) > custom.size()) break;
+        std::uint32_t data_len;
+        std::memcpy(&data_len, custom.data() + pos, sizeof(std::uint32_t));
+        pos += sizeof(std::uint32_t);
+        if (pos + data_len > custom.size()) break;
+        std::vector<std::uint8_t> bytes(custom.begin() + pos, custom.begin() + pos + data_len);
+        pos += data_len;
+
+        // Find and restore saveable
+        auto it = saveable_map.find(id);
+        if (it != saveable_map.end() && it->second) {
+            it->second->deserialize(bytes, version);
         }
     }
 }
@@ -1056,22 +1125,245 @@ std::vector<CheckpointManager::Checkpoint> CheckpointManager::get_checkpoints_in
 
 std::vector<std::uint8_t> CheckpointManager::serialize() const {
     std::vector<std::uint8_t> result;
-    // Serialize checkpoints
+
+    // Write checkpoint count
+    std::uint32_t count = static_cast<std::uint32_t>(m_checkpoints.size());
+    result.resize(result.size() + sizeof(std::uint32_t));
+    std::memcpy(result.data() + result.size() - sizeof(std::uint32_t), &count, sizeof(std::uint32_t));
+
+    // Write next ID
+    result.resize(result.size() + sizeof(std::uint64_t));
+    std::memcpy(result.data() + result.size() - sizeof(std::uint64_t), &m_next_id, sizeof(std::uint64_t));
+
+    // Write each checkpoint
+    for (const auto& [id, cp] : m_checkpoints) {
+        // ID
+        result.resize(result.size() + sizeof(std::uint64_t));
+        std::memcpy(result.data() + result.size() - sizeof(std::uint64_t), &id.value, sizeof(std::uint64_t));
+
+        // Name (length + data)
+        std::uint32_t name_len = static_cast<std::uint32_t>(cp.name.size());
+        result.resize(result.size() + sizeof(std::uint32_t));
+        std::memcpy(result.data() + result.size() - sizeof(std::uint32_t), &name_len, sizeof(std::uint32_t));
+        result.insert(result.end(), cp.name.begin(), cp.name.end());
+
+        // Description
+        std::uint32_t desc_len = static_cast<std::uint32_t>(cp.description.size());
+        result.resize(result.size() + sizeof(std::uint32_t));
+        std::memcpy(result.data() + result.size() - sizeof(std::uint32_t), &desc_len, sizeof(std::uint32_t));
+        result.insert(result.end(), cp.description.begin(), cp.description.end());
+
+        // Position (3 floats)
+        result.resize(result.size() + 3 * sizeof(float));
+        std::memcpy(result.data() + result.size() - 3 * sizeof(float), &cp.position, 3 * sizeof(float));
+
+        // Rotation (3 floats)
+        result.resize(result.size() + 3 * sizeof(float));
+        std::memcpy(result.data() + result.size() - 3 * sizeof(float), &cp.rotation, 3 * sizeof(float));
+
+        // Level name
+        std::uint32_t level_len = static_cast<std::uint32_t>(cp.level_name.size());
+        result.resize(result.size() + sizeof(std::uint32_t));
+        std::memcpy(result.data() + result.size() - sizeof(std::uint32_t), &level_len, sizeof(std::uint32_t));
+        result.insert(result.end(), cp.level_name.begin(), cp.level_name.end());
+
+        // Timestamp
+        result.resize(result.size() + sizeof(double));
+        std::memcpy(result.data() + result.size() - sizeof(double), &cp.timestamp, sizeof(double));
+
+        // State data (length + data)
+        std::uint32_t state_len = static_cast<std::uint32_t>(cp.state_data.size());
+        result.resize(result.size() + sizeof(std::uint32_t));
+        std::memcpy(result.data() + result.size() - sizeof(std::uint32_t), &state_len, sizeof(std::uint32_t));
+        result.insert(result.end(), cp.state_data.begin(), cp.state_data.end());
+    }
+
     return result;
 }
 
 void CheckpointManager::deserialize(const std::vector<std::uint8_t>& data) {
-    // Deserialize checkpoints
+    if (data.size() < sizeof(std::uint32_t) + sizeof(std::uint64_t)) {
+        return;
+    }
+
+    m_checkpoints.clear();
+    std::size_t pos = 0;
+
+    // Read checkpoint count
+    std::uint32_t count;
+    std::memcpy(&count, data.data() + pos, sizeof(std::uint32_t));
+    pos += sizeof(std::uint32_t);
+
+    // Read next ID
+    std::memcpy(&m_next_id, data.data() + pos, sizeof(std::uint64_t));
+    pos += sizeof(std::uint64_t);
+
+    // Read each checkpoint
+    for (std::uint32_t i = 0; i < count && pos < data.size(); ++i) {
+        Checkpoint cp;
+
+        // ID
+        if (pos + sizeof(std::uint64_t) > data.size()) break;
+        std::memcpy(&cp.id.value, data.data() + pos, sizeof(std::uint64_t));
+        pos += sizeof(std::uint64_t);
+
+        // Name
+        if (pos + sizeof(std::uint32_t) > data.size()) break;
+        std::uint32_t name_len;
+        std::memcpy(&name_len, data.data() + pos, sizeof(std::uint32_t));
+        pos += sizeof(std::uint32_t);
+        if (pos + name_len > data.size()) break;
+        cp.name.assign(reinterpret_cast<const char*>(data.data() + pos), name_len);
+        pos += name_len;
+
+        // Description
+        if (pos + sizeof(std::uint32_t) > data.size()) break;
+        std::uint32_t desc_len;
+        std::memcpy(&desc_len, data.data() + pos, sizeof(std::uint32_t));
+        pos += sizeof(std::uint32_t);
+        if (pos + desc_len > data.size()) break;
+        cp.description.assign(reinterpret_cast<const char*>(data.data() + pos), desc_len);
+        pos += desc_len;
+
+        // Position
+        if (pos + 3 * sizeof(float) > data.size()) break;
+        std::memcpy(&cp.position, data.data() + pos, 3 * sizeof(float));
+        pos += 3 * sizeof(float);
+
+        // Rotation
+        if (pos + 3 * sizeof(float) > data.size()) break;
+        std::memcpy(&cp.rotation, data.data() + pos, 3 * sizeof(float));
+        pos += 3 * sizeof(float);
+
+        // Level name
+        if (pos + sizeof(std::uint32_t) > data.size()) break;
+        std::uint32_t level_len;
+        std::memcpy(&level_len, data.data() + pos, sizeof(std::uint32_t));
+        pos += sizeof(std::uint32_t);
+        if (pos + level_len > data.size()) break;
+        cp.level_name.assign(reinterpret_cast<const char*>(data.data() + pos), level_len);
+        pos += level_len;
+
+        // Timestamp
+        if (pos + sizeof(double) > data.size()) break;
+        std::memcpy(&cp.timestamp, data.data() + pos, sizeof(double));
+        pos += sizeof(double);
+
+        // State data
+        if (pos + sizeof(std::uint32_t) > data.size()) break;
+        std::uint32_t state_len;
+        std::memcpy(&state_len, data.data() + pos, sizeof(std::uint32_t));
+        pos += sizeof(std::uint32_t);
+        if (pos + state_len > data.size()) break;
+        cp.state_data.assign(data.begin() + pos, data.begin() + pos + state_len);
+        pos += state_len;
+
+        m_checkpoints[cp.id] = std::move(cp);
+    }
 }
 
 std::vector<std::uint8_t> CheckpointManager::capture_state() const {
     std::vector<std::uint8_t> state;
-    // Capture current state from save manager
+
+    if (!m_save_manager) {
+        return state;
+    }
+
+    // Use SaveManager to gather data from all registered saveables
+    // We serialize: saveable_id (string) + version (uint32) + data_size (uint32) + data
+    const auto& saveables = m_save_manager->saveables();
+
+    // Write saveable count
+    std::uint32_t count = static_cast<std::uint32_t>(saveables.size());
+    state.resize(state.size() + sizeof(std::uint32_t));
+    std::memcpy(state.data() + state.size() - sizeof(std::uint32_t), &count, sizeof(std::uint32_t));
+
+    for (auto* saveable : saveables) {
+        if (!saveable) continue;
+
+        // Notify before save
+        saveable->on_before_save();
+
+        // Get saveable ID
+        std::string id = saveable->saveable_id();
+        std::uint32_t id_len = static_cast<std::uint32_t>(id.size());
+        state.resize(state.size() + sizeof(std::uint32_t));
+        std::memcpy(state.data() + state.size() - sizeof(std::uint32_t), &id_len, sizeof(std::uint32_t));
+        state.insert(state.end(), id.begin(), id.end());
+
+        // Get version
+        std::uint32_t version = saveable->save_version();
+        state.resize(state.size() + sizeof(std::uint32_t));
+        std::memcpy(state.data() + state.size() - sizeof(std::uint32_t), &version, sizeof(std::uint32_t));
+
+        // Get serialized data
+        auto bytes = saveable->serialize();
+        std::uint32_t data_len = static_cast<std::uint32_t>(bytes.size());
+        state.resize(state.size() + sizeof(std::uint32_t));
+        std::memcpy(state.data() + state.size() - sizeof(std::uint32_t), &data_len, sizeof(std::uint32_t));
+        state.insert(state.end(), bytes.begin(), bytes.end());
+
+        saveable->on_after_save(SaveResult::Success);
+    }
+
     return state;
 }
 
 void CheckpointManager::restore_state(const std::vector<std::uint8_t>& data) {
-    // Restore state through save manager
+    if (!m_save_manager || data.empty()) {
+        return;
+    }
+
+    std::size_t pos = 0;
+
+    // Read saveable count
+    if (pos + sizeof(std::uint32_t) > data.size()) return;
+    std::uint32_t count;
+    std::memcpy(&count, data.data() + pos, sizeof(std::uint32_t));
+    pos += sizeof(std::uint32_t);
+
+    // Build a map from ID to saveable for quick lookup
+    std::unordered_map<std::string, ISaveable*> saveable_map;
+    for (auto* saveable : m_save_manager->saveables()) {
+        if (saveable) {
+            saveable_map[saveable->saveable_id()] = saveable;
+        }
+    }
+
+    // Read each saveable's data
+    for (std::uint32_t i = 0; i < count && pos < data.size(); ++i) {
+        // Read ID
+        if (pos + sizeof(std::uint32_t) > data.size()) break;
+        std::uint32_t id_len;
+        std::memcpy(&id_len, data.data() + pos, sizeof(std::uint32_t));
+        pos += sizeof(std::uint32_t);
+        if (pos + id_len > data.size()) break;
+        std::string id(reinterpret_cast<const char*>(data.data() + pos), id_len);
+        pos += id_len;
+
+        // Read version
+        if (pos + sizeof(std::uint32_t) > data.size()) break;
+        std::uint32_t version;
+        std::memcpy(&version, data.data() + pos, sizeof(std::uint32_t));
+        pos += sizeof(std::uint32_t);
+
+        // Read data
+        if (pos + sizeof(std::uint32_t) > data.size()) break;
+        std::uint32_t data_len;
+        std::memcpy(&data_len, data.data() + pos, sizeof(std::uint32_t));
+        pos += sizeof(std::uint32_t);
+        if (pos + data_len > data.size()) break;
+        std::vector<std::uint8_t> bytes(data.begin() + pos, data.begin() + pos + data_len);
+        pos += data_len;
+
+        // Find and restore saveable
+        auto it = saveable_map.find(id);
+        if (it != saveable_map.end() && it->second) {
+            it->second->on_before_load();
+            bool success = it->second->deserialize(bytes, version);
+            it->second->on_after_load(success ? LoadResult::Success : LoadResult::Failed);
+        }
+    }
 }
 
 // =============================================================================
@@ -1083,12 +1375,108 @@ SaveStateSnapshot::~SaveStateSnapshot() = default;
 
 void SaveStateSnapshot::capture(SaveManager* manager) {
     if (!manager) return;
-    // Capture current state
+
+    // Gather data from all saveables
+    m_data = manager->gather_data("Snapshot", SaveType::Quick);
+
+    // Store saveable data in custom_data section
+    const auto& saveables = manager->saveables();
+
+    // Clear and rebuild custom_data
+    m_data.custom_data.clear();
+
+    // Write saveable count
+    std::uint32_t count = static_cast<std::uint32_t>(saveables.size());
+    m_data.custom_data.resize(sizeof(std::uint32_t));
+    std::memcpy(m_data.custom_data.data(), &count, sizeof(std::uint32_t));
+
+    for (auto* saveable : saveables) {
+        if (!saveable) continue;
+
+        saveable->on_before_save();
+
+        // Get saveable ID
+        std::string id = saveable->saveable_id();
+        std::uint32_t id_len = static_cast<std::uint32_t>(id.size());
+        m_data.custom_data.resize(m_data.custom_data.size() + sizeof(std::uint32_t));
+        std::memcpy(m_data.custom_data.data() + m_data.custom_data.size() - sizeof(std::uint32_t),
+                    &id_len, sizeof(std::uint32_t));
+        m_data.custom_data.insert(m_data.custom_data.end(), id.begin(), id.end());
+
+        // Get version
+        std::uint32_t version = saveable->save_version();
+        m_data.custom_data.resize(m_data.custom_data.size() + sizeof(std::uint32_t));
+        std::memcpy(m_data.custom_data.data() + m_data.custom_data.size() - sizeof(std::uint32_t),
+                    &version, sizeof(std::uint32_t));
+
+        // Get serialized data
+        auto bytes = saveable->serialize();
+        std::uint32_t data_len = static_cast<std::uint32_t>(bytes.size());
+        m_data.custom_data.resize(m_data.custom_data.size() + sizeof(std::uint32_t));
+        std::memcpy(m_data.custom_data.data() + m_data.custom_data.size() - sizeof(std::uint32_t),
+                    &data_len, sizeof(std::uint32_t));
+        m_data.custom_data.insert(m_data.custom_data.end(), bytes.begin(), bytes.end());
+
+        saveable->on_after_save(SaveResult::Success);
+    }
 }
 
 void SaveStateSnapshot::restore(SaveManager* manager) {
     if (!manager || !is_valid()) return;
-    // Restore captured state
+
+    // Build a map from ID to saveable for quick lookup
+    std::unordered_map<std::string, ISaveable*> saveable_map;
+    for (auto* saveable : manager->saveables()) {
+        if (saveable) {
+            saveable_map[saveable->saveable_id()] = saveable;
+        }
+    }
+
+    // Parse custom_data to restore saveable states
+    const auto& data = m_data.custom_data;
+    if (data.size() < sizeof(std::uint32_t)) return;
+
+    std::size_t pos = 0;
+
+    // Read saveable count
+    std::uint32_t count;
+    std::memcpy(&count, data.data() + pos, sizeof(std::uint32_t));
+    pos += sizeof(std::uint32_t);
+
+    // Read each saveable's data
+    for (std::uint32_t i = 0; i < count && pos < data.size(); ++i) {
+        // Read ID
+        if (pos + sizeof(std::uint32_t) > data.size()) break;
+        std::uint32_t id_len;
+        std::memcpy(&id_len, data.data() + pos, sizeof(std::uint32_t));
+        pos += sizeof(std::uint32_t);
+        if (pos + id_len > data.size()) break;
+        std::string id(reinterpret_cast<const char*>(data.data() + pos), id_len);
+        pos += id_len;
+
+        // Read version
+        if (pos + sizeof(std::uint32_t) > data.size()) break;
+        std::uint32_t version;
+        std::memcpy(&version, data.data() + pos, sizeof(std::uint32_t));
+        pos += sizeof(std::uint32_t);
+
+        // Read data
+        if (pos + sizeof(std::uint32_t) > data.size()) break;
+        std::uint32_t data_len;
+        std::memcpy(&data_len, data.data() + pos, sizeof(std::uint32_t));
+        pos += sizeof(std::uint32_t);
+        if (pos + data_len > data.size()) break;
+        std::vector<std::uint8_t> bytes(data.begin() + pos, data.begin() + pos + data_len);
+        pos += data_len;
+
+        // Find and restore saveable
+        auto it = saveable_map.find(id);
+        if (it != saveable_map.end() && it->second) {
+            it->second->on_before_load();
+            bool success = it->second->deserialize(bytes, version);
+            it->second->on_after_load(success ? LoadResult::Success : LoadResult::Failed);
+        }
+    }
 }
 
 void SaveStateSnapshot::clear() {

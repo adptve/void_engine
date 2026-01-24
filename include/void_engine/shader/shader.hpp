@@ -29,6 +29,9 @@
 // Hot-reload
 #include "hot_reload.hpp"
 
+// Hot-reload snapshots
+#include "snapshot.hpp"
+
 /// @namespace void_shader
 /// @brief Shader compilation and management module
 ///

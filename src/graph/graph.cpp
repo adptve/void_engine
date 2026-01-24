@@ -2,8 +2,12 @@
 #include "registry.hpp"
 
 #include <algorithm>
+#include <cctype>
+#include <filesystem>
+#include <fstream>
 #include <queue>
 #include <sstream>
+#include <unordered_map>
 
 namespace void_graph {
 
@@ -655,9 +659,645 @@ std::string Graph::to_json() const {
     return ss.str();
 }
 
+namespace {
+    // Simple JSON tokenizer for graph parsing
+    enum class JsonTokenType { Object, Array, String, Number, Bool, Null, Colon, Comma, End };
+
+    struct JsonToken {
+        JsonTokenType type;
+        std::string value;
+    };
+
+    class SimpleJsonParser {
+    public:
+        explicit SimpleJsonParser(const std::string& json) : json_(json), pos_(0) {}
+
+        bool parse_graph(Graph& graph, const NodeRegistry& registry) {
+            skip_whitespace();
+            if (!expect('{')) return false;
+
+            while (pos_ < json_.size()) {
+                skip_whitespace();
+                if (peek() == '}') { ++pos_; break; }
+
+                std::string key = parse_string();
+                skip_whitespace();
+                if (!expect(':')) return false;
+                skip_whitespace();
+
+                if (key == "name") {
+                    graph.set_name(parse_string());
+                } else if (key == "type") {
+                    graph.set_type(static_cast<GraphType>(parse_int()));
+                } else if (key == "nodes") {
+                    parse_nodes(graph, registry);
+                } else if (key == "connections") {
+                    parse_connections(graph);
+                } else if (key == "variables") {
+                    parse_variables(graph);
+                } else {
+                    skip_value();
+                }
+
+                skip_whitespace();
+                if (peek() == ',') ++pos_;
+            }
+            return true;
+        }
+
+    private:
+        void skip_whitespace() {
+            while (pos_ < json_.size() && std::isspace(json_[pos_])) ++pos_;
+        }
+
+        char peek() const { return pos_ < json_.size() ? json_[pos_] : '\0'; }
+        bool expect(char c) { if (peek() == c) { ++pos_; return true; } return false; }
+
+        std::string parse_string() {
+            skip_whitespace();
+            if (!expect('"')) return "";
+            std::string result;
+            while (pos_ < json_.size() && json_[pos_] != '"') {
+                if (json_[pos_] == '\\' && pos_ + 1 < json_.size()) {
+                    ++pos_;
+                    switch (json_[pos_]) {
+                        case 'n': result += '\n'; break;
+                        case 't': result += '\t'; break;
+                        case 'r': result += '\r'; break;
+                        case '"': result += '"'; break;
+                        case '\\': result += '\\'; break;
+                        default: result += json_[pos_]; break;
+                    }
+                } else {
+                    result += json_[pos_];
+                }
+                ++pos_;
+            }
+            expect('"');
+            return result;
+        }
+
+        int parse_int() {
+            skip_whitespace();
+            int result = 0;
+            bool negative = false;
+            if (peek() == '-') { negative = true; ++pos_; }
+            while (pos_ < json_.size() && std::isdigit(json_[pos_])) {
+                result = result * 10 + (json_[pos_] - '0');
+                ++pos_;
+            }
+            return negative ? -result : result;
+        }
+
+        float parse_float() {
+            skip_whitespace();
+            std::string num_str;
+            while (pos_ < json_.size() && (std::isdigit(json_[pos_]) ||
+                   json_[pos_] == '.' || json_[pos_] == '-' || json_[pos_] == 'e' || json_[pos_] == 'E')) {
+                num_str += json_[pos_++];
+            }
+            return num_str.empty() ? 0.0f : std::stof(num_str);
+        }
+
+        void skip_value() {
+            skip_whitespace();
+            char c = peek();
+            if (c == '"') {
+                parse_string();
+            } else if (c == '{') {
+                skip_object();
+            } else if (c == '[') {
+                skip_array();
+            } else {
+                while (pos_ < json_.size() && json_[pos_] != ',' && json_[pos_] != '}' && json_[pos_] != ']') {
+                    ++pos_;
+                }
+            }
+        }
+
+        void skip_object() {
+            expect('{');
+            int depth = 1;
+            while (pos_ < json_.size() && depth > 0) {
+                if (json_[pos_] == '{') ++depth;
+                else if (json_[pos_] == '}') --depth;
+                else if (json_[pos_] == '"') {
+                    ++pos_;
+                    while (pos_ < json_.size() && json_[pos_] != '"') {
+                        if (json_[pos_] == '\\') ++pos_;
+                        ++pos_;
+                    }
+                }
+                ++pos_;
+            }
+        }
+
+        void skip_array() {
+            expect('[');
+            int depth = 1;
+            while (pos_ < json_.size() && depth > 0) {
+                if (json_[pos_] == '[') ++depth;
+                else if (json_[pos_] == ']') --depth;
+                else if (json_[pos_] == '"') {
+                    ++pos_;
+                    while (pos_ < json_.size() && json_[pos_] != '"') {
+                        if (json_[pos_] == '\\') ++pos_;
+                        ++pos_;
+                    }
+                }
+                ++pos_;
+            }
+        }
+
+        void parse_nodes(Graph& graph, const NodeRegistry& registry) {
+            skip_whitespace();
+            if (!expect('[')) return;
+
+            while (pos_ < json_.size()) {
+                skip_whitespace();
+                if (peek() == ']') { ++pos_; break; }
+
+                if (expect('{')) {
+                    std::uint32_t id = 0, type_id = 0;
+                    float x = 0, y = 0;
+                    std::string name;
+
+                    while (pos_ < json_.size()) {
+                        skip_whitespace();
+                        if (peek() == '}') { ++pos_; break; }
+
+                        std::string key = parse_string();
+                        skip_whitespace();
+                        expect(':');
+                        skip_whitespace();
+
+                        if (key == "id") id = static_cast<std::uint32_t>(parse_int());
+                        else if (key == "type_id") type_id = static_cast<std::uint32_t>(parse_int());
+                        else if (key == "name") name = parse_string();
+                        else if (key == "x") x = parse_float();
+                        else if (key == "y") y = parse_float();
+                        else skip_value();
+
+                        skip_whitespace();
+                        if (peek() == ',') ++pos_;
+                    }
+
+                    auto node = registry.create_node(NodeTypeId::from_bits(type_id), NodeId::from_bits(id));
+                    if (node) {
+                        node->set_position(x, y);
+                        graph.add_node(std::move(node));
+                    }
+                }
+
+                skip_whitespace();
+                if (peek() == ',') ++pos_;
+            }
+        }
+
+        void parse_connections(Graph& graph) {
+            skip_whitespace();
+            if (!expect('[')) return;
+
+            while (pos_ < json_.size()) {
+                skip_whitespace();
+                if (peek() == ']') { ++pos_; break; }
+
+                if (expect('{')) {
+                    std::uint32_t source = 0, target = 0;
+
+                    while (pos_ < json_.size()) {
+                        skip_whitespace();
+                        if (peek() == '}') { ++pos_; break; }
+
+                        std::string key = parse_string();
+                        skip_whitespace();
+                        expect(':');
+                        skip_whitespace();
+
+                        if (key == "source") source = static_cast<std::uint32_t>(parse_int());
+                        else if (key == "target") target = static_cast<std::uint32_t>(parse_int());
+                        else skip_value();
+
+                        skip_whitespace();
+                        if (peek() == ',') ++pos_;
+                    }
+
+                    graph.connect(PinId::from_bits(source), PinId::from_bits(target));
+                }
+
+                skip_whitespace();
+                if (peek() == ',') ++pos_;
+            }
+        }
+
+        void parse_variables(Graph& graph) {
+            skip_whitespace();
+            if (!expect('[')) return;
+
+            while (pos_ < json_.size()) {
+                skip_whitespace();
+                if (peek() == ']') { ++pos_; break; }
+
+                if (expect('{')) {
+                    GraphVariable var;
+
+                    while (pos_ < json_.size()) {
+                        skip_whitespace();
+                        if (peek() == '}') { ++pos_; break; }
+
+                        std::string key = parse_string();
+                        skip_whitespace();
+                        expect(':');
+                        skip_whitespace();
+
+                        if (key == "name") var.name = parse_string();
+                        else if (key == "type") var.type = static_cast<PinType>(parse_int());
+                        else skip_value();
+
+                        skip_whitespace();
+                        if (peek() == ',') ++pos_;
+                    }
+
+                    graph.add_variable(var);
+                }
+
+                skip_whitespace();
+                if (peek() == ',') ++pos_;
+            }
+        }
+
+        const std::string& json_;
+        std::size_t pos_;
+    };
+
+    // Simple TOML parser for blueprint files
+    class SimpleTomlParser {
+    public:
+        explicit SimpleTomlParser(const std::string& toml) : toml_(toml), pos_(0), line_(1) {}
+
+        bool parse_graph(Graph& graph, const NodeRegistry& registry) {
+            std::unordered_map<std::uint32_t, NodeId> node_id_map;
+
+            while (pos_ < toml_.size()) {
+                skip_whitespace_and_comments();
+                if (pos_ >= toml_.size()) break;
+
+                if (peek() == '[') {
+                    std::string section = parse_section();
+
+                    if (section == "blueprint") {
+                        parse_blueprint_section(graph);
+                    } else if (section == "variables") {
+                        parse_variable(graph);
+                    } else if (section == "nodes") {
+                        parse_node(graph, registry, node_id_map);
+                    } else if (section == "connections") {
+                        parse_connection(graph, node_id_map);
+                    }
+                } else {
+                    skip_line();
+                }
+            }
+            return true;
+        }
+
+    private:
+        void skip_whitespace() {
+            while (pos_ < toml_.size() && (toml_[pos_] == ' ' || toml_[pos_] == '\t')) ++pos_;
+        }
+
+        void skip_whitespace_and_comments() {
+            while (pos_ < toml_.size()) {
+                if (toml_[pos_] == ' ' || toml_[pos_] == '\t') {
+                    ++pos_;
+                } else if (toml_[pos_] == '\n' || toml_[pos_] == '\r') {
+                    if (toml_[pos_] == '\r' && pos_ + 1 < toml_.size() && toml_[pos_ + 1] == '\n') ++pos_;
+                    ++pos_;
+                    ++line_;
+                } else if (toml_[pos_] == '#') {
+                    skip_line();
+                } else {
+                    break;
+                }
+            }
+        }
+
+        void skip_line() {
+            while (pos_ < toml_.size() && toml_[pos_] != '\n' && toml_[pos_] != '\r') ++pos_;
+            if (pos_ < toml_.size()) {
+                if (toml_[pos_] == '\r' && pos_ + 1 < toml_.size() && toml_[pos_ + 1] == '\n') ++pos_;
+                ++pos_;
+                ++line_;
+            }
+        }
+
+        char peek() const { return pos_ < toml_.size() ? toml_[pos_] : '\0'; }
+        bool expect(char c) { if (peek() == c) { ++pos_; return true; } return false; }
+
+        std::string parse_section() {
+            std::string section;
+            bool is_array = false;
+
+            expect('[');
+            if (peek() == '[') { expect('['); is_array = true; }
+
+            while (pos_ < toml_.size() && toml_[pos_] != ']' && toml_[pos_] != '\n') {
+                section += toml_[pos_++];
+            }
+
+            expect(']');
+            if (is_array) expect(']');
+            skip_line();
+
+            return section;
+        }
+
+        std::string parse_key() {
+            skip_whitespace();
+            std::string key;
+            while (pos_ < toml_.size() && toml_[pos_] != '=' && toml_[pos_] != ' ' &&
+                   toml_[pos_] != '\t' && toml_[pos_] != '\n') {
+                key += toml_[pos_++];
+            }
+            return key;
+        }
+
+        std::string parse_string_value() {
+            skip_whitespace();
+            if (!expect('"')) return "";
+            std::string result;
+            while (pos_ < toml_.size() && toml_[pos_] != '"') {
+                if (toml_[pos_] == '\\' && pos_ + 1 < toml_.size()) {
+                    ++pos_;
+                    switch (toml_[pos_]) {
+                        case 'n': result += '\n'; break;
+                        case 't': result += '\t'; break;
+                        case 'r': result += '\r'; break;
+                        default: result += toml_[pos_]; break;
+                    }
+                } else {
+                    result += toml_[pos_];
+                }
+                ++pos_;
+            }
+            expect('"');
+            return result;
+        }
+
+        int parse_int_value() {
+            skip_whitespace();
+            std::string num;
+            if (peek() == '-' || peek() == '+') num += toml_[pos_++];
+            while (pos_ < toml_.size() && std::isdigit(toml_[pos_])) {
+                num += toml_[pos_++];
+            }
+            return num.empty() ? 0 : std::stoi(num);
+        }
+
+        float parse_float_value() {
+            skip_whitespace();
+            std::string num;
+            while (pos_ < toml_.size() && (std::isdigit(toml_[pos_]) ||
+                   toml_[pos_] == '.' || toml_[pos_] == '-' || toml_[pos_] == '+' ||
+                   toml_[pos_] == 'e' || toml_[pos_] == 'E')) {
+                num += toml_[pos_++];
+            }
+            return num.empty() ? 0.0f : std::stof(num);
+        }
+
+        bool parse_bool_value() {
+            skip_whitespace();
+            if (toml_.substr(pos_, 4) == "true") { pos_ += 4; return true; }
+            if (toml_.substr(pos_, 5) == "false") { pos_ += 5; return false; }
+            return false;
+        }
+
+        void parse_blueprint_section(Graph& graph) {
+            while (pos_ < toml_.size() && peek() != '[') {
+                skip_whitespace_and_comments();
+                if (peek() == '[') break;
+
+                std::string key = parse_key();
+                if (key.empty()) { skip_line(); continue; }
+
+                skip_whitespace();
+                if (!expect('=')) { skip_line(); continue; }
+
+                if (key == "name") {
+                    graph.set_name(parse_string_value());
+                } else if (key == "version") {
+                    parse_string_value(); // Skip version
+                }
+                skip_line();
+            }
+        }
+
+        void parse_variable(Graph& graph) {
+            GraphVariable var;
+
+            while (pos_ < toml_.size() && peek() != '[') {
+                skip_whitespace_and_comments();
+                if (peek() == '[') break;
+
+                std::string key = parse_key();
+                if (key.empty()) { skip_line(); continue; }
+
+                skip_whitespace();
+                if (!expect('=')) { skip_line(); continue; }
+
+                if (key == "name") {
+                    var.name = parse_string_value();
+                } else if (key == "type") {
+                    std::string type_str = parse_string_value();
+                    if (type_str == "bool") var.type = PinType::Bool;
+                    else if (type_str == "int") var.type = PinType::Int;
+                    else if (type_str == "float") var.type = PinType::Float;
+                    else if (type_str == "string") var.type = PinType::String;
+                    else if (type_str == "vec3") var.type = PinType::Vec3;
+                } else if (key == "default") {
+                    // Parse based on type
+                    skip_whitespace();
+                    if (peek() == '"') {
+                        var.default_value.value = parse_string_value();
+                    } else if (peek() == 't' || peek() == 'f') {
+                        var.default_value.value = parse_bool_value();
+                    } else {
+                        var.default_value.value = parse_float_value();
+                    }
+                } else if (key == "exposed") {
+                    var.is_exposed = parse_bool_value();
+                }
+                skip_line();
+            }
+
+            if (!var.name.empty()) {
+                graph.add_variable(var);
+            }
+        }
+
+        void parse_node(Graph& graph, const NodeRegistry& registry,
+                       std::unordered_map<std::uint32_t, NodeId>& node_id_map) {
+            std::uint32_t id = 0;
+            std::string type_name;
+            float x = 0, y = 0;
+
+            while (pos_ < toml_.size() && peek() != '[') {
+                skip_whitespace_and_comments();
+                if (peek() == '[') break;
+
+                std::string key = parse_key();
+                if (key.empty()) { skip_line(); continue; }
+
+                skip_whitespace();
+                if (!expect('=')) { skip_line(); continue; }
+
+                if (key == "id") {
+                    id = static_cast<std::uint32_t>(parse_int_value());
+                } else if (key == "type") {
+                    type_name = parse_string_value();
+                } else if (key == "position") {
+                    // Parse [x, y] array
+                    skip_whitespace();
+                    if (expect('[')) {
+                        x = parse_float_value();
+                        skip_whitespace();
+                        expect(',');
+                        y = parse_float_value();
+                        expect(']');
+                    }
+                }
+                skip_line();
+            }
+
+            if (id > 0 && !type_name.empty()) {
+                auto node = registry.create_node(type_name, NodeId::from_bits(id));
+                if (node) {
+                    node->set_position(x, y);
+                    node_id_map[id] = node->id();
+                    graph.add_node(std::move(node));
+                }
+            }
+        }
+
+        void parse_connection(Graph& graph, const std::unordered_map<std::uint32_t, NodeId>& node_id_map) {
+            std::uint32_t from_node = 0, to_node = 0;
+            std::string from_pin, to_pin;
+
+            while (pos_ < toml_.size() && peek() != '[') {
+                skip_whitespace_and_comments();
+                if (peek() == '[') break;
+
+                std::string key = parse_key();
+                if (key.empty()) { skip_line(); continue; }
+
+                skip_whitespace();
+                if (!expect('=')) { skip_line(); continue; }
+
+                // Handle inline tables: from = { node = 1, pin = "exec_out" }
+                if (key == "from" || key == "to") {
+                    skip_whitespace();
+                    if (expect('{')) {
+                        std::uint32_t* node_ptr = (key == "from") ? &from_node : &to_node;
+                        std::string* pin_ptr = (key == "from") ? &from_pin : &to_pin;
+
+                        while (peek() != '}' && pos_ < toml_.size()) {
+                            skip_whitespace();
+                            std::string subkey = parse_key();
+                            skip_whitespace();
+                            expect('=');
+                            skip_whitespace();
+
+                            if (subkey == "node") {
+                                *node_ptr = static_cast<std::uint32_t>(parse_int_value());
+                            } else if (subkey == "pin") {
+                                *pin_ptr = parse_string_value();
+                            }
+
+                            skip_whitespace();
+                            if (peek() == ',') ++pos_;
+                        }
+                        expect('}');
+                    }
+                }
+                skip_line();
+            }
+
+            // Create connection using node IDs and pin names
+            // This is simplified - full implementation would look up pins by name
+            if (from_node > 0 && to_node > 0) {
+                auto from_it = node_id_map.find(from_node);
+                auto to_it = node_id_map.find(to_node);
+
+                if (from_it != node_id_map.end() && to_it != node_id_map.end()) {
+                    INode* from_node_ptr = graph.get_node(from_it->second);
+                    INode* to_node_ptr = graph.get_node(to_it->second);
+
+                    if (from_node_ptr && to_node_ptr) {
+                        const Pin* from_pin_ptr = from_node_ptr->find_pin_by_name(from_pin);
+                        const Pin* to_pin_ptr = to_node_ptr->find_pin_by_name(to_pin);
+
+                        if (from_pin_ptr && to_pin_ptr) {
+                            graph.connect(from_pin_ptr->id, to_pin_ptr->id);
+                        }
+                    }
+                }
+            }
+        }
+
+        const std::string& toml_;
+        std::size_t pos_;
+        std::size_t line_;
+    };
+} // anonymous namespace
+
 std::unique_ptr<Graph> Graph::from_json(const std::string& json, const NodeRegistry& registry) {
-    // TODO: Implement JSON parsing
-    return std::make_unique<Graph>();
+    auto graph = std::make_unique<Graph>();
+    SimpleJsonParser parser(json);
+
+    if (!parser.parse_graph(*graph, registry)) {
+        return nullptr;
+    }
+
+    return graph;
+}
+
+std::unique_ptr<Graph> Graph::from_toml(const std::string& toml, const NodeRegistry& registry) {
+    auto graph = std::make_unique<Graph>();
+    SimpleTomlParser parser(toml);
+
+    if (!parser.parse_graph(*graph, registry)) {
+        return nullptr;
+    }
+
+    return graph;
+}
+
+std::unique_ptr<Graph> Graph::load(const std::filesystem::path& path, const NodeRegistry& registry) {
+    std::ifstream file(path);
+    if (!file) return nullptr;
+
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    std::string content = buffer.str();
+
+    std::string ext = path.extension().string();
+    if (ext == ".json") {
+        return from_json(content, registry);
+    } else if (ext == ".toml" || ext == ".bp") {
+        return from_toml(content, registry);
+    } else if (ext == ".vgraph") {
+        file.seekg(0);
+        return deserialize(file, registry);
+    }
+
+    // Try to auto-detect format
+    if (content.find('{') == 0) {
+        return from_json(content, registry);
+    } else if (content.find('[') != std::string::npos || content.find('=') != std::string::npos) {
+        return from_toml(content, registry);
+    }
+
+    return nullptr;
 }
 
 void Graph::serialize(std::ostream& out) const {

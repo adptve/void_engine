@@ -162,6 +162,16 @@ public:
     void set_current_level(const std::string& level) { m_current_level = level; }
     void set_play_time(double time) { m_play_time = time; }
 
+    // Serializer access (for external state capture)
+    const SaveSerializer& serializer() const { return m_serializer; }
+
+    // Saveable access (for checkpoint system)
+    const std::vector<ISaveable*>& saveables() const { return m_saveables; }
+
+    // Gather and apply for external use
+    SaveData gather_data(const std::string& name, SaveType type) const { return gather_save_data(name, type); }
+    void apply_data(const SaveData& data) { apply_save_data(data); }
+
 private:
     std::filesystem::path get_slot_path(SaveSlotId slot) const;
     std::string generate_slot_filename(SaveSlotId slot) const;

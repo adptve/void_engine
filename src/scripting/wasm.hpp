@@ -189,6 +189,10 @@ private:
     std::vector<std::unique_ptr<WasmMemory>> memories_;
     std::unordered_map<std::string, std::uint32_t> export_map_;
 
+    // Globals and tables (for interpreter-based execution)
+    mutable std::vector<WasmValue> globals_;
+    mutable std::vector<std::vector<std::uint32_t>> tables_;
+
     // Backend-specific instance (opaque)
     void* instance_ = nullptr;
     std::uint64_t fuel_ = 0;

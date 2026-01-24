@@ -143,6 +143,14 @@
 // Output management
 #include "output.hpp"
 
+// Layer composition
+#include "layer.hpp"
+#include "layer_compositor.hpp"
+
+// Hot-reload support
+#include "rehydration.hpp"
+#include "snapshot.hpp"
+
 // Main compositor
 #include "compositor.hpp"
 
@@ -211,6 +219,32 @@ namespace prelude {
     using void_compositor::ICompositor;
     using void_compositor::NullCompositor;
     using void_compositor::CompositorFactory;
+
+    // Layer Composition
+    using void_compositor::LayerId;
+    using void_compositor::BlendMode;
+    using void_compositor::LayerConfig;
+    using void_compositor::LayerBounds;
+    using void_compositor::LayerTransform;
+    using void_compositor::LayerContent;
+    using void_compositor::LayerContentType;
+    using void_compositor::Layer;
+    using void_compositor::LayerManager;
+    using void_compositor::LayerCompositorConfig;
+    using void_compositor::LayerCompositorStats;
+    using void_compositor::ILayerCompositor;
+    using void_compositor::NullLayerCompositor;
+    using void_compositor::SoftwareLayerCompositor;
+    using void_compositor::LayerCompositorFactory;
+
+    // Hot-Reload
+    using void_compositor::RehydrationState;
+    using void_compositor::RehydrationStore;
+    using void_compositor::IRehydratable;
+    using void_compositor::CompositorSnapshot;
+    using void_compositor::FrameSchedulerSnapshot;
+    using void_compositor::BinaryWriter;
+    using void_compositor::BinaryReader;
 } // namespace prelude
 
 } // namespace void_compositor

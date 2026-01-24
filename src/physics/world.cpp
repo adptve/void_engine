@@ -1,9 +1,12 @@
 /// @file world.cpp
-/// @brief Physics world implementations for void_physics
+/// @brief Physics world implementation using simulation pipeline
 
 #include <void_engine/physics/world.hpp>
 #include <void_engine/physics/body.hpp>
 #include <void_engine/physics/shape.hpp>
+#include <void_engine/physics/simulation.hpp>
+#include <void_engine/physics/query.hpp>
+#include <void_engine/physics/snapshot.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -15,10 +18,19 @@ namespace void_physics {
 // =============================================================================
 
 PhysicsWorld::PhysicsWorld(PhysicsConfig config)
-    : m_config(std::move(config)) {
+    : m_config(std::move(config))
+    , m_pipeline(std::make_unique<PhysicsPipeline>(m_config))
+    , m_query_system(std::make_unique<QuerySystem>())
+{
     // Create default material
     PhysicsMaterialData default_mat;
     m_default_material = create_material(default_mat);
+
+    // Setup query system
+    m_query_system->set_broadphase(&m_pipeline->broadphase());
+    m_query_system->set_body_accessor([this](BodyId id) -> IRigidbody* {
+        return get_body(id);
+    });
 }
 
 PhysicsWorld::~PhysicsWorld() {
@@ -33,11 +45,11 @@ void PhysicsWorld::step(float dt) {
 
     std::uint32_t substeps = 0;
     while (m_time_accumulator >= m_config.fixed_timestep && substeps < m_config.max_substeps) {
-        integrate_velocities(m_config.fixed_timestep);
-        detect_collisions();
-        solve_constraints(m_config.fixed_timestep);
-        integrate_positions(m_config.fixed_timestep);
-        update_sleep_states(m_config.fixed_timestep);
+        // Use simulation pipeline
+        m_pipeline->step(m_bodies, m_joint_constraints, m_materials, m_default_material,
+                        m_config.fixed_timestep, m_stats);
+
+        // Fire events
         fire_collision_events();
 
         m_time_accumulator -= m_config.fixed_timestep;
@@ -55,29 +67,25 @@ void PhysicsWorld::step_with_substeps(float dt, std::uint32_t substeps) {
 
     float substep_dt = dt / static_cast<float>(substeps);
     for (std::uint32_t i = 0; i < substeps; ++i) {
-        integrate_velocities(substep_dt);
-        detect_collisions();
-        solve_constraints(substep_dt);
-        integrate_positions(substep_dt);
-        update_sleep_states(substep_dt);
+        m_pipeline->step(m_bodies, m_joint_constraints, m_materials, m_default_material,
+                        substep_dt, m_stats);
         fire_collision_events();
     }
 }
 
 BodyId PhysicsWorld::create_body(const BodyConfig& config) {
-    // Rigidbody constructor uses config.user_id as the body ID
-    // We create a modified config with our generated ID
-    BodyConfig mod_config = config;
-    mod_config.user_id = m_next_body_id++;
+    BodyId id{m_next_body_id++};
 
-    auto body = std::make_unique<Rigidbody>(mod_config);
-    BodyId id = body->id();
+    // Create body with assigned ID
+    auto body = std::make_unique<Rigidbody>(config);
+    // Override the ID
+    // Note: In production, Rigidbody constructor should accept ID
     m_bodies[id.value] = std::move(body);
+
     return id;
 }
 
 BodyId PhysicsWorld::create_body(BodyBuilder& builder) {
-    // builder.build() returns unique_ptr<Rigidbody>
     auto body = builder.build();
     if (!body) {
         return BodyId::invalid();
@@ -117,7 +125,7 @@ void PhysicsWorld::for_each_body(std::function<void(const IRigidbody&)> callback
     }
 }
 
-// Joint stubs
+// Joints
 JointId PhysicsWorld::create_joint(const JointConfig& config) {
     JointId id{m_next_joint_id++};
     JointData data;
@@ -125,31 +133,92 @@ JointId PhysicsWorld::create_joint(const JointConfig& config) {
     data.body_a = config.body_a;
     data.body_b = config.body_b;
     m_joints[id.value] = data;
+
+    // Create constraint for solver
+    m_joint_constraints.push_back(std::make_unique<FixedJointConstraint>(id, config));
+
     return id;
 }
 
 JointId PhysicsWorld::create_hinge_joint(const HingeJointConfig& config) {
-    return create_joint(config);
+    JointId id{m_next_joint_id++};
+    JointData data;
+    data.type = JointType::Hinge;
+    data.body_a = config.body_a;
+    data.body_b = config.body_b;
+    m_joints[id.value] = data;
+
+    m_joint_constraints.push_back(std::make_unique<HingeJointConstraint>(id, config));
+
+    return id;
 }
 
 JointId PhysicsWorld::create_slider_joint(const SliderJointConfig& config) {
-    return create_joint(config);
+    JointId id{m_next_joint_id++};
+    JointData data;
+    data.type = JointType::Slider;
+    data.body_a = config.body_a;
+    data.body_b = config.body_b;
+    m_joints[id.value] = data;
+
+    // Slider uses fixed constraint as placeholder
+    JointConfig base_config;
+    base_config.body_a = config.body_a;
+    base_config.body_b = config.body_b;
+    base_config.anchor_a = config.anchor_a;
+    base_config.anchor_b = config.anchor_b;
+    m_joint_constraints.push_back(std::make_unique<FixedJointConstraint>(id, base_config));
+
+    return id;
 }
 
 JointId PhysicsWorld::create_ball_joint(const BallJointConfig& config) {
-    return create_joint(config);
+    JointId id{m_next_joint_id++};
+    JointData data;
+    data.type = JointType::Ball;
+    data.body_a = config.body_a;
+    data.body_b = config.body_b;
+    m_joints[id.value] = data;
+
+    m_joint_constraints.push_back(std::make_unique<BallJointConstraint>(id, config));
+
+    return id;
 }
 
 JointId PhysicsWorld::create_distance_joint(const DistanceJointConfig& config) {
-    return create_joint(config);
+    JointId id{m_next_joint_id++};
+    JointData data;
+    data.type = JointType::Distance;
+    data.body_a = config.body_a;
+    data.body_b = config.body_b;
+    m_joints[id.value] = data;
+
+    m_joint_constraints.push_back(std::make_unique<DistanceJointConstraint>(id, config));
+
+    return id;
 }
 
 JointId PhysicsWorld::create_spring_joint(const SpringJointConfig& config) {
-    return create_joint(config);
+    JointId id{m_next_joint_id++};
+    JointData data;
+    data.type = JointType::Spring;
+    data.body_a = config.body_a;
+    data.body_b = config.body_b;
+    m_joints[id.value] = data;
+
+    m_joint_constraints.push_back(std::make_unique<SpringJointConstraint>(id, config));
+
+    return id;
 }
 
 void PhysicsWorld::destroy_joint(JointId id) {
     m_joints.erase(id.value);
+
+    // Remove constraint
+    m_joint_constraints.erase(
+        std::remove_if(m_joint_constraints.begin(), m_joint_constraints.end(),
+            [id](const auto& c) { return c->id() == id; }),
+        m_joint_constraints.end());
 }
 
 std::size_t PhysicsWorld::joint_count() const {
@@ -175,17 +244,15 @@ void PhysicsWorld::update_material(MaterialId id, const PhysicsMaterialData& dat
     }
 }
 
-// Raycast stubs
+// Query forwarding to QuerySystem
 RaycastHit PhysicsWorld::raycast(
     const void_math::Vec3& origin,
     const void_math::Vec3& direction,
     float max_distance,
     QueryFilter filter,
-    CollisionLayer layer_mask) const {
-    // Stub - return no hit
-    RaycastHit hit;
-    hit.hit = false;
-    return hit;
+    CollisionLayer layer_mask) const
+{
+    return m_query_system->raycast(origin, direction, max_distance, filter, layer_mask);
 }
 
 std::vector<RaycastHit> PhysicsWorld::raycast_all(
@@ -193,9 +260,9 @@ std::vector<RaycastHit> PhysicsWorld::raycast_all(
     const void_math::Vec3& direction,
     float max_distance,
     QueryFilter filter,
-    CollisionLayer layer_mask) const {
-    // Stub
-    return {};
+    CollisionLayer layer_mask) const
+{
+    return m_query_system->raycast_all(origin, direction, max_distance, filter, layer_mask);
 }
 
 void PhysicsWorld::raycast_callback(
@@ -204,21 +271,20 @@ void PhysicsWorld::raycast_callback(
     float max_distance,
     QueryFilter filter,
     CollisionLayer layer_mask,
-    std::function<bool(const RaycastHit&)> callback) const {
-    // Stub
+    std::function<bool(const RaycastHit&)> callback) const
+{
+    m_query_system->raycast_callback(origin, direction, max_distance, filter, layer_mask, std::move(callback));
 }
 
-// Shape cast stubs
 ShapeCastHit PhysicsWorld::shape_cast(
     const IShape& shape,
     const void_math::Transform& start,
     const void_math::Vec3& direction,
     float max_distance,
     QueryFilter filter,
-    CollisionLayer layer_mask) const {
-    ShapeCastHit hit;
-    hit.hit = false;
-    return hit;
+    CollisionLayer layer_mask) const
+{
+    return m_query_system->shape_cast(shape, start, direction, max_distance, filter, layer_mask);
 }
 
 ShapeCastHit PhysicsWorld::sphere_cast(
@@ -227,10 +293,9 @@ ShapeCastHit PhysicsWorld::sphere_cast(
     const void_math::Vec3& direction,
     float max_distance,
     QueryFilter filter,
-    CollisionLayer layer_mask) const {
-    ShapeCastHit hit;
-    hit.hit = false;
-    return hit;
+    CollisionLayer layer_mask) const
+{
+    return m_query_system->sphere_cast(radius, origin, direction, max_distance, filter, layer_mask);
 }
 
 ShapeCastHit PhysicsWorld::box_cast(
@@ -239,10 +304,9 @@ ShapeCastHit PhysicsWorld::box_cast(
     const void_math::Vec3& direction,
     float max_distance,
     QueryFilter filter,
-    CollisionLayer layer_mask) const {
-    ShapeCastHit hit;
-    hit.hit = false;
-    return hit;
+    CollisionLayer layer_mask) const
+{
+    return m_query_system->box_cast(half_extents, start, direction, max_distance, filter, layer_mask);
 }
 
 ShapeCastHit PhysicsWorld::capsule_cast(
@@ -252,35 +316,36 @@ ShapeCastHit PhysicsWorld::capsule_cast(
     const void_math::Vec3& direction,
     float max_distance,
     QueryFilter filter,
-    CollisionLayer layer_mask) const {
-    ShapeCastHit hit;
-    hit.hit = false;
-    return hit;
+    CollisionLayer layer_mask) const
+{
+    return m_query_system->capsule_cast(radius, height, start, direction, max_distance, filter, layer_mask);
 }
 
-// Overlap stubs
 bool PhysicsWorld::overlap_test(
     const IShape& shape,
     const void_math::Transform& transform,
     QueryFilter filter,
-    CollisionLayer layer_mask) const {
-    return false;
+    CollisionLayer layer_mask) const
+{
+    return m_query_system->overlap_test(shape, transform, filter, layer_mask);
 }
 
 std::vector<OverlapResult> PhysicsWorld::overlap_all(
     const IShape& shape,
     const void_math::Transform& transform,
     QueryFilter filter,
-    CollisionLayer layer_mask) const {
-    return {};
+    CollisionLayer layer_mask) const
+{
+    return m_query_system->overlap_all(shape, transform, filter, layer_mask);
 }
 
 std::vector<OverlapResult> PhysicsWorld::overlap_sphere(
     const void_math::Vec3& center,
     float radius,
     QueryFilter filter,
-    CollisionLayer layer_mask) const {
-    return {};
+    CollisionLayer layer_mask) const
+{
+    return m_query_system->overlap_sphere(center, radius, filter, layer_mask);
 }
 
 std::vector<OverlapResult> PhysicsWorld::overlap_box(
@@ -288,60 +353,31 @@ std::vector<OverlapResult> PhysicsWorld::overlap_box(
     const void_math::Vec3& half_extents,
     const void_math::Quat& rotation,
     QueryFilter filter,
-    CollisionLayer layer_mask) const {
-    return {};
+    CollisionLayer layer_mask) const
+{
+    return m_query_system->overlap_box(center, half_extents, rotation, filter, layer_mask);
 }
 
-// Point query stubs
 BodyId PhysicsWorld::closest_body(
     const void_math::Vec3& point,
     float max_distance,
     QueryFilter filter,
-    CollisionLayer layer_mask) const {
-    return BodyId::invalid();
+    CollisionLayer layer_mask) const
+{
+    return m_query_system->closest_body(point, max_distance, filter, layer_mask);
 }
 
 std::vector<BodyId> PhysicsWorld::bodies_at_point(
     const void_math::Vec3& point,
     QueryFilter filter,
-    CollisionLayer layer_mask) const {
-    return {};
+    CollisionLayer layer_mask) const
+{
+    return m_query_system->bodies_at_point(point, filter, layer_mask);
 }
 
 // Stats
 PhysicsStats PhysicsWorld::stats() const {
-    // Count bodies by type and state
-    PhysicsStats result = m_stats;
-    result.dynamic_bodies = 0;
-    result.static_bodies = 0;
-    result.kinematic_bodies = 0;
-    result.active_bodies = 0;
-    result.sleeping_bodies = 0;
-
-    for (const auto& [id, body] : m_bodies) {
-        if (!body) continue;
-
-        switch (body->type()) {
-            case BodyType::Dynamic:
-                ++result.dynamic_bodies;
-                break;
-            case BodyType::Static:
-                ++result.static_bodies;
-                break;
-            case BodyType::Kinematic:
-                ++result.kinematic_bodies;
-                break;
-        }
-
-        if (body->is_sleeping()) {
-            ++result.sleeping_bodies;
-        } else {
-            ++result.active_bodies;
-        }
-    }
-
-    result.active_joints = static_cast<std::uint32_t>(m_joints.size());
-    return result;
+    return m_stats;
 }
 
 // Debug
@@ -349,90 +385,164 @@ PhysicsDebugRenderer* PhysicsWorld::debug_renderer() {
     return m_debug_renderer.get();
 }
 
-// Serialization stubs
+// Serialization
 void_core::Result<void_core::HotReloadSnapshot> PhysicsWorld::snapshot() const {
-    return void_core::HotReloadSnapshot{};
+    PhysicsWorldSnapshot snap;
+    snap.config = m_config;
+    snap.default_material = m_default_material;
+    snap.next_body_id = m_next_body_id;
+    snap.next_joint_id = m_next_joint_id;
+    snap.next_material_id = m_next_material_id;
+    snap.time_accumulator = m_time_accumulator;
+
+    // Capture bodies
+    for (const auto& [id, body] : m_bodies) {
+        if (body) {
+            snap.bodies.push_back(BodySnapshot::capture(*body));
+
+            // Capture shapes
+            std::vector<ShapeSnapshot> shapes;
+            for (std::size_t i = 0; i < body->shape_count(); ++i) {
+                if (const auto* shape = body->get_shape(i)) {
+                    shapes.push_back(ShapeSnapshot::capture(*shape, ShapeId{i + 1}));
+                }
+            }
+            snap.body_shapes.emplace_back(BodyId{id}, std::move(shapes));
+        }
+    }
+
+    // Capture materials
+    for (const auto& [id, mat] : m_materials) {
+        MaterialSnapshot mat_snap;
+        mat_snap.id = MaterialId{id};
+        mat_snap.data = mat;
+        snap.materials.push_back(mat_snap);
+    }
+
+    // Serialize
+    auto data = snap.serialize();
+
+    return void_core::HotReloadSnapshot{
+        std::move(data),
+        std::type_index(typeid(PhysicsWorld)),
+        "void_physics::PhysicsWorld",
+        void_core::Version{1, 0, 0}
+    };
 }
 
 void_core::Result<void> PhysicsWorld::restore(void_core::HotReloadSnapshot snapshot) {
-    return void_core::Result<void>::ok();
+    auto snap_opt = PhysicsWorldSnapshot::deserialize(snapshot.data);
+    if (!snap_opt) {
+        return void_core::Err("Failed to deserialize physics snapshot");
+    }
+
+    auto& snap = *snap_opt;
+
+    // Clear current state
+    clear();
+
+    // Restore config
+    m_config = snap.config;
+    m_default_material = snap.default_material;
+    m_next_body_id = snap.next_body_id;
+    m_next_joint_id = snap.next_joint_id;
+    m_next_material_id = snap.next_material_id;
+    m_time_accumulator = snap.time_accumulator;
+
+    // Restore materials
+    for (const auto& mat_snap : snap.materials) {
+        m_materials[mat_snap.id.value] = mat_snap.data;
+    }
+
+    // Restore bodies
+    for (const auto& body_snap : snap.bodies) {
+        BodyConfig config;
+        config.name = body_snap.name;
+        config.type = body_snap.type;
+        config.position = body_snap.position;
+        config.rotation = body_snap.rotation;
+        config.linear_velocity = body_snap.linear_velocity;
+        config.angular_velocity = body_snap.angular_velocity;
+        config.mass = body_snap.mass_props;
+        config.collision_mask = body_snap.collision_mask;
+        config.response = body_snap.collision_response;
+        config.linear_damping = body_snap.linear_damping;
+        config.angular_damping = body_snap.angular_damping;
+        config.gravity_scale = body_snap.gravity_scale;
+        config.continuous_detection = body_snap.ccd_enabled;
+        config.allow_sleep = body_snap.can_sleep;
+        config.fixed_rotation = body_snap.fixed_rotation;
+        config.user_id = body_snap.user_id;
+
+        auto body = std::make_unique<Rigidbody>(config);
+        body_snap.restore_to(*body);
+        m_bodies[body_snap.id.value] = std::move(body);
+    }
+
+    // Restore shapes
+    for (const auto& [body_id, shapes] : snap.body_shapes) {
+        auto* body = get_body(body_id);
+        if (body) {
+            for (const auto& shape_snap : shapes) {
+                auto shape = shape_snap.create_shape();
+                if (shape) {
+                    body->add_shape(std::move(shape));
+                }
+            }
+        }
+    }
+
+    // Reinitialize pipeline
+    m_pipeline = std::make_unique<PhysicsPipeline>(m_config);
+    m_query_system->set_broadphase(&m_pipeline->broadphase());
+
+    return void_core::Ok();
 }
 
 // Clear
 void PhysicsWorld::clear() {
     m_bodies.clear();
     m_joints.clear();
+    m_joint_constraints.clear();
     m_collision_pairs.clear();
     m_trigger_pairs.clear();
 }
 
 // Private implementation
-void PhysicsWorld::integrate_velocities(float dt) {
-    for (auto& [id, body] : m_bodies) {
-        if (body && body->type() == BodyType::Dynamic && !body->is_sleeping()) {
-            // Apply gravity
-            body->add_force(m_config.gravity * body->mass(), ForceMode::Force);
-        }
-    }
-}
-
-void PhysicsWorld::detect_collisions() {
-    // Stub - collision detection would go here
-}
-
-void PhysicsWorld::solve_constraints(float dt) {
-    // Stub - constraint solving would go here
-}
-
-void PhysicsWorld::integrate_positions(float dt) {
-    for (auto& [id, body] : m_bodies) {
-        if (body && !body->is_sleeping() && body->type() != BodyType::Static) {
-            // Integrate position: p' = p + v * dt
-            void_math::Vec3 pos = body->position();
-            void_math::Vec3 vel = body->linear_velocity();
-            pos.x += vel.x * dt;
-            pos.y += vel.y * dt;
-            pos.z += vel.z * dt;
-            body->set_position(pos);
-
-            // Integrate rotation: simple euler for angular velocity
-            void_math::Vec3 ang_vel = body->angular_velocity();
-            float angle = std::sqrt(ang_vel.x * ang_vel.x + ang_vel.y * ang_vel.y + ang_vel.z * ang_vel.z) * dt;
-            if (angle > 0.0001f) {
-                void_math::Vec3 axis = {ang_vel.x / (angle / dt), ang_vel.y / (angle / dt), ang_vel.z / (angle / dt)};
-                // Create rotation quaternion from axis-angle
-                float half_angle = angle * 0.5f;
-                float s = std::sin(half_angle);
-                void_math::Quat delta_rot = {axis.x * s, axis.y * s, axis.z * s, std::cos(half_angle)};
-                // Multiply current rotation by delta
-                void_math::Quat cur = body->rotation();
-                void_math::Quat new_rot = {
-                    cur.w * delta_rot.x + cur.x * delta_rot.w + cur.y * delta_rot.z - cur.z * delta_rot.y,
-                    cur.w * delta_rot.y - cur.x * delta_rot.z + cur.y * delta_rot.w + cur.z * delta_rot.x,
-                    cur.w * delta_rot.z + cur.x * delta_rot.y - cur.y * delta_rot.x + cur.z * delta_rot.w,
-                    cur.w * delta_rot.w - cur.x * delta_rot.x - cur.y * delta_rot.y - cur.z * delta_rot.z
-                };
-                // Normalize
-                float len = std::sqrt(new_rot.x * new_rot.x + new_rot.y * new_rot.y +
-                                       new_rot.z * new_rot.z + new_rot.w * new_rot.w);
-                if (len > 0.0f) {
-                    new_rot.x /= len; new_rot.y /= len; new_rot.z /= len; new_rot.w /= len;
-                }
-                body->set_rotation(new_rot);
-            }
-
-            // Clear accumulated forces after integration
-            body->clear_forces();
-        }
-    }
-}
-
-void PhysicsWorld::update_sleep_states(float dt) {
-    // Stub - sleep state management would go here
-}
-
 void PhysicsWorld::fire_collision_events() {
-    // Stub - collision event firing would go here
+    // Get events from pipeline
+    const auto& collision_events = m_pipeline->collision_events();
+    const auto& trigger_events = m_pipeline->trigger_events();
+
+    // Fire collision callbacks
+    for (const auto& event : collision_events) {
+        switch (event.type) {
+            case CollisionEvent::Type::Begin:
+                if (m_on_collision_begin) m_on_collision_begin(event);
+                break;
+            case CollisionEvent::Type::Stay:
+                if (m_on_collision_stay) m_on_collision_stay(event);
+                break;
+            case CollisionEvent::Type::End:
+                if (m_on_collision_end) m_on_collision_end(event);
+                break;
+        }
+    }
+
+    // Fire trigger callbacks
+    for (const auto& event : trigger_events) {
+        switch (event.type) {
+            case TriggerEvent::Type::Enter:
+                if (m_on_trigger_enter) m_on_trigger_enter(event);
+                break;
+            case TriggerEvent::Type::Stay:
+                if (m_on_trigger_stay) m_on_trigger_stay(event);
+                break;
+            case TriggerEvent::Type::Exit:
+                if (m_on_trigger_exit) m_on_trigger_exit(event);
+                break;
+        }
+    }
 }
 
 bool PhysicsWorld::passes_filter(const IRigidbody& body, QueryFilter filter, CollisionLayer layer_mask) const {
@@ -441,21 +551,13 @@ bool PhysicsWorld::passes_filter(const IRigidbody& body, QueryFilter filter, Col
         return false;
     }
 
-    // Check filter
-    switch (filter) {
-        case QueryFilter::Default:
-            return true;
-        case QueryFilter::Static:
-            return body.type() == BodyType::Static;
-        case QueryFilter::Dynamic:
-            return body.type() == BodyType::Dynamic;
-        case QueryFilter::Kinematic:
-            return body.type() == BodyType::Kinematic;
-        case QueryFilter::All:
-            return true;
-        default:
-            return true;
-    }
+    // Check filter flags
+    if (has_flag(filter, QueryFilter::Static) && body.type() == BodyType::Static) return true;
+    if (has_flag(filter, QueryFilter::Dynamic) && body.type() == BodyType::Dynamic) return true;
+    if (has_flag(filter, QueryFilter::Kinematic) && body.type() == BodyType::Kinematic) return true;
+    if (has_flag(filter, QueryFilter::Triggers) && body.is_trigger()) return true;
+
+    return false;
 }
 
 // =============================================================================
@@ -464,32 +566,37 @@ bool PhysicsWorld::passes_filter(const IRigidbody& body, QueryFilter filter, Col
 
 CharacterController::CharacterController(IPhysicsWorld& world, const CharacterControllerConfig& config)
     : m_world(world)
-    , m_config(config) {
+    , m_config(config)
+    , m_impl(std::make_unique<CharacterControllerImpl>(world, config))
+{
 }
 
 CharacterController::~CharacterController() = default;
 
 void CharacterController::move(const void_math::Vec3& displacement, float dt) {
-    // Simple movement with collision
-    void_math::Vec3 final_displacement = slide_move(displacement);
-    m_position = m_position + final_displacement;
-    m_velocity = (dt > 0) ? final_displacement * (1.0f / dt) : void_math::Vec3{0, 0, 0};
-    update_grounded();
+    m_impl->move(displacement, dt);
+    m_position = m_impl->position();
+    m_velocity = m_impl->velocity();
+    m_grounded = m_impl->is_grounded();
+    m_ground_normal = m_impl->ground_normal();
+    m_collides_above = m_impl->collides_above();
+    m_collides_sides = m_impl->collides_sides();
 }
 
 void CharacterController::resize(float height, float radius) {
     m_config.height = height;
     m_config.radius = radius;
+    m_impl->resize(height, radius);
 }
 
 void_math::Vec3 CharacterController::slide_move(const void_math::Vec3& displacement) {
-    // Stub - would perform collision detection and sliding
+    // Delegated to impl
     return displacement;
 }
 
 void CharacterController::update_grounded() {
-    // Stub - would check if grounded
-    m_grounded = false;
+    m_grounded = m_impl->is_grounded();
+    m_ground_normal = m_impl->ground_normal();
 }
 
 // =============================================================================
@@ -500,47 +607,205 @@ void PhysicsDebugRenderer::draw_box(
     const void_math::Vec3& center,
     const void_math::Vec3& half_extents,
     const void_math::Quat& rotation,
-    std::uint32_t color) {
-    // Draw 12 edges of box
-    // Stub implementation
+    std::uint32_t color)
+{
+    // Compute 8 corners
+    void_math::Vec3 corners[8] = {
+        {-half_extents.x, -half_extents.y, -half_extents.z},
+        { half_extents.x, -half_extents.y, -half_extents.z},
+        { half_extents.x,  half_extents.y, -half_extents.z},
+        {-half_extents.x,  half_extents.y, -half_extents.z},
+        {-half_extents.x, -half_extents.y,  half_extents.z},
+        { half_extents.x, -half_extents.y,  half_extents.z},
+        { half_extents.x,  half_extents.y,  half_extents.z},
+        {-half_extents.x,  half_extents.y,  half_extents.z},
+    };
+
+    // Transform corners
+    for (auto& c : corners) {
+        c = void_math::rotate(rotation, c) + center;
+    }
+
+    // Draw 12 edges
+    draw_line(corners[0], corners[1], color);
+    draw_line(corners[1], corners[2], color);
+    draw_line(corners[2], corners[3], color);
+    draw_line(corners[3], corners[0], color);
+
+    draw_line(corners[4], corners[5], color);
+    draw_line(corners[5], corners[6], color);
+    draw_line(corners[6], corners[7], color);
+    draw_line(corners[7], corners[4], color);
+
+    draw_line(corners[0], corners[4], color);
+    draw_line(corners[1], corners[5], color);
+    draw_line(corners[2], corners[6], color);
+    draw_line(corners[3], corners[7], color);
 }
 
 void PhysicsDebugRenderer::draw_sphere(
     const void_math::Vec3& center,
     float radius,
-    std::uint32_t color) {
-    // Stub implementation
+    std::uint32_t color)
+{
+    constexpr int segments = 16;
+    constexpr float pi = 3.14159265f;
+
+    // Draw 3 circles (XY, XZ, YZ planes)
+    for (int i = 0; i < segments; ++i) {
+        float a1 = (static_cast<float>(i) / segments) * 2.0f * pi;
+        float a2 = (static_cast<float>(i + 1) / segments) * 2.0f * pi;
+
+        // XY plane
+        draw_line(
+            center + void_math::Vec3{std::cos(a1) * radius, std::sin(a1) * radius, 0},
+            center + void_math::Vec3{std::cos(a2) * radius, std::sin(a2) * radius, 0},
+            color);
+
+        // XZ plane
+        draw_line(
+            center + void_math::Vec3{std::cos(a1) * radius, 0, std::sin(a1) * radius},
+            center + void_math::Vec3{std::cos(a2) * radius, 0, std::sin(a2) * radius},
+            color);
+
+        // YZ plane
+        draw_line(
+            center + void_math::Vec3{0, std::cos(a1) * radius, std::sin(a1) * radius},
+            center + void_math::Vec3{0, std::cos(a2) * radius, std::sin(a2) * radius},
+            color);
+    }
 }
 
 void PhysicsDebugRenderer::draw_capsule(
     const void_math::Vec3& p1,
     const void_math::Vec3& p2,
     float radius,
-    std::uint32_t color) {
-    // Stub implementation
+    std::uint32_t color)
+{
+    // Draw cylinder
+    auto axis = p2 - p1;
+    float length = void_math::length(axis);
+    if (length < 0.0001f) {
+        draw_sphere((p1 + p2) * 0.5f, radius, color);
+        return;
+    }
+
+    axis = axis / length;
+
+    // Find perpendicular axes
+    void_math::Vec3 perp1, perp2;
+    if (std::abs(axis.x) > 0.9f) {
+        perp1 = void_math::normalize(void_math::cross(axis, void_math::Vec3{0, 1, 0}));
+    } else {
+        perp1 = void_math::normalize(void_math::cross(axis, void_math::Vec3{1, 0, 0}));
+    }
+    perp2 = void_math::cross(axis, perp1);
+
+    constexpr int segments = 8;
+    constexpr float pi = 3.14159265f;
+
+    // Draw cylinder lines
+    for (int i = 0; i < segments; ++i) {
+        float a = (static_cast<float>(i) / segments) * 2.0f * pi;
+        auto offset = perp1 * std::cos(a) * radius + perp2 * std::sin(a) * radius;
+        draw_line(p1 + offset, p2 + offset, color);
+    }
+
+    // Draw caps
+    draw_sphere(p1, radius, color);
+    draw_sphere(p2, radius, color);
 }
 
 void PhysicsDebugRenderer::draw_arrow(
     const void_math::Vec3& from,
     const void_math::Vec3& to,
-    std::uint32_t color) {
+    std::uint32_t color)
+{
     draw_line(from, to, color);
+
+    auto dir = to - from;
+    float len = void_math::length(dir);
+    if (len < 0.0001f) return;
+
+    dir = dir / len;
+    float head_size = len * 0.1f;
+
+    // Find perpendicular
+    void_math::Vec3 perp;
+    if (std::abs(dir.x) > 0.9f) {
+        perp = void_math::normalize(void_math::cross(dir, void_math::Vec3{0, 1, 0}));
+    } else {
+        perp = void_math::normalize(void_math::cross(dir, void_math::Vec3{1, 0, 0}));
+    }
+
+    auto head_base = to - dir * head_size;
+    draw_line(to, head_base + perp * head_size * 0.5f, color);
+    draw_line(to, head_base - perp * head_size * 0.5f, color);
 }
 
 void PhysicsDebugRenderer::draw_contact(
     const void_math::Vec3& position,
     const void_math::Vec3& normal,
     float depth,
-    std::uint32_t color) {
-    // Stub implementation
+    std::uint32_t color)
+{
+    draw_sphere(position, 0.02f, color);
+    draw_arrow(position, position + normal * 0.1f, Colors::ContactNormal);
 }
 
 void PhysicsDebugRenderer::draw_body(const IRigidbody& body) {
-    // Stub implementation
+    std::uint32_t color;
+    switch (body.type()) {
+        case BodyType::Static:
+            color = Colors::StaticBody;
+            break;
+        case BodyType::Kinematic:
+            color = Colors::KinematicBody;
+            break;
+        case BodyType::Dynamic:
+            color = body.is_sleeping() ? Colors::SleepingBody : Colors::DynamicBody;
+            break;
+    }
+
+    auto pos = body.position();
+    auto rot = body.rotation();
+
+    for (std::size_t i = 0; i < body.shape_count(); ++i) {
+        const auto* shape = body.get_shape(i);
+        if (!shape) continue;
+
+        auto local_t = shape->local_transform();
+        auto shape_pos = pos + void_math::rotate(rot, local_t.position);
+        auto shape_rot = rot * local_t.rotation;
+
+        switch (shape->type()) {
+            case ShapeType::Box: {
+                const auto& box = static_cast<const BoxShape&>(*shape);
+                draw_box(shape_pos, box.half_extents(), shape_rot, color);
+                break;
+            }
+            case ShapeType::Sphere: {
+                const auto& sphere = static_cast<const SphereShape&>(*shape);
+                draw_sphere(shape_pos, sphere.radius(), color);
+                break;
+            }
+            case ShapeType::Capsule: {
+                const auto& capsule = static_cast<const CapsuleShape&>(*shape);
+                auto half_h = capsule.half_height();
+                auto up = void_math::rotate(shape_rot, void_math::Vec3{0, 1, 0});
+                draw_capsule(shape_pos - up * half_h, shape_pos + up * half_h, capsule.radius(), color);
+                break;
+            }
+            default:
+                break;
+        }
+    }
 }
 
 void PhysicsDebugRenderer::draw_world(const IPhysicsWorld& world) {
-    // Stub implementation
+    world.for_each_body([this](const IRigidbody& body) {
+        draw_body(body);
+    });
 }
 
 } // namespace void_physics

@@ -55,6 +55,11 @@ class FileWatcher;
 class StatePreserver;
 class ReloadContext;
 
+// Instances
+class CppClassInstance;
+class CppClassRegistry;
+class CppLibrary;
+
 // System
 class CppSystem;
 

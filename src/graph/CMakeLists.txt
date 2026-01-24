@@ -7,6 +7,7 @@ void_add_module(NAME void_graph
         execution.cpp
         registry.cpp
         system.cpp
+        snapshot.cpp
     DEPENDENCIES
         void_core
         void_structures

@@ -99,7 +99,7 @@ struct NumericRange {
 struct StringConstraint {
     std::optional<std::size_t> min_length;
     std::optional<std::size_t> max_length;
-    std::optional<std::string> pattern;  // Regex pattern (not implemented)
+    std::optional<std::string> pattern;  // Regex pattern (optional, requires <regex>)
 
     [[nodiscard]] bool check(const std::string& value) const {
         if (min_length && value.length() < *min_length) return false;

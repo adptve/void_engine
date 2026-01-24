@@ -4,6 +4,7 @@
 /// @brief Main C++ runtime system
 
 #include "hot_reload.hpp"
+#include "instance.hpp"
 
 #include <void_engine/event/event.hpp>
 
@@ -83,6 +84,29 @@ public:
     /// @brief Get hot reloader
     [[nodiscard]] HotReloader& hot_reloader() { return *hot_reloader_; }
     [[nodiscard]] const HotReloader& hot_reloader() const { return *hot_reloader_; }
+
+    /// @brief Get class registry
+    [[nodiscard]] CppClassRegistry& class_registry() { return CppClassRegistry::instance(); }
+    [[nodiscard]] const CppClassRegistry& class_registry() const { return CppClassRegistry::instance(); }
+
+    // ==========================================================================
+    // Instance Lifecycle
+    // ==========================================================================
+
+    /// @brief Call BeginPlay on all instances
+    void begin_play_all() { CppClassRegistry::instance().begin_play_all(); }
+
+    /// @brief Call Tick on all active instances
+    void tick_all(float delta_time) { CppClassRegistry::instance().tick_all(delta_time); }
+
+    /// @brief Call FixedTick on all active instances
+    void fixed_tick_all(float delta_time) { CppClassRegistry::instance().fixed_tick_all(delta_time); }
+
+    /// @brief Call EndPlay on all instances
+    void end_play_all() { CppClassRegistry::instance().end_play_all(); }
+
+    /// @brief Set world context for all instances
+    void set_world_context(const FfiWorldContext* context) { CppClassRegistry::instance().set_world_context(context); }
 
     // ==========================================================================
     // Quick Access
@@ -183,6 +207,23 @@ using void_cpp::ModuleRegistry;
 using void_cpp::HotReloader;
 using void_cpp::FileWatcher;
 using void_cpp::StatePreserver;
+
+// Instance management
+using void_cpp::CppLibrary;
+using void_cpp::CppClassInstance;
+using void_cpp::CppClassRegistry;
+using void_cpp::CppHandle;
+using void_cpp::FfiEntityId;
+using void_cpp::FfiVec3;
+using void_cpp::FfiQuat;
+using void_cpp::FfiTransform;
+using void_cpp::FfiWorldContext;
+using void_cpp::FfiClassInfo;
+using void_cpp::FfiClassVTable;
+using void_cpp::PropertyValue;
+using void_cpp::PropertyMap;
+using void_cpp::InstanceId;
+using void_cpp::InstanceState;
 
 using void_cpp::CompilerType;
 using void_cpp::BuildConfig;

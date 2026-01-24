@@ -8,11 +8,28 @@ void_add_module(NAME void_audio
         mixer.cpp
         effects.cpp
         backend.cpp
+        miniaudio_backend.cpp
     DEPENDENCIES
         void_core
         void_asset
         void_ecs
 )
+
+# Link miniaudio (header-only)
+target_link_libraries(void_audio PRIVATE miniaudio)
+
+# Platform-specific audio libraries
+if(WIN32)
+    # Windows audio APIs are loaded dynamically by miniaudio
+elseif(UNIX AND NOT APPLE)
+    # Linux: link pthread for miniaudio threading
+    find_package(Threads REQUIRED)
+    target_link_libraries(void_audio PRIVATE Threads::Threads)
+    # ALSA or PulseAudio are loaded dynamically
+elseif(APPLE)
+    # macOS: CoreAudio framework
+    target_link_libraries(void_audio PRIVATE "-framework CoreFoundation" "-framework CoreAudio" "-framework AudioToolbox")
+endif()
 
 # Platform audio backends
 if(WIN32)

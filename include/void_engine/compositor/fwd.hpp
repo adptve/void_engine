@@ -49,4 +49,36 @@ class IRenderTarget;
 class ICompositor;
 class CompositorFactory;
 
+// Layer types
+struct LayerId;
+enum class BlendMode : std::uint8_t;
+struct LayerConfig;
+struct LayerBounds;
+struct LayerTransform;
+struct LayerContent;
+enum class LayerContentType : std::uint8_t;
+class Layer;
+class LayerManager;
+
+// Layer compositor types
+struct LayerCompositorConfig;
+struct LayerCompositorStats;
+class ILayerCompositor;
+class NullLayerCompositor;
+class SoftwareLayerCompositor;
+class LayerCompositorFactory;
+
+// Rehydration types
+enum class RehydrationErrorKind;
+struct RehydrationError;
+class RehydrationState;
+class IRehydratable;
+class RehydrationStore;
+
+// Snapshot types
+class BinaryWriter;
+class BinaryReader;
+struct FrameSchedulerSnapshot;
+struct CompositorSnapshot;
+
 } // namespace void_compositor

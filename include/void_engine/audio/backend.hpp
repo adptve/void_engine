@@ -236,14 +236,59 @@ private:
 };
 
 // =============================================================================
-// OpenAL Backend
+// OpenAL Backend (Legacy/Fallback)
 // =============================================================================
 
-/// OpenAL audio backend
+/// OpenAL audio backend (legacy fallback)
 class OpenALBackend : public IAudioBackend {
 public:
     [[nodiscard]] AudioBackendInfo info() const override;
     [[nodiscard]] AudioBackend type() const override { return AudioBackend::OpenAL; }
+    [[nodiscard]] void_core::Result<void> initialize(const AudioConfig& config) override;
+    void shutdown() override;
+    [[nodiscard]] bool is_initialized() const override;
+
+    [[nodiscard]] void_core::Result<BufferId> create_buffer(const AudioBufferDesc& desc) override;
+    void destroy_buffer(BufferId id) override;
+    [[nodiscard]] IAudioBuffer* get_buffer(BufferId id) override;
+
+    [[nodiscard]] void_core::Result<SourceId> create_source(const AudioSourceConfig& config) override;
+    void destroy_source(SourceId id) override;
+    [[nodiscard]] IAudioSource* get_source(SourceId id) override;
+
+    [[nodiscard]] IAudioListener* listener() override;
+
+    [[nodiscard]] void_core::Result<EffectId> create_effect(const EffectConfig& config) override;
+    void destroy_effect(EffectId id) override;
+    [[nodiscard]] IAudioEffect* get_effect(EffectId id) override;
+
+    void update(float dt) override;
+    void process() override;
+
+    [[nodiscard]] AudioStats stats() const override;
+    void reset_stats() override;
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> m_impl;
+};
+
+// =============================================================================
+// Miniaudio Backend (Primary)
+// =============================================================================
+
+/// Miniaudio-based audio backend - cross-platform, no dependencies
+class MiniaudioBackend : public IAudioBackend {
+public:
+    MiniaudioBackend();
+    ~MiniaudioBackend() override;
+
+    // Non-copyable
+    MiniaudioBackend(const MiniaudioBackend&) = delete;
+    MiniaudioBackend& operator=(const MiniaudioBackend&) = delete;
+
+    [[nodiscard]] AudioBackendInfo info() const override;
+    [[nodiscard]] AudioBackend type() const override { return AudioBackend::Custom; }
     [[nodiscard]] void_core::Result<void> initialize(const AudioConfig& config) override;
     void shutdown() override;
     [[nodiscard]] bool is_initialized() const override;
@@ -325,7 +370,8 @@ private:
 class AudioSystem {
 public:
     /// Create audio system with specified backend
-    explicit AudioSystem(AudioBackend backend = AudioBackend::OpenAL);
+    /// @note Default is Custom (Miniaudio) for cross-platform audio output
+    explicit AudioSystem(AudioBackend backend = AudioBackend::Custom);
     ~AudioSystem();
 
     // Non-copyable

@@ -1163,17 +1163,125 @@ WasmResult<void> WasmInterpreter::execute_code(
 
                 StackValue idx = pop();
                 if (table_idx >= tables_.size() ||
-                    static_cast<std::uint32_t>(idx.i32) >= tables_[table_idx].size()) {
+                    static_cast<std::uint32_t>(idx.u32) >= tables_[table_idx].size()) {
                     return void_core::Error{void_core::ErrorCode::InvalidArgument, "WASM out of bounds"};
                 }
 
-                std::uint32_t func_idx = tables_[table_idx][idx.i32];
+                std::uint32_t func_idx = tables_[table_idx][idx.u32];
                 if (func_idx == 0xFFFFFFFF) {
                     return void_core::Error{void_core::ErrorCode::InvalidState, "WASM trap"};
                 }
 
-                // Same as Call
-                // ... (simplified: reuse Call logic)
+                // Validate function type matches
+                if (type_idx >= module.types.size()) {
+                    return void_core::Error{void_core::ErrorCode::InvalidArgument, "WASM invalid type index"};
+                }
+                const WasmFunctionType& expected_type = module.types[type_idx];
+
+                // Check if imported function
+                if (func_idx < module.num_imported_functions) {
+                    std::uint32_t imp_idx = 0;
+                    for (const auto& imp : module.imports) {
+                        if (imp.kind == WasmExternKind::Func) {
+                            if (imp_idx == func_idx) {
+                                // Verify type
+                                if (imp.func_type &&
+                                    (imp.func_type->params != expected_type.params ||
+                                     imp.func_type->results != expected_type.results)) {
+                                    return void_core::Error{void_core::ErrorCode::InvalidArgument, "WASM type mismatch"};
+                                }
+
+                                // Pop arguments
+                                std::vector<WasmValue> args;
+                                for (std::size_t i = 0; i < expected_type.params.size(); ++i) {
+                                    StackValue v = pop();
+                                    WasmValue wv;
+                                    wv.type = expected_type.params[expected_type.params.size() - 1 - i];
+                                    switch (wv.type) {
+                                        case WasmValType::I32: wv.i32 = v.i32; break;
+                                        case WasmValType::I64: wv.i64 = v.i64; break;
+                                        case WasmValType::F32: wv.f32 = v.f32; break;
+                                        case WasmValType::F64: wv.f64 = v.f64; break;
+                                        default: break;
+                                    }
+                                    args.push_back(wv);
+                                }
+                                std::reverse(args.begin(), args.end());
+
+                                auto result = call_host_function(imp.module, imp.name, args);
+                                if (!result) {
+                                    return result.error();
+                                }
+
+                                // Push results
+                                for (const auto& rv : result.value()) {
+                                    StackValue sv;
+                                    switch (rv.type) {
+                                        case WasmValType::I32: sv.i32 = rv.i32; break;
+                                        case WasmValType::I64: sv.i64 = rv.i64; break;
+                                        case WasmValType::F32: sv.f32 = rv.f32; break;
+                                        case WasmValType::F64: sv.f64 = rv.f64; break;
+                                        default: break;
+                                    }
+                                    push(sv);
+                                }
+                                break;
+                            }
+                            ++imp_idx;
+                        }
+                    }
+                } else {
+                    // Local function call
+                    std::uint32_t local_idx = func_idx - module.num_imported_functions;
+                    if (local_idx >= module.functions.size()) {
+                        return void_core::Error{void_core::ErrorCode::InvalidArgument, "WASM invalid function"};
+                    }
+
+                    const WasmFunction& callee = module.functions[local_idx];
+                    const WasmFunctionType& callee_type = module.types[callee.type_index];
+
+                    // Verify type
+                    if (callee_type.params != expected_type.params ||
+                        callee_type.results != expected_type.results) {
+                        return void_core::Error{void_core::ErrorCode::InvalidArgument, "WASM type mismatch"};
+                    }
+
+                    // Pop arguments
+                    std::vector<WasmValue> args;
+                    for (std::size_t i = 0; i < callee_type.params.size(); ++i) {
+                        StackValue v = pop();
+                        WasmValue wv;
+                        wv.type = callee_type.params[callee_type.params.size() - 1 - i];
+                        switch (wv.type) {
+                            case WasmValType::I32: wv.i32 = v.i32; break;
+                            case WasmValType::I64: wv.i64 = v.i64; break;
+                            case WasmValType::F32: wv.f32 = v.f32; break;
+                            case WasmValType::F64: wv.f64 = v.f64; break;
+                            default: break;
+                        }
+                        args.push_back(wv);
+                    }
+                    std::reverse(args.begin(), args.end());
+
+                    // Recursive call
+                    auto result = execute(module, memory, func_idx, args);
+                    if (!result) {
+                        return result.error();
+                    }
+
+                    // Push results
+                    for (const auto& rv : result.value()) {
+                        StackValue sv;
+                        switch (rv.type) {
+                            case WasmValType::I32: sv.i32 = rv.i32; break;
+                            case WasmValType::I64: sv.i64 = rv.i64; break;
+                            case WasmValType::F32: sv.f32 = rv.f32; break;
+                            case WasmValType::F64: sv.f64 = rv.f64; break;
+                            default: break;
+                        }
+                        push(sv);
+                    }
+                }
                 break;
             }
 

@@ -11,6 +11,7 @@ void_add_module(NAME void_compositor
     SOURCES
         stub.cpp
         compositor.cpp
+        layer_compositor.cpp
     DEPENDENCIES
         void_core
         void_render

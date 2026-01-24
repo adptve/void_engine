@@ -8,6 +8,11 @@
 #include <void_engine/presenter/backends/wgpu_backend.hpp>
 #endif
 
+#if defined(VOID_HAS_OPENGL) || (!defined(VOID_HAS_WGPU) && !defined(__EMSCRIPTEN__))
+#include <void_engine/presenter/backends/opengl_backend.hpp>
+#define VOID_PRESENTER_USE_OPENGL 1
+#endif
+
 #include <unordered_map>
 #include <mutex>
 
@@ -33,6 +38,13 @@ void ensure_initialized() {
     // Register wgpu backend
     g_backend_creators[BackendType::Wgpu] = [](const BackendConfig& config) {
         return std::make_unique<backends::WgpuBackend>(config, backends::WgpuBackendConfig{});
+    };
+#endif
+
+#if defined(VOID_PRESENTER_USE_OPENGL)
+    // Register OpenGL backend
+    g_backend_creators[BackendType::OpenGL] = [](const BackendConfig& config) {
+        return std::make_unique<backends::OpenGLBackend>(config);
     };
 #endif
 
@@ -95,8 +107,12 @@ std::vector<BackendAvailability> BackendFactory::query_available() {
 #endif
 
     // OpenGL
-#if defined(VOID_HAS_OPENGL)
-    result.push_back({BackendType::OpenGL, true, ""});
+#if defined(VOID_PRESENTER_USE_OPENGL)
+    if (backends::is_opengl_available()) {
+        result.push_back({BackendType::OpenGL, true, ""});
+    } else {
+        result.push_back({BackendType::OpenGL, false, "OpenGL context creation failed"});
+    }
 #else
     result.push_back({BackendType::OpenGL, false, "OpenGL not compiled"});
 #endif
@@ -168,8 +184,8 @@ bool BackendFactory::is_available(BackendType type) {
 #endif
 
         case BackendType::OpenGL:
-#if defined(VOID_HAS_OPENGL)
-            return true;
+#if defined(VOID_PRESENTER_USE_OPENGL)
+            return backends::is_opengl_available();
 #else
             return false;
 #endif
@@ -198,6 +214,8 @@ BackendType BackendFactory::recommended() {
     return BackendType::WebGPU;
 #elif defined(VOID_HAS_WGPU)
     return BackendType::Wgpu;  // wgpu auto-selects best backend
+#elif defined(VOID_PRESENTER_USE_OPENGL)
+    return BackendType::OpenGL;  // OpenGL as primary fallback
 #elif defined(_WIN32)
     return BackendType::D3D12;
 #elif defined(__APPLE__)
@@ -205,7 +223,7 @@ BackendType BackendFactory::recommended() {
 #elif defined(VOID_HAS_VULKAN)
     return BackendType::Vulkan;
 #else
-    return BackendType::OpenGL;
+    return BackendType::Null;
 #endif
 }
 

@@ -637,7 +637,7 @@ StmtPtr Parser::parse_class_declaration() {
 
     while (!check(TokenType::RightBrace) && !is_at_end()) {
         bool is_pub = match(TokenType::Pub);
-        bool is_static = false;  // TODO: static keyword
+        bool is_static = match(TokenType::Static);
 
         if (check(TokenType::Fn)) {
             advance();

@@ -573,13 +573,17 @@ void TriggerSystem::process_entity_stay(EntityId entity, Trigger& trigger, float
 bool TriggerSystem::check_entity_filter(EntityId entity, const Trigger& trigger) const {
     const auto& config = trigger.config();
 
-    // Check player flags
-    if (has_flag(config.flags, TriggerFlags::PlayerOnly)) {
-        // Would check if entity is player
-    }
+    // Check player flags using the player check callback
+    if (m_is_player) {
+        bool is_player = m_is_player(entity);
 
-    if (has_flag(config.flags, TriggerFlags::IgnorePlayer)) {
-        // Would check if entity is player
+        if (has_flag(config.flags, TriggerFlags::PlayerOnly)) {
+            if (!is_player) return false;
+        }
+
+        if (has_flag(config.flags, TriggerFlags::IgnorePlayer)) {
+            if (is_player) return false;
+        }
     }
 
     // Check tags
@@ -639,6 +643,7 @@ TriggerSystem::Snapshot TriggerSystem::take_snapshot() const {
         data.state = static_cast<std::uint8_t>(trigger->state());
         data.activation_count = trigger->activation_count();
         data.last_activation = trigger->last_activation_time();
+        data.cooldown_remaining = trigger->cooldown_remaining();
         data.enabled = trigger->is_enabled();
         snapshot.triggers.push_back(data);
     }
@@ -652,12 +657,18 @@ void TriggerSystem::apply_snapshot(const Snapshot& snapshot) {
     for (const auto& data : snapshot.triggers) {
         TriggerId id{data.id};
         if (auto* trigger = get_trigger(id)) {
+            // Restore enabled state
             if (data.enabled) {
                 trigger->enable();
             } else {
                 trigger->disable();
             }
-            // Note: activation count and state would need additional methods to restore
+
+            // Restore full trigger state
+            trigger->set_state(static_cast<TriggerState>(data.state));
+            trigger->set_activation_count(data.activation_count);
+            trigger->set_last_activation(data.last_activation);
+            trigger->set_cooldown_remaining(data.cooldown_remaining);
         }
     }
 }

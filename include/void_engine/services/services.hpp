@@ -80,11 +80,14 @@
 #include "service.hpp"
 #include "registry.hpp"
 #include "session.hpp"
+#include "event_bus.hpp"
+#include "snapshot.hpp"
 
 namespace void_services {
 
 /// Prelude - commonly used types
 namespace prelude {
+    // Service types
     using void_services::IService;
     using void_services::ServiceBase;
     using void_services::ServiceId;
@@ -94,10 +97,27 @@ namespace prelude {
     using void_services::ServiceRegistry;
     using void_services::ServiceEvent;
     using void_services::ServiceEventType;
+
+    // Session types
     using void_services::Session;
     using void_services::SessionManager;
     using void_services::SessionId;
     using void_services::SessionState;
+
+    // Event bus types
+    using void_services::EventBus;
+    using void_services::SharedEventBus;
+    using void_services::EventPriority;
+    using void_services::SubscriptionId;
+    using void_services::SubscriptionGuard;
+    using void_services::IEvent;
+
+    // Snapshot types
+    using void_services::BinaryWriter;
+    using void_services::BinaryReader;
+    using void_services::RegistrySnapshot;
+    using void_services::SessionManagerSnapshot;
+    using void_services::EventBusSnapshot;
 } // namespace prelude
 
 } // namespace void_services

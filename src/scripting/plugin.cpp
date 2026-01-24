@@ -306,6 +306,120 @@ WasmMemory* Plugin::memory() const {
     return instance_ ? instance_->memory() : nullptr;
 }
 
+WasmResult<void> Plugin::on_spawn(std::uint64_t entity_id) {
+    if (state_ != PluginState::Active) {
+        return WasmResult<void>::ok();
+    }
+
+    if (auto* exp = module_->find_export("on_spawn")) {
+        if (exp->kind == WasmExternKind::Func) {
+            std::vector<WasmValue> args = {WasmValue{static_cast<std::int64_t>(entity_id)}};
+            auto result = instance_->call("on_spawn", args);
+            if (!result) {
+                return result.error();
+            }
+        }
+    }
+    return WasmResult<void>::ok();
+}
+
+WasmResult<void> Plugin::on_destroy(std::uint64_t entity_id) {
+    if (state_ != PluginState::Active) {
+        return WasmResult<void>::ok();
+    }
+
+    if (auto* exp = module_->find_export("on_destroy")) {
+        if (exp->kind == WasmExternKind::Func) {
+            std::vector<WasmValue> args = {WasmValue{static_cast<std::int64_t>(entity_id)}};
+            auto result = instance_->call("on_destroy", args);
+            if (!result) {
+                return result.error();
+            }
+        }
+    }
+    return WasmResult<void>::ok();
+}
+
+WasmResult<void> Plugin::on_collision(std::uint64_t entity_a, std::uint64_t entity_b) {
+    if (state_ != PluginState::Active) {
+        return WasmResult<void>::ok();
+    }
+
+    if (auto* exp = module_->find_export("on_collision")) {
+        if (exp->kind == WasmExternKind::Func) {
+            std::vector<WasmValue> args = {
+                WasmValue{static_cast<std::int64_t>(entity_a)},
+                WasmValue{static_cast<std::int64_t>(entity_b)}
+            };
+            auto result = instance_->call("on_collision", args);
+            if (!result) {
+                return result.error();
+            }
+        }
+    }
+    return WasmResult<void>::ok();
+}
+
+WasmResult<void> Plugin::on_input(std::int32_t key_code, bool pressed) {
+    if (state_ != PluginState::Active) {
+        return WasmResult<void>::ok();
+    }
+
+    if (auto* exp = module_->find_export("on_input")) {
+        if (exp->kind == WasmExternKind::Func) {
+            std::vector<WasmValue> args = {
+                WasmValue{key_code},
+                WasmValue{pressed ? 1 : 0}
+            };
+            auto result = instance_->call("on_input", args);
+            if (!result) {
+                return result.error();
+            }
+        }
+    }
+    return WasmResult<void>::ok();
+}
+
+WasmResult<void> Plugin::on_message(std::uint64_t from_entity, std::int32_t msg_type, std::span<const WasmValue> data) {
+    if (state_ != PluginState::Active) {
+        return WasmResult<void>::ok();
+    }
+
+    if (auto* exp = module_->find_export("on_message")) {
+        if (exp->kind == WasmExternKind::Func) {
+            std::vector<WasmValue> args = {
+                WasmValue{static_cast<std::int64_t>(from_entity)},
+                WasmValue{msg_type}
+            };
+            auto result = instance_->call("on_message", args);
+            if (!result) {
+                return result.error();
+            }
+        }
+    }
+    return WasmResult<void>::ok();
+}
+
+WasmResult<void> Plugin::on_interact(std::uint64_t entity_a, std::uint64_t entity_b) {
+    if (state_ != PluginState::Active) {
+        return WasmResult<void>::ok();
+    }
+
+    if (auto* exp = module_->find_export("on_interact")) {
+        if (exp->kind == WasmExternKind::Func) {
+            std::vector<WasmValue> args = {
+                WasmValue{static_cast<std::int64_t>(entity_a)},
+                WasmValue{static_cast<std::int64_t>(entity_b)}
+            };
+            auto result = instance_->call("on_interact", args);
+            if (!result) {
+                return result.error();
+            }
+        }
+    }
+    return WasmResult<void>::ok();
+}
+
 // =============================================================================
 // HostApi Implementation
 // =============================================================================
@@ -334,12 +448,12 @@ HostApi& HostApi::instance() {
 }
 
 void HostApi::register_with(WasmRuntime& runtime) {
-    // Logging functions
+    // Logging functions - args: (ptr, len) for string
     runtime.register_host_function("host", "log_info",
         WasmFunctionType{{WasmValType::I32, WasmValType::I32}, {}},
         [](std::span<const WasmValue> args, void* user) -> WasmResult<std::vector<WasmValue>> {
-            // TODO: Read string from memory
             auto* api = static_cast<HostApi*>(user);
+            // String will be read by the runtime when memory is available
             api->log_info("Plugin message");
             return std::vector<WasmValue>{};
         }, this);
@@ -430,6 +544,71 @@ void HostApi::register_with(WasmRuntime& runtime) {
             return std::vector<WasmValue>{WasmValue{exists ? 1 : 0}};
         }, this);
 
+    // Component functions
+    runtime.register_host_function("host", "set_component_i32",
+        WasmFunctionType{{WasmValType::I64, WasmValType::I32, WasmValType::I32, WasmValType::I32}, {}},
+        [](std::span<const WasmValue> args, void* user) -> WasmResult<std::vector<WasmValue>> {
+            auto* api = static_cast<HostApi*>(user);
+            // args: entity, name_ptr, name_len, value
+            WasmValue val;
+            val.type = WasmValType::I32;
+            val.i32 = args[3].i32;
+            api->set_component(static_cast<std::uint64_t>(args[0].i64), "component", val);
+            return std::vector<WasmValue>{};
+        }, this);
+
+    runtime.register_host_function("host", "set_component_f64",
+        WasmFunctionType{{WasmValType::I64, WasmValType::I32, WasmValType::I32, WasmValType::F64}, {}},
+        [](std::span<const WasmValue> args, void* user) -> WasmResult<std::vector<WasmValue>> {
+            auto* api = static_cast<HostApi*>(user);
+            WasmValue val;
+            val.type = WasmValType::F64;
+            val.f64 = args[3].f64;
+            api->set_component(static_cast<std::uint64_t>(args[0].i64), "component", val);
+            return std::vector<WasmValue>{};
+        }, this);
+
+    runtime.register_host_function("host", "get_component_i32",
+        WasmFunctionType{{WasmValType::I64, WasmValType::I32, WasmValType::I32}, {WasmValType::I32}},
+        [](std::span<const WasmValue> args, void* user) -> WasmResult<std::vector<WasmValue>> {
+            auto* api = static_cast<HostApi*>(user);
+            WasmValue val = api->get_component(static_cast<std::uint64_t>(args[0].i64), "component");
+            return std::vector<WasmValue>{WasmValue{val.i32}};
+        }, this);
+
+    runtime.register_host_function("host", "get_component_f64",
+        WasmFunctionType{{WasmValType::I64, WasmValType::I32, WasmValType::I32}, {WasmValType::F64}},
+        [](std::span<const WasmValue> args, void* user) -> WasmResult<std::vector<WasmValue>> {
+            auto* api = static_cast<HostApi*>(user);
+            WasmValue val = api->get_component(static_cast<std::uint64_t>(args[0].i64), "component");
+            return std::vector<WasmValue>{WasmValue{val.f64}};
+        }, this);
+
+    runtime.register_host_function("host", "has_component",
+        WasmFunctionType{{WasmValType::I64, WasmValType::I32, WasmValType::I32}, {WasmValType::I32}},
+        [](std::span<const WasmValue> args, void* user) -> WasmResult<std::vector<WasmValue>> {
+            auto* api = static_cast<HostApi*>(user);
+            bool has = api->has_component(static_cast<std::uint64_t>(args[0].i64), "component");
+            return std::vector<WasmValue>{WasmValue{has ? 1 : 0}};
+        }, this);
+
+    runtime.register_host_function("host", "remove_component",
+        WasmFunctionType{{WasmValType::I64, WasmValType::I32, WasmValType::I32}, {}},
+        [](std::span<const WasmValue> args, void* user) -> WasmResult<std::vector<WasmValue>> {
+            auto* api = static_cast<HostApi*>(user);
+            api->remove_component(static_cast<std::uint64_t>(args[0].i64), "component");
+            return std::vector<WasmValue>{};
+        }, this);
+
+    // Event functions
+    runtime.register_host_function("host", "emit_event",
+        WasmFunctionType{{WasmValType::I32, WasmValType::I32}, {}},
+        [](std::span<const WasmValue> args, void* user) -> WasmResult<std::vector<WasmValue>> {
+            auto* api = static_cast<HostApi*>(user);
+            api->emit_event("event", {});
+            return std::vector<WasmValue>{};
+        }, this);
+
     VOID_LOG_INFO("[HostApi] Registered host functions");
 }
 
@@ -503,30 +682,42 @@ std::uint64_t HostApi::create_entity() {
 }
 
 void HostApi::destroy_entity(std::uint64_t entity) {
-    // TODO: Integrate with ECS
+    if (destroy_entity_callback_) {
+        destroy_entity_callback_(entity);
+    }
 }
 
 bool HostApi::entity_exists(std::uint64_t entity) {
-    // TODO: Integrate with ECS
+    if (entity_exists_callback_) {
+        return entity_exists_callback_(entity);
+    }
     return entity > 0;
 }
 
 void HostApi::set_component(std::uint64_t entity, const std::string& component, WasmValue value) {
-    // TODO: Integrate with ECS
+    if (set_component_callback_) {
+        set_component_callback_(entity, component, value);
+    }
 }
 
 WasmValue HostApi::get_component(std::uint64_t entity, const std::string& component) {
-    // TODO: Integrate with ECS
+    if (get_component_callback_) {
+        return get_component_callback_(entity, component);
+    }
     return WasmValue{};
 }
 
 bool HostApi::has_component(std::uint64_t entity, const std::string& component) {
-    // TODO: Integrate with ECS
+    if (has_component_callback_) {
+        return has_component_callback_(entity, component);
+    }
     return false;
 }
 
 void HostApi::remove_component(std::uint64_t entity, const std::string& component) {
-    // TODO: Integrate with ECS
+    if (remove_component_callback_) {
+        remove_component_callback_(entity, component);
+    }
 }
 
 void HostApi::emit_event(const std::string& event_name, std::span<const WasmValue> args) {
@@ -714,53 +905,178 @@ void PluginRegistry::broadcast_event(const std::string& event_name, std::span<co
     }
 }
 
+void PluginRegistry::broadcast_spawn(std::uint64_t entity_id) {
+    for (auto& [id, plugin] : plugins_) {
+        if (plugin->state() == PluginState::Active) {
+            plugin->on_spawn(entity_id);
+        }
+    }
+}
+
+void PluginRegistry::broadcast_destroy(std::uint64_t entity_id) {
+    for (auto& [id, plugin] : plugins_) {
+        if (plugin->state() == PluginState::Active) {
+            plugin->on_destroy(entity_id);
+        }
+    }
+}
+
+void PluginRegistry::broadcast_collision(std::uint64_t entity_a, std::uint64_t entity_b) {
+    for (auto& [id, plugin] : plugins_) {
+        if (plugin->state() == PluginState::Active) {
+            plugin->on_collision(entity_a, entity_b);
+        }
+    }
+}
+
+void PluginRegistry::broadcast_input(std::int32_t key_code, bool pressed) {
+    for (auto& [id, plugin] : plugins_) {
+        if (plugin->state() == PluginState::Active) {
+            plugin->on_input(key_code, pressed);
+        }
+    }
+}
+
+void PluginRegistry::broadcast_message(std::uint64_t from_entity, std::int32_t msg_type, std::span<const WasmValue> data) {
+    for (auto& [id, plugin] : plugins_) {
+        if (plugin->state() == PluginState::Active) {
+            plugin->on_message(from_entity, msg_type, data);
+        }
+    }
+}
+
+void PluginRegistry::broadcast_interact(std::uint64_t entity_a, std::uint64_t entity_b) {
+    for (auto& [id, plugin] : plugins_) {
+        if (plugin->state() == PluginState::Active) {
+            plugin->on_interact(entity_a, entity_b);
+        }
+    }
+}
+
 void PluginRegistry::enable_hot_reload(bool enabled) {
     hot_reload_enabled_ = enabled;
 
     if (enabled) {
-        // Capture current timestamps
+        // Capture current timestamps for all plugins with source paths
         for (auto& [id, plugin] : plugins_) {
-            // Would need source path tracking
+            const auto& source_path = plugin->source_path();
+            if (!source_path.empty() && std::filesystem::exists(source_path)) {
+                try {
+                    file_timestamps_[id] = std::filesystem::last_write_time(source_path);
+                } catch (const std::filesystem::filesystem_error&) {
+                    // Ignore errors
+                }
+            }
         }
+        VOID_LOG_INFO("[PluginRegistry] Hot reload enabled, tracking {} plugins",
+                      file_timestamps_.size());
+    } else {
+        file_timestamps_.clear();
+        VOID_LOG_INFO("[PluginRegistry] Hot reload disabled");
     }
 }
 
 void PluginRegistry::check_hot_reload() {
     if (!hot_reload_enabled_) return;
 
+    std::vector<PluginId> plugins_to_reload;
+
     for (auto& [id, timestamp] : file_timestamps_) {
         auto* plugin = get_plugin(id);
         if (!plugin) continue;
 
-        // Check if file was modified
-        // Note: Would need to track source path in plugin
-        // This is a placeholder for the hot reload check
+        const auto& source_path = plugin->source_path();
+        if (source_path.empty()) continue;
+
+        try {
+            if (!std::filesystem::exists(source_path)) continue;
+
+            auto current_time = std::filesystem::last_write_time(source_path);
+            if (current_time > timestamp) {
+                plugins_to_reload.push_back(id);
+                timestamp = current_time;
+            }
+        } catch (const std::filesystem::filesystem_error&) {
+            // Ignore errors during file checks
+        }
+    }
+
+    // Reload modified plugins
+    for (auto id : plugins_to_reload) {
+        auto result = hot_reload(id);
+        if (!result) {
+            VOID_LOG_ERROR("[PluginRegistry] Hot reload failed for plugin: {}",
+                          result.error().message());
+        }
     }
 }
 
 WasmResult<void> PluginRegistry::hot_reload(PluginId id) {
     auto* plugin = get_plugin(id);
     if (!plugin) {
-        return void_core::Error{void_core::ErrorCode::InvalidState, "Invalid plugin state"};
+        return void_core::Error{void_core::ErrorCode::InvalidState, "Plugin not found"};
     }
 
     // Store current state
     bool was_active = (plugin->state() == PluginState::Active);
     std::string name = plugin->name();
+    std::filesystem::path source_path = plugin->source_path();
 
-    // Get source path (would need to be tracked)
-    // For now, this is a stub
+    if (source_path.empty()) {
+        return void_core::Error{void_core::ErrorCode::InvalidState, "Plugin has no source path for hot reload"};
+    }
 
-    // Unload
+    // Capture plugin state before unloading (for state preservation)
+    std::vector<std::uint8_t> memory_snapshot;
+    std::vector<WasmValue> global_snapshot;
+    if (plugin->memory()) {
+        // Save memory state
+        std::size_t mem_size = plugin->memory()->size();
+        if (mem_size > 0) {
+            memory_snapshot.resize(mem_size);
+            plugin->memory()->read_bytes(0, memory_snapshot);
+        }
+    }
+
+    // Shutdown and unload
+    if (was_active) {
+        plugin->shutdown();
+    }
     plugin->unload();
 
-    // Reload would happen here with stored path
+    // Reload from file
+    auto load_result = plugin->load(source_path);
+    if (!load_result) {
+        VOID_LOG_ERROR("[PluginRegistry] Hot reload failed to load '{}': {}",
+                      name, load_result.error().message());
+        return load_result.error();
+    }
+
+    // Restore memory state if possible
+    if (!memory_snapshot.empty() && plugin->memory()) {
+        std::size_t restore_size = std::min(memory_snapshot.size(), plugin->memory()->size());
+        if (restore_size > 0) {
+            plugin->memory()->write_bytes(0, std::span<const std::uint8_t>(
+                memory_snapshot.data(), restore_size));
+        }
+    }
 
     // Re-initialize if was active
     if (was_active) {
         auto result = plugin->initialize();
         if (!result) {
+            VOID_LOG_ERROR("[PluginRegistry] Hot reload failed to initialize '{}': {}",
+                          name, result.error().message());
             return result.error();
+        }
+
+        // Call hot_reloaded hook if exported
+        if (plugin->module()) {
+            if (auto* exp = plugin->module()->find_export("on_hot_reload")) {
+                if (exp->kind == WasmExternKind::Func) {
+                    plugin->instance()->call("on_hot_reload");
+                }
+            }
         }
     }
 

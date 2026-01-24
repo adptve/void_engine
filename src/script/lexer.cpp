@@ -45,6 +45,7 @@ const std::unordered_map<std::string_view, TokenType> Lexer::keywords_ = {
     {"type", TokenType::Type},
     {"interface", TokenType::Interface},
     {"impl", TokenType::Impl},
+    {"static", TokenType::Static},
     {"true", TokenType::True},
     {"false", TokenType::False},
     {"null", TokenType::Null},

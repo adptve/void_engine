@@ -40,6 +40,15 @@
 /// - Target tracking with forget time
 /// - Team-based filtering
 ///
+/// ## State Machines
+/// Generic finite state machine (FSM):
+/// - Type-safe state identification
+/// - State lifecycle hooks (on_enter, on_exit, on_update)
+/// - Priority-based transitions
+/// - Global transitions (from any state)
+/// - Lambda-based and data-driven state support
+/// - Hot-reload with state snapshots
+///
 /// # Example Usage
 ///
 /// @code
@@ -134,6 +143,7 @@
 #include "navmesh.hpp"
 #include "steering.hpp"
 #include "perception.hpp"
+#include "state_machine.hpp"
 
 namespace void_ai {
 
@@ -333,6 +343,15 @@ namespace prelude {
     using void_ai::KnownTarget;
     using void_ai::Stimulus;
     using void_ai::SenseType;
+
+    // State Machine
+    using void_ai::IState;
+    using void_ai::StateMachine;
+    using void_ai::StateMachineBuilder;
+    using void_ai::LambdaState;
+    using void_ai::DataDrivenState;
+    using void_ai::SimpleStateId;
+    using void_ai::make_state_machine;
 
     // System
     using void_ai::AISystem;

@@ -12,6 +12,10 @@
 #include <optional>
 #include <chrono>
 #include <functional>
+#include <map>
+#include <unordered_map>
+#include <unordered_set>
+#include <algorithm>
 
 namespace void_ir {
 
@@ -251,6 +255,50 @@ public:
         m_rollback_snapshot = id;
     }
 
+    // -------------------------------------------------------------------------
+    // Dependencies
+    // -------------------------------------------------------------------------
+
+    /// Get dependencies (transactions that must complete before this one)
+    [[nodiscard]] const std::vector<TransactionId>& dependencies() const noexcept {
+        return m_dependencies;
+    }
+
+    /// Add a dependency
+    void add_dependency(TransactionId tx_id) {
+        if (m_state != TransactionState::Building) {
+            throw std::runtime_error("Cannot add dependencies after submission");
+        }
+        m_dependencies.push_back(tx_id);
+    }
+
+    /// Check if this transaction depends on another
+    [[nodiscard]] bool depends_on(TransactionId tx_id) const noexcept {
+        return std::find(m_dependencies.begin(), m_dependencies.end(), tx_id)
+               != m_dependencies.end();
+    }
+
+    /// Check if all dependencies are satisfied (given committed transactions)
+    [[nodiscard]] bool dependencies_satisfied(
+        const std::unordered_set<TransactionId>& committed) const {
+        for (TransactionId dep : m_dependencies) {
+            if (committed.find(dep) == committed.end()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// Get frame number this transaction was created for
+    [[nodiscard]] std::uint64_t frame() const noexcept {
+        return m_frame;
+    }
+
+    /// Set frame number
+    void set_frame(std::uint64_t frame) {
+        m_frame = frame;
+    }
+
 private:
     TransactionId m_id;
     NamespaceId m_namespace;
@@ -259,6 +307,8 @@ private:
     PatchBatch m_patches;
     std::string m_error;
     std::optional<SnapshotId> m_rollback_snapshot;
+    std::vector<TransactionId> m_dependencies;
+    std::uint64_t m_frame = 0;
 };
 
 // =============================================================================
@@ -364,6 +414,26 @@ public:
         return *this;
     }
 
+    /// Add dependency on another transaction
+    TransactionBuilder& depends_on(TransactionId tx_id) {
+        m_dependencies.push_back(tx_id);
+        return *this;
+    }
+
+    /// Add multiple dependencies
+    TransactionBuilder& depends_on_all(std::initializer_list<TransactionId> tx_ids) {
+        for (auto id : tx_ids) {
+            m_dependencies.push_back(id);
+        }
+        return *this;
+    }
+
+    /// Set frame number
+    TransactionBuilder& frame(std::uint64_t frame_num) {
+        m_frame = frame_num;
+        return *this;
+    }
+
     /// Get patch count
     [[nodiscard]] std::size_t patch_count() const noexcept {
         return m_patches.size();
@@ -380,7 +450,18 @@ public:
             tx.add_patch(std::move(patch));
         }
 
+        for (auto dep : m_dependencies) {
+            tx.add_dependency(dep);
+        }
+
+        tx.set_frame(m_frame);
+
         return tx;
+    }
+
+    /// Build as draft (stays in Building state, not submitted)
+    [[nodiscard]] Transaction build_draft(TransactionId id) {
+        return build(id);
     }
 
 private:
@@ -389,6 +470,8 @@ private:
     std::string m_source;
     TransactionPriority m_priority = TransactionPriority::Normal;
     PatchBatch m_patches;
+    std::vector<TransactionId> m_dependencies;
+    std::uint64_t m_frame = 0;
 };
 
 // =============================================================================
@@ -461,6 +544,265 @@ public:
 
 private:
     std::vector<Transaction> m_pending;
+};
+
+// =============================================================================
+// ConflictDetector
+// =============================================================================
+
+/// Type of conflict between transactions
+enum class ConflictType : std::uint8_t {
+    None = 0,
+    Entity,      // Both modify same entity
+    Component,   // Both modify same component on same entity
+    Layer,       // Both modify same layer
+    Asset        // Both modify same asset
+};
+
+/// Conflict detection result
+struct Conflict {
+    ConflictType type = ConflictType::None;
+    TransactionId tx_a;
+    TransactionId tx_b;
+    std::optional<EntityRef> entity;
+    std::optional<std::string> component_type;
+    std::optional<LayerId> layer;
+    std::optional<AssetRef> asset;
+
+    [[nodiscard]] bool has_conflict() const noexcept {
+        return type != ConflictType::None;
+    }
+
+    [[nodiscard]] static Conflict none() {
+        return Conflict{};
+    }
+
+    [[nodiscard]] static Conflict entity_conflict(
+        TransactionId a, TransactionId b, EntityRef e) {
+        Conflict c;
+        c.type = ConflictType::Entity;
+        c.tx_a = a;
+        c.tx_b = b;
+        c.entity = e;
+        return c;
+    }
+
+    [[nodiscard]] static Conflict component_conflict(
+        TransactionId a, TransactionId b, EntityRef e, std::string comp) {
+        Conflict c;
+        c.type = ConflictType::Component;
+        c.tx_a = a;
+        c.tx_b = b;
+        c.entity = e;
+        c.component_type = std::move(comp);
+        return c;
+    }
+
+    [[nodiscard]] static Conflict layer_conflict(
+        TransactionId a, TransactionId b, LayerId l) {
+        Conflict c;
+        c.type = ConflictType::Layer;
+        c.tx_a = a;
+        c.tx_b = b;
+        c.layer = l;
+        return c;
+    }
+
+    [[nodiscard]] static Conflict asset_conflict(
+        TransactionId a, TransactionId b, AssetRef a_ref) {
+        Conflict c;
+        c.type = ConflictType::Asset;
+        c.tx_a = a;
+        c.tx_b = b;
+        c.asset = a_ref;
+        return c;
+    }
+};
+
+/// Tracks modifications for conflict detection
+class ConflictDetector {
+public:
+    /// Track a transaction's modifications
+    void track(const Transaction& tx) {
+        TransactionId tx_id = tx.id();
+
+        for (const auto& patch : tx.patches()) {
+            std::optional<EntityRef> entity = patch.target_entity();
+
+            switch (patch.kind()) {
+                case PatchKind::Entity:
+                    if (entity) {
+                        m_modified_entities[entity->entity_id].push_back(tx_id);
+                    }
+                    break;
+
+                case PatchKind::Component:
+                    if (entity) {
+                        const auto* comp = patch.try_as<ComponentPatch>();
+                        if (comp) {
+                            auto key = std::make_pair(entity->entity_id, comp->component_type);
+                            m_modified_components[key].push_back(tx_id);
+                        }
+                    }
+                    break;
+
+                case PatchKind::Layer:
+                    {
+                        const auto* layer = patch.try_as<LayerPatch>();
+                        if (layer) {
+                            m_modified_layers[layer->layer.value].push_back(tx_id);
+                        }
+                    }
+                    break;
+
+                case PatchKind::Asset:
+                    {
+                        const auto* asset = patch.try_as<AssetPatch>();
+                        if (asset && entity) {
+                            m_modified_assets[entity->entity_id].push_back(tx_id);
+                        }
+                    }
+                    break;
+
+                default:
+                    break;
+            }
+        }
+    }
+
+    /// Detect conflicts between tracked transactions
+    [[nodiscard]] std::vector<Conflict> detect() const {
+        std::vector<Conflict> conflicts;
+
+        // Check entity conflicts
+        for (const auto& [entity_id, tx_ids] : m_modified_entities) {
+            if (tx_ids.size() > 1) {
+                for (std::size_t i = 0; i < tx_ids.size(); ++i) {
+                    for (std::size_t j = i + 1; j < tx_ids.size(); ++j) {
+                        EntityRef entity(NamespaceId{}, entity_id);
+                        conflicts.push_back(
+                            Conflict::entity_conflict(tx_ids[i], tx_ids[j], entity));
+                    }
+                }
+            }
+        }
+
+        // Check component conflicts
+        for (const auto& [key, tx_ids] : m_modified_components) {
+            if (tx_ids.size() > 1) {
+                for (std::size_t i = 0; i < tx_ids.size(); ++i) {
+                    for (std::size_t j = i + 1; j < tx_ids.size(); ++j) {
+                        EntityRef entity(NamespaceId{}, key.first);
+                        conflicts.push_back(
+                            Conflict::component_conflict(tx_ids[i], tx_ids[j], entity, key.second));
+                    }
+                }
+            }
+        }
+
+        // Check layer conflicts
+        for (const auto& [layer_id, tx_ids] : m_modified_layers) {
+            if (tx_ids.size() > 1) {
+                for (std::size_t i = 0; i < tx_ids.size(); ++i) {
+                    for (std::size_t j = i + 1; j < tx_ids.size(); ++j) {
+                        conflicts.push_back(
+                            Conflict::layer_conflict(tx_ids[i], tx_ids[j], LayerId{layer_id}));
+                    }
+                }
+            }
+        }
+
+        // Check asset conflicts
+        for (const auto& [entity_id, tx_ids] : m_modified_assets) {
+            if (tx_ids.size() > 1) {
+                for (std::size_t i = 0; i < tx_ids.size(); ++i) {
+                    for (std::size_t j = i + 1; j < tx_ids.size(); ++j) {
+                        AssetRef asset;
+                        asset.path = "";  // We don't track path, just entity
+                        conflicts.push_back(
+                            Conflict::asset_conflict(tx_ids[i], tx_ids[j], asset));
+                    }
+                }
+            }
+        }
+
+        return conflicts;
+    }
+
+    /// Check if a specific transaction conflicts with already-tracked ones
+    [[nodiscard]] std::optional<Conflict> check(const Transaction& tx) const {
+        for (const auto& patch : tx.patches()) {
+            std::optional<EntityRef> entity = patch.target_entity();
+
+            switch (patch.kind()) {
+                case PatchKind::Entity:
+                    if (entity) {
+                        auto it = m_modified_entities.find(entity->entity_id);
+                        if (it != m_modified_entities.end() && !it->second.empty()) {
+                            return Conflict::entity_conflict(
+                                it->second.front(), tx.id(), *entity);
+                        }
+                    }
+                    break;
+
+                case PatchKind::Component:
+                    if (entity) {
+                        const auto* comp = patch.try_as<ComponentPatch>();
+                        if (comp) {
+                            auto key = std::make_pair(entity->entity_id, comp->component_type);
+                            auto it = m_modified_components.find(key);
+                            if (it != m_modified_components.end() && !it->second.empty()) {
+                                return Conflict::component_conflict(
+                                    it->second.front(), tx.id(), *entity, comp->component_type);
+                            }
+                        }
+                    }
+                    break;
+
+                case PatchKind::Layer:
+                    {
+                        const auto* layer = patch.try_as<LayerPatch>();
+                        if (layer) {
+                            auto it = m_modified_layers.find(layer->layer.value);
+                            if (it != m_modified_layers.end() && !it->second.empty()) {
+                                return Conflict::layer_conflict(
+                                    it->second.front(), tx.id(), layer->layer);
+                            }
+                        }
+                    }
+                    break;
+
+                default:
+                    break;
+            }
+        }
+
+        return std::nullopt;
+    }
+
+    /// Clear all tracked modifications
+    void clear() {
+        m_modified_entities.clear();
+        m_modified_components.clear();
+        m_modified_layers.clear();
+        m_modified_assets.clear();
+    }
+
+    /// Get count of tracked entities
+    [[nodiscard]] std::size_t entity_count() const noexcept {
+        return m_modified_entities.size();
+    }
+
+    /// Get count of tracked components
+    [[nodiscard]] std::size_t component_count() const noexcept {
+        return m_modified_components.size();
+    }
+
+private:
+    std::unordered_map<std::uint64_t, std::vector<TransactionId>> m_modified_entities;
+    std::map<std::pair<std::uint64_t, std::string>, std::vector<TransactionId>> m_modified_components;
+    std::unordered_map<std::uint32_t, std::vector<TransactionId>> m_modified_layers;
+    std::unordered_map<std::uint64_t, std::vector<TransactionId>> m_modified_assets;
 };
 
 } // namespace void_ir

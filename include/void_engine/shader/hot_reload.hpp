@@ -126,21 +126,25 @@ public:
 
         // Watch all matching files in directory
         std::error_code ec;
-        auto options = m_config.recursive
-            ? std::filesystem::directory_options::follow_directory_symlink
-            : std::filesystem::directory_options::none;
 
-        auto iterator = m_config.recursive
-            ? std::filesystem::recursive_directory_iterator(dir_path, options, ec)
-            : std::filesystem::recursive_directory_iterator(dir_path, options, ec);
-
-        if (ec) {
-            return void_core::Err("Failed to iterate directory: " + ec.message());
-        }
-
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(dir_path)) {
-            if (entry.is_regular_file() && is_shader_file(entry.path().string())) {
-                m_watcher->watch(entry.path().string());
+        if (m_config.recursive) {
+            auto options = std::filesystem::directory_options::follow_directory_symlink;
+            for (const auto& entry : std::filesystem::recursive_directory_iterator(dir_path, options, ec)) {
+                if (ec) {
+                    return void_core::Err("Failed to iterate directory: " + ec.message());
+                }
+                if (entry.is_regular_file() && is_shader_file(entry.path().string())) {
+                    m_watcher->watch(entry.path().string());
+                }
+            }
+        } else {
+            for (const auto& entry : std::filesystem::directory_iterator(dir_path, ec)) {
+                if (ec) {
+                    return void_core::Err("Failed to iterate directory: " + ec.message());
+                }
+                if (entry.is_regular_file() && is_shader_file(entry.path().string())) {
+                    m_watcher->watch(entry.path().string());
+                }
             }
         }
 

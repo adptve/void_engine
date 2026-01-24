@@ -149,6 +149,19 @@ public:
         m_state = SessionState::Terminated;
     }
 
+    /// Restore session state directly (for hot-reload)
+    /// @note This bypasses normal state transitions for restoration purposes
+    void restore_state(SessionState state) {
+        m_state = state;
+    }
+
+    /// Restore authentication state (for hot-reload)
+    void restore_auth(std::optional<std::string> user_id, bool authenticated) {
+        std::unique_lock lock(m_mutex);
+        m_user_id = std::move(user_id);
+        m_authenticated = authenticated;
+    }
+
     /// Check if session is usable
     [[nodiscard]] bool is_active() const {
         return m_state == SessionState::Active;
@@ -582,6 +595,83 @@ public:
 
     /// Get configuration
     [[nodiscard]] const SessionManagerConfig& config() const { return m_config; }
+
+    // =========================================================================
+    // Hot-Reload Restore
+    // =========================================================================
+
+    /// Restore a session from snapshot data (for hot-reload)
+    /// @param id Session ID to restore
+    /// @param state Session state
+    /// @param user_id Optional user ID
+    /// @param authenticated Whether session is authenticated
+    /// @param permissions Set of permission strings
+    /// @param metadata Key-value metadata pairs
+    /// @return The restored session, or nullptr if capacity exceeded
+    [[nodiscard]] std::shared_ptr<Session> restore_session(
+        std::uint64_t id,
+        SessionState state,
+        std::optional<std::string> user_id,
+        bool authenticated,
+        const std::vector<std::string>& permissions,
+        const std::vector<std::pair<std::string, std::string>>& metadata) {
+
+        std::unique_lock lock(m_mutex);
+
+        // Check capacity
+        if (m_config.max_sessions > 0 && m_sessions.size() >= m_config.max_sessions) {
+            return nullptr;
+        }
+
+        // Update next ID to avoid conflicts
+        if (id >= m_next_session_id) {
+            m_next_session_id = id + 1;
+        }
+
+        SessionId session_id(id);
+        auto session = std::make_shared<Session>(session_id);
+
+        // Restore state
+        session->restore_state(state);
+        session->restore_auth(user_id, authenticated);
+
+        // Restore permissions
+        for (const auto& perm : permissions) {
+            session->grant_permission(perm);
+        }
+
+        // Restore metadata
+        for (const auto& [key, value] : metadata) {
+            session->set_metadata(key, value);
+        }
+
+        m_sessions[session_id] = session;
+
+        // Track user sessions
+        if (user_id) {
+            m_user_sessions[*user_id].push_back(session_id);
+        }
+
+        m_stats.peak_concurrent = std::max(m_stats.peak_concurrent, m_sessions.size());
+
+        return session;
+    }
+
+    /// Restore session manager stats (for hot-reload)
+    void restore_stats(std::uint64_t total_created, std::uint64_t total_terminated,
+                       std::uint64_t total_expired, std::size_t peak_concurrent) {
+        std::unique_lock lock(m_mutex);
+        m_stats.total_created = total_created;
+        m_stats.total_terminated = total_terminated;
+        m_stats.total_expired = total_expired;
+        m_stats.peak_concurrent = peak_concurrent;
+    }
+
+    /// Set next session ID (for hot-reload)
+    void set_next_session_id(std::uint64_t id) {
+        std::unique_lock lock(m_mutex);
+        m_next_session_id = id;
+    }
 
 private:
     void cleanup_loop() {

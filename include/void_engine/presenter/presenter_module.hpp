@@ -153,6 +153,7 @@
 
 // Hot-swap support
 #include "rehydration.hpp"
+#include "snapshot.hpp"
 
 // Main presenter
 #include "presenter.hpp"
@@ -164,6 +165,10 @@
 // Platform-specific backends (conditionally included)
 #if defined(VOID_HAS_WGPU)
 #include "backends/wgpu_backend.hpp"
+#endif
+
+#if defined(VOID_HAS_OPENGL) || (!defined(VOID_HAS_WGPU) && !defined(__EMSCRIPTEN__))
+#include "backends/opengl_backend.hpp"
 #endif
 
 namespace void_presenter {
@@ -242,6 +247,12 @@ namespace prelude {
 
     // XR
     namespace xr = void_presenter::xr;
+
+    // Snapshots
+    using void_presenter::BinaryWriter;
+    using void_presenter::BinaryReader;
+    using void_presenter::PresenterManagerSnapshot;
+    using void_presenter::MultiBackendPresenterSnapshot;
 } // namespace prelude
 
 } // namespace void_presenter

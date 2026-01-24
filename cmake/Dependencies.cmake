@@ -104,6 +104,16 @@ FetchContent_Declare(
 )
 
 # ============================================================================
+# miniaudio - Single-header cross-platform audio library
+# ============================================================================
+FetchContent_Declare(
+    miniaudio
+    GIT_REPOSITORY https://github.com/mackron/miniaudio.git
+    GIT_TAG        0.11.21
+    GIT_SHALLOW    TRUE
+)
+
+# ============================================================================
 # Make dependencies available
 # ============================================================================
 function(void_fetch_dependencies)
@@ -157,6 +167,14 @@ function(void_fetch_dependencies)
         target_include_directories(minimp3 INTERFACE ${minimp3_SOURCE_DIR})
     endif()
     set(MINIMP3_SOURCE_DIR ${minimp3_SOURCE_DIR} PARENT_SCOPE)
+
+    # miniaudio (single-header cross-platform audio)
+    FetchContent_MakeAvailable(miniaudio)
+    if(NOT TARGET miniaudio)
+        add_library(miniaudio INTERFACE)
+        target_include_directories(miniaudio INTERFACE ${miniaudio_SOURCE_DIR})
+    endif()
+    set(MINIAUDIO_SOURCE_DIR ${miniaudio_SOURCE_DIR} PARENT_SCOPE)
 
     message(STATUS "Dependencies fetched successfully")
 endfunction()

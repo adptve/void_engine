@@ -135,8 +135,12 @@ void NullAudioBackend::update(float dt) {
 }
 
 // =============================================================================
-// OpenALBackend Implementation
+// OpenALBackend Implementation (LEGACY - MiniaudioBackend is now primary)
 // =============================================================================
+// NOTE: This backend is kept for compatibility but is no longer used.
+// The AudioSystem redirects OpenAL requests to MiniaudioBackend which
+// provides real cross-platform audio output. The OpenAL code below
+// shows the intended structure but would require OpenAL library linking.
 
 struct OpenALBackend::Impl {
     bool initialized = false;
@@ -528,8 +532,10 @@ std::unique_ptr<IAudioBackend> AudioBackendFactory::create(AudioBackend type) co
 }
 
 std::unique_ptr<IAudioBackend> AudioBackendFactory::create_best() const {
-    // Priority: OpenAL > XAudio2 > CoreAudio > Null
+    // Priority: Miniaudio (Custom) > OpenAL > XAudio2 > CoreAudio > Null
+    // Miniaudio is preferred as it's cross-platform with no dependencies
     static const AudioBackend priority[] = {
+        AudioBackend::Custom,       // Miniaudio
         AudioBackend::OpenAL,
         AudioBackend::XAudio2,
         AudioBackend::CoreAudio,
@@ -552,6 +558,12 @@ void AudioBackendFactory::register_builtins() {
         return std::make_unique<NullAudioBackend>();
     });
 
+    // Miniaudio is the primary cross-platform backend
+    register_backend(AudioBackend::Custom, []() {
+        return std::make_unique<MiniaudioBackend>();
+    });
+
+    // OpenAL as legacy fallback
     register_backend(AudioBackend::OpenAL, []() {
         return std::make_unique<OpenALBackend>();
     });
@@ -574,7 +586,18 @@ AudioSystem::AudioSystem(AudioBackend backend)
     : m_one_shot(*this) {
 
     AudioBackendFactory::instance().register_builtins();
-    m_backend = AudioBackendFactory::instance().create(backend);
+
+    // If OpenAL requested, redirect to Miniaudio for actual audio output
+    AudioBackend actual_backend = backend;
+    if (backend == AudioBackend::OpenAL) {
+        actual_backend = AudioBackend::Custom; // Use Miniaudio instead
+    }
+
+    m_backend = AudioBackendFactory::instance().create(actual_backend);
+    if (!m_backend) {
+        // Fallback to best available
+        m_backend = AudioBackendFactory::instance().create_best();
+    }
     if (!m_backend) {
         m_backend = std::make_unique<NullAudioBackend>();
     }
@@ -679,8 +702,19 @@ void AudioSystem::stop(SourceId id) {
 }
 
 void AudioSystem::stop_all() {
-    // This would iterate all sources and stop them
-    // In a real implementation, track all source IDs
+    // Stop one-shot sounds
+    m_one_shot.stop_all();
+
+    // Stop music
+    if (m_current_music) {
+        if (auto* source = get_source(m_current_music)) {
+            source->stop();
+        }
+        m_current_music = SourceId{0};
+    }
+
+    // Note: Individual sources created directly are managed by the caller
+    // The backend tracks them internally for mixing but doesn't expose iteration
 }
 
 IAudioListener* AudioSystem::listener() {

@@ -913,6 +913,500 @@ void EQEffect::set_band_q(std::size_t index, float q) {
 }
 
 // =============================================================================
+// LimiterEffect Implementation
+// =============================================================================
+
+LimiterEffect::LimiterEffect() {
+    m_type = EffectType::Limiter;
+    m_name = "Limiter";
+    m_lookahead_buffer.resize(LOOKAHEAD_SAMPLES * 2, 0.0f);
+}
+
+LimiterEffect::LimiterEffect(const LimiterConfig& config)
+    : m_config(config) {
+    m_type = EffectType::Limiter;
+    m_name = "Limiter";
+    m_mix = config.mix;
+    m_enabled = config.enabled;
+    m_lookahead_buffer.resize(LOOKAHEAD_SAMPLES * 2, 0.0f);
+}
+
+void LimiterEffect::process(float* samples, std::size_t sample_count, std::uint32_t channels) {
+    if (!m_enabled || channels == 0) return;
+
+    std::vector<float> dry(sample_count * channels);
+    std::memcpy(dry.data(), samples, sample_count * channels * sizeof(float));
+
+    float threshold_linear = std::pow(10.0f, m_config.threshold / 20.0f);
+    float ceiling_linear = std::pow(10.0f, m_config.ceiling / 20.0f);
+    float release_coeff = std::exp(-1.0f / (m_config.release * static_cast<float>(m_sample_rate)));
+
+    for (std::size_t i = 0; i < sample_count; ++i) {
+        // Get peak level across channels
+        float peak = 0;
+        for (std::uint32_t c = 0; c < channels; ++c) {
+            peak = std::max(peak, std::abs(samples[i * channels + c]));
+        }
+
+        // Compute required gain reduction
+        float target_gain = 1.0f;
+        if (peak > threshold_linear) {
+            if (m_config.soft_knee) {
+                // Soft knee limiting
+                float knee_width = 0.1f * threshold_linear;
+                if (peak < threshold_linear + knee_width) {
+                    float x = (peak - threshold_linear) / knee_width;
+                    target_gain = 1.0f - x * x * 0.5f * (1.0f - threshold_linear / peak);
+                } else {
+                    target_gain = threshold_linear / peak;
+                }
+            } else {
+                target_gain = threshold_linear / peak;
+            }
+        }
+
+        // Smooth envelope (instant attack, smooth release)
+        if (target_gain < m_envelope) {
+            m_envelope = target_gain; // Instant attack
+        } else {
+            m_envelope = m_envelope * release_coeff + target_gain * (1.0f - release_coeff);
+        }
+
+        // Apply ceiling
+        float gain = m_envelope * ceiling_linear / threshold_linear;
+        gain = std::min(gain, ceiling_linear);
+
+        m_gain_reduction = 20.0f * std::log10(std::max(m_envelope, 1e-6f));
+
+        // Apply gain
+        for (std::uint32_t c = 0; c < channels; ++c) {
+            samples[i * channels + c] *= gain;
+            // Hard clip at ceiling as safety
+            samples[i * channels + c] = std::clamp(samples[i * channels + c], -ceiling_linear, ceiling_linear);
+        }
+    }
+
+    apply_mix(dry.data(), samples, sample_count * channels);
+}
+
+void LimiterEffect::reset() {
+    m_envelope = 0;
+    m_gain_reduction = 0;
+    std::fill(m_lookahead_buffer.begin(), m_lookahead_buffer.end(), 0.0f);
+    m_lookahead_index = 0;
+}
+
+void LimiterEffect::set_config(const LimiterConfig& config) {
+    m_config = config;
+    m_mix = config.mix;
+    m_enabled = config.enabled;
+}
+
+void LimiterEffect::set_threshold(float db) {
+    m_config.threshold = std::clamp(db, -30.0f, 0.0f);
+}
+
+void LimiterEffect::set_release(float seconds) {
+    m_config.release = std::clamp(seconds, 0.001f, 1.0f);
+}
+
+void LimiterEffect::set_ceiling(float db) {
+    m_config.ceiling = std::clamp(db, -10.0f, 0.0f);
+}
+
+// =============================================================================
+// FlangerEffect Implementation
+// =============================================================================
+
+FlangerEffect::FlangerEffect() {
+    m_type = EffectType::Flanger;
+    m_name = "Flanger";
+
+    // Flanger uses short delays (1-10ms), allocate 50ms buffer
+    std::size_t buffer_size = static_cast<std::size_t>(0.05f * m_sample_rate);
+    m_delay_buffer_l.resize(buffer_size, 0.0f);
+    m_delay_buffer_r.resize(buffer_size, 0.0f);
+}
+
+FlangerEffect::FlangerEffect(const FlangerConfig& config)
+    : m_config(config) {
+    m_type = EffectType::Flanger;
+    m_name = "Flanger";
+    m_mix = config.mix;
+    m_enabled = config.enabled;
+
+    std::size_t buffer_size = static_cast<std::size_t>(0.05f * m_sample_rate);
+    m_delay_buffer_l.resize(buffer_size, 0.0f);
+    m_delay_buffer_r.resize(buffer_size, 0.0f);
+}
+
+float FlangerEffect::read_delay_interpolated(const std::vector<float>& buffer, float delay_samples) {
+    float read_pos = static_cast<float>(m_write_index) - delay_samples;
+    if (read_pos < 0) read_pos += static_cast<float>(buffer.size());
+
+    std::size_t index = static_cast<std::size_t>(read_pos) % buffer.size();
+    std::size_t next_index = (index + 1) % buffer.size();
+    float frac = read_pos - std::floor(read_pos);
+
+    return buffer[index] * (1.0f - frac) + buffer[next_index] * frac;
+}
+
+void FlangerEffect::process(float* samples, std::size_t sample_count, std::uint32_t channels) {
+    if (!m_enabled || channels == 0) return;
+
+    std::vector<float> dry(sample_count * channels);
+    std::memcpy(dry.data(), samples, sample_count * channels * sizeof(float));
+
+    constexpr float pi = 3.14159265358979323846f;
+    float lfo_increment = m_config.rate / static_cast<float>(m_sample_rate);
+
+    for (std::size_t i = 0; i < sample_count; ++i) {
+        float in_l = samples[i * channels];
+        float in_r = channels > 1 ? samples[i * channels + 1] : in_l;
+
+        // LFO modulation (with stereo phase offset)
+        float lfo_l = std::sin(2.0f * pi * m_lfo_phase);
+        float lfo_r = std::sin(2.0f * pi * (m_lfo_phase + m_config.stereo_phase));
+
+        // Calculate delay times (1-10ms range modulated by LFO)
+        float base_delay_samples = m_config.delay * static_cast<float>(m_sample_rate);
+        float mod_range = base_delay_samples * m_config.depth;
+
+        float delay_samples_l = base_delay_samples + lfo_l * mod_range;
+        float delay_samples_r = base_delay_samples + lfo_r * mod_range;
+
+        // Clamp delay to valid range
+        delay_samples_l = std::clamp(delay_samples_l, 1.0f, static_cast<float>(m_delay_buffer_l.size() - 1));
+        delay_samples_r = std::clamp(delay_samples_r, 1.0f, static_cast<float>(m_delay_buffer_r.size() - 1));
+
+        // Read from delay lines
+        float delayed_l = read_delay_interpolated(m_delay_buffer_l, delay_samples_l);
+        float delayed_r = read_delay_interpolated(m_delay_buffer_r, delay_samples_r);
+
+        // Write to delay lines (input + feedback)
+        m_delay_buffer_l[m_write_index] = in_l + delayed_l * m_config.feedback;
+        m_delay_buffer_r[m_write_index] = in_r + delayed_r * m_config.feedback;
+
+        // Output
+        samples[i * channels] = delayed_l;
+        if (channels > 1) {
+            samples[i * channels + 1] = delayed_r;
+        }
+
+        // Advance write position and LFO
+        m_write_index++;
+        if (m_write_index >= m_delay_buffer_l.size()) {
+            m_write_index = 0;
+        }
+
+        m_lfo_phase += lfo_increment;
+        if (m_lfo_phase >= 1.0f) m_lfo_phase -= 1.0f;
+    }
+
+    apply_mix(dry.data(), samples, sample_count * channels);
+}
+
+void FlangerEffect::reset() {
+    std::fill(m_delay_buffer_l.begin(), m_delay_buffer_l.end(), 0.0f);
+    std::fill(m_delay_buffer_r.begin(), m_delay_buffer_r.end(), 0.0f);
+    m_write_index = 0;
+    m_lfo_phase = 0;
+}
+
+void FlangerEffect::set_config(const FlangerConfig& config) {
+    m_config = config;
+    m_mix = config.mix;
+    m_enabled = config.enabled;
+}
+
+void FlangerEffect::set_rate(float hz) {
+    m_config.rate = std::clamp(hz, 0.01f, 5.0f);
+}
+
+void FlangerEffect::set_depth(float depth) {
+    m_config.depth = std::clamp(depth, 0.0f, 1.0f);
+}
+
+void FlangerEffect::set_feedback(float feedback) {
+    m_config.feedback = std::clamp(feedback, -0.99f, 0.99f);
+}
+
+// =============================================================================
+// PhaserEffect Implementation
+// =============================================================================
+
+PhaserEffect::PhaserEffect() {
+    m_type = EffectType::Phaser;
+    m_name = "Phaser";
+}
+
+PhaserEffect::PhaserEffect(const PhaserConfig& config)
+    : m_config(config) {
+    m_type = EffectType::Phaser;
+    m_name = "Phaser";
+    m_mix = config.mix;
+    m_enabled = config.enabled;
+}
+
+void PhaserEffect::process(float* samples, std::size_t sample_count, std::uint32_t channels) {
+    if (!m_enabled || channels == 0) return;
+
+    std::vector<float> dry(sample_count * channels);
+    std::memcpy(dry.data(), samples, sample_count * channels * sizeof(float));
+
+    constexpr float pi = 3.14159265358979323846f;
+    float lfo_increment = m_config.rate / static_cast<float>(m_sample_rate);
+
+    std::uint8_t num_stages = std::min(m_config.stages, static_cast<std::uint8_t>(MAX_STAGES));
+
+    for (std::size_t i = 0; i < sample_count; ++i) {
+        // LFO for frequency sweep (with stereo phase)
+        float lfo_l = (std::sin(2.0f * pi * m_lfo_phase) + 1.0f) * 0.5f;
+        float lfo_r = (std::sin(2.0f * pi * (m_lfo_phase + m_config.stereo_phase)) + 1.0f) * 0.5f;
+
+        // Map LFO to frequency range (exponential)
+        float freq_l = m_config.min_freq * std::pow(m_config.max_freq / m_config.min_freq, lfo_l * m_config.depth);
+        float freq_r = m_config.min_freq * std::pow(m_config.max_freq / m_config.min_freq, lfo_r * m_config.depth);
+
+        // Calculate allpass coefficients
+        float a1_l = (std::tan(pi * freq_l / static_cast<float>(m_sample_rate)) - 1.0f) /
+                     (std::tan(pi * freq_l / static_cast<float>(m_sample_rate)) + 1.0f);
+        float a1_r = (std::tan(pi * freq_r / static_cast<float>(m_sample_rate)) - 1.0f) /
+                     (std::tan(pi * freq_r / static_cast<float>(m_sample_rate)) + 1.0f);
+
+        // Input with feedback
+        float in_l = samples[i * channels] + m_feedback_l * m_config.feedback;
+        float in_r = channels > 1 ? samples[i * channels + 1] + m_feedback_r * m_config.feedback : in_l;
+
+        // Process through allpass stages
+        float out_l = in_l;
+        float out_r = in_r;
+
+        for (std::uint8_t s = 0; s < num_stages; ++s) {
+            m_stages[s].a1 = a1_l;
+
+            // Left channel allpass
+            float tmp_l = m_stages[s].a1 * out_l + m_stages[s].z1_l;
+            m_stages[s].z1_l = out_l - m_stages[s].a1 * tmp_l;
+            out_l = tmp_l;
+
+            // Right channel allpass
+            m_stages[s].a1 = a1_r;
+            float tmp_r = m_stages[s].a1 * out_r + m_stages[s].z1_r;
+            m_stages[s].z1_r = out_r - m_stages[s].a1 * tmp_r;
+            out_r = tmp_r;
+        }
+
+        // Store for feedback
+        m_feedback_l = out_l;
+        m_feedback_r = out_r;
+
+        // Output (mix of dry and wet creates notch)
+        samples[i * channels] = out_l;
+        if (channels > 1) {
+            samples[i * channels + 1] = out_r;
+        }
+
+        // Advance LFO
+        m_lfo_phase += lfo_increment;
+        if (m_lfo_phase >= 1.0f) m_lfo_phase -= 1.0f;
+    }
+
+    apply_mix(dry.data(), samples, sample_count * channels);
+}
+
+void PhaserEffect::reset() {
+    for (auto& stage : m_stages) {
+        stage.z1_l = 0;
+        stage.z1_r = 0;
+    }
+    m_lfo_phase = 0;
+    m_feedback_l = 0;
+    m_feedback_r = 0;
+}
+
+void PhaserEffect::set_config(const PhaserConfig& config) {
+    m_config = config;
+    m_mix = config.mix;
+    m_enabled = config.enabled;
+}
+
+void PhaserEffect::set_rate(float hz) {
+    m_config.rate = std::clamp(hz, 0.01f, 5.0f);
+}
+
+void PhaserEffect::set_depth(float depth) {
+    m_config.depth = std::clamp(depth, 0.0f, 1.0f);
+}
+
+void PhaserEffect::set_stages(std::uint8_t count) {
+    m_config.stages = std::clamp(count, std::uint8_t(2), std::uint8_t(MAX_STAGES));
+}
+
+// =============================================================================
+// PitchShifterEffect Implementation
+// =============================================================================
+
+PitchShifterEffect::PitchShifterEffect() {
+    m_type = EffectType::Pitch;
+    m_name = "Pitch Shifter";
+    update_parameters();
+}
+
+PitchShifterEffect::PitchShifterEffect(const PitchConfig& config)
+    : m_config(config) {
+    m_type = EffectType::Pitch;
+    m_name = "Pitch Shifter";
+    m_mix = config.mix;
+    m_enabled = config.enabled;
+    update_parameters();
+}
+
+void PitchShifterEffect::update_parameters() {
+    // Calculate window size in samples
+    m_window_samples = static_cast<std::size_t>(m_config.window_size * m_sample_rate);
+    m_window_samples = std::max(m_window_samples, std::size_t(256));
+
+    // Input buffer needs to hold multiple windows
+    std::size_t buffer_size = m_window_samples * 4;
+    m_input_buffer_l.resize(buffer_size, 0.0f);
+    m_input_buffer_r.resize(buffer_size, 0.0f);
+
+    // Calculate grain spacing based on overlap
+    m_grain_spacing = m_window_samples * (1.0f - m_config.overlap);
+    m_grain_spacing = std::max(m_grain_spacing, 1.0f);
+}
+
+float PitchShifterEffect::pitch_ratio() const {
+    float semitones = m_config.semitones + m_config.cents / 100.0f;
+    return std::pow(2.0f, semitones / 12.0f);
+}
+
+float PitchShifterEffect::read_with_window(const std::vector<float>& buffer, float position, float window_pos) {
+    // Wrap position
+    while (position < 0) position += static_cast<float>(buffer.size());
+    while (position >= static_cast<float>(buffer.size())) position -= static_cast<float>(buffer.size());
+
+    // Linear interpolation for read
+    std::size_t index = static_cast<std::size_t>(position) % buffer.size();
+    std::size_t next = (index + 1) % buffer.size();
+    float frac = position - std::floor(position);
+    float sample = buffer[index] * (1.0f - frac) + buffer[next] * frac;
+
+    // Hann window
+    constexpr float pi = 3.14159265358979323846f;
+    float window = 0.5f * (1.0f - std::cos(2.0f * pi * window_pos));
+
+    return sample * window;
+}
+
+void PitchShifterEffect::process(float* samples, std::size_t sample_count, std::uint32_t channels) {
+    if (!m_enabled || channels == 0) return;
+
+    std::vector<float> dry(sample_count * channels);
+    std::memcpy(dry.data(), samples, sample_count * channels * sizeof(float));
+
+    float ratio = pitch_ratio();
+    float read_increment = ratio;
+
+    for (std::size_t i = 0; i < sample_count; ++i) {
+        float in_l = samples[i * channels];
+        float in_r = channels > 1 ? samples[i * channels + 1] : in_l;
+
+        // Write to input buffer
+        m_input_buffer_l[m_input_write_index] = in_l;
+        m_input_buffer_r[m_input_write_index] = in_r;
+
+        // Start new grain if needed
+        m_samples_since_grain++;
+        if (m_samples_since_grain >= static_cast<std::size_t>(m_grain_spacing)) {
+            m_samples_since_grain = 0;
+
+            // Find an inactive grain
+            for (std::size_t g = 0; g < NUM_GRAINS; ++g) {
+                std::size_t idx = (m_next_grain + g) % NUM_GRAINS;
+                if (!m_grains[idx].active) {
+                    m_grains[idx].active = true;
+                    m_grains[idx].position = static_cast<float>(m_input_write_index);
+                    m_grains[idx].window_pos = 0;
+                    m_next_grain = (idx + 1) % NUM_GRAINS;
+                    break;
+                }
+            }
+        }
+
+        // Mix all active grains
+        float out_l = 0, out_r = 0;
+        int active_grains = 0;
+
+        for (auto& grain : m_grains) {
+            if (!grain.active) continue;
+
+            out_l += read_with_window(m_input_buffer_l, grain.position, grain.window_pos);
+            out_r += read_with_window(m_input_buffer_r, grain.position, grain.window_pos);
+            active_grains++;
+
+            // Advance grain
+            grain.position += read_increment;
+            grain.window_pos += 1.0f / static_cast<float>(m_window_samples);
+
+            // Deactivate finished grains
+            if (grain.window_pos >= 1.0f) {
+                grain.active = false;
+            }
+        }
+
+        // Normalize output
+        if (active_grains > 0) {
+            float norm = 1.0f / std::sqrt(static_cast<float>(active_grains));
+            out_l *= norm;
+            out_r *= norm;
+        }
+
+        samples[i * channels] = out_l;
+        if (channels > 1) {
+            samples[i * channels + 1] = out_r;
+        }
+
+        // Advance write position
+        m_input_write_index++;
+        if (m_input_write_index >= m_input_buffer_l.size()) {
+            m_input_write_index = 0;
+        }
+    }
+
+    apply_mix(dry.data(), samples, sample_count * channels);
+}
+
+void PitchShifterEffect::reset() {
+    std::fill(m_input_buffer_l.begin(), m_input_buffer_l.end(), 0.0f);
+    std::fill(m_input_buffer_r.begin(), m_input_buffer_r.end(), 0.0f);
+    m_input_write_index = 0;
+    m_samples_since_grain = 0;
+
+    for (auto& grain : m_grains) {
+        grain.active = false;
+        grain.position = 0;
+        grain.window_pos = 0;
+    }
+}
+
+void PitchShifterEffect::set_config(const PitchConfig& config) {
+    m_config = config;
+    m_mix = config.mix;
+    m_enabled = config.enabled;
+    update_parameters();
+}
+
+void PitchShifterEffect::set_semitones(float semitones) {
+    m_config.semitones = std::clamp(semitones, -24.0f, 24.0f);
+}
+
+void PitchShifterEffect::set_cents(float cents) {
+    m_config.cents = std::clamp(cents, -100.0f, 100.0f);
+}
+
+// =============================================================================
 // AudioEffectFactory Implementation
 // =============================================================================
 
@@ -928,12 +1422,20 @@ EffectPtr AudioEffectFactory::create(EffectType type) {
             return create_filter(FilterConfig{type});
         case EffectType::Compressor:
             return create_compressor();
+        case EffectType::Limiter:
+            return create_limiter();
         case EffectType::Distortion:
             return create_distortion();
         case EffectType::Chorus:
             return create_chorus();
+        case EffectType::Flanger:
+            return create_flanger();
+        case EffectType::Phaser:
+            return create_phaser();
         case EffectType::Equalizer:
             return create_eq();
+        case EffectType::Pitch:
+            return create_pitch();
         default:
             return nullptr;
     }
@@ -965,6 +1467,22 @@ EffectPtr AudioEffectFactory::create_chorus(const ChorusConfig& config) {
 
 EffectPtr AudioEffectFactory::create_eq(const EQConfig& config) {
     return std::make_shared<EQEffect>(config);
+}
+
+EffectPtr AudioEffectFactory::create_limiter(const LimiterConfig& config) {
+    return std::make_shared<LimiterEffect>(config);
+}
+
+EffectPtr AudioEffectFactory::create_flanger(const FlangerConfig& config) {
+    return std::make_shared<FlangerEffect>(config);
+}
+
+EffectPtr AudioEffectFactory::create_phaser(const PhaserConfig& config) {
+    return std::make_shared<PhaserEffect>(config);
+}
+
+EffectPtr AudioEffectFactory::create_pitch(const PitchConfig& config) {
+    return std::make_shared<PitchShifterEffect>(config);
 }
 
 // =============================================================================

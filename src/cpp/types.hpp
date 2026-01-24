@@ -6,11 +6,13 @@
 #include "fwd.hpp"
 #include <void_engine/core/error.hpp>
 
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <string>
+#include <unordered_map>
 #include <variant>
 #include <vector>
 
@@ -345,6 +347,227 @@ using PreReloadCallback = std::function<void(ModuleId module_id, void** state)>;
 using PostReloadCallback = std::function<void(ModuleId module_id, void* state)>;
 
 // =============================================================================
+// FFI Types for C++ Plugins
+// =============================================================================
+
+/// @brief API version for compatibility checking
+constexpr std::uint32_t VOID_CPP_API_VERSION = 1;
+
+/// @brief Opaque handle to C++ object instance
+struct CppHandle {
+    void* ptr = nullptr;
+
+    [[nodiscard]] bool is_valid() const { return ptr != nullptr; }
+    explicit operator bool() const { return is_valid(); }
+};
+
+/// @brief FFI-safe entity ID
+struct FfiEntityId {
+    std::uint32_t index = 0;
+    std::uint32_t generation = 0;
+
+    [[nodiscard]] bool is_valid() const { return index != 0 || generation != 0; }
+    static FfiEntityId invalid() { return {0, 0}; }
+
+    bool operator==(const FfiEntityId& other) const {
+        return index == other.index && generation == other.generation;
+    }
+    bool operator!=(const FfiEntityId& other) const { return !(*this == other); }
+};
+
+/// @brief FFI-safe 3D vector
+struct FfiVec3 {
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+};
+
+/// @brief FFI-safe quaternion
+struct FfiQuat {
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+    float w = 1.0f;
+};
+
+/// @brief FFI-safe transform
+struct FfiTransform {
+    FfiVec3 position;
+    FfiQuat rotation;
+    FfiVec3 scale{1.0f, 1.0f, 1.0f};
+};
+
+/// @brief FFI-safe hit result
+struct FfiHitResult {
+    bool hit = false;
+    FfiVec3 point;
+    FfiVec3 normal;
+    float distance = 0.0f;
+    FfiEntityId entity;
+};
+
+/// @brief FFI-safe damage info
+struct FfiDamageInfo {
+    float amount = 0.0f;
+    int damage_type = 0;
+    FfiEntityId source;
+    FfiVec3 hit_point;
+    FfiVec3 hit_normal;
+    bool is_critical = false;
+};
+
+/// @brief FFI-safe input action
+struct FfiInputAction {
+    const char* action_name = nullptr;
+    float value = 0.0f;
+    bool pressed = false;
+    bool released = false;
+};
+
+/// @brief Class info from C++ library
+struct FfiClassInfo {
+    const char* name = nullptr;
+    std::size_t size = 0;
+    std::size_t alignment = 0;
+    std::uint32_t api_version = VOID_CPP_API_VERSION;
+
+    // Construction/destruction
+    CppHandle (*create_fn)() = nullptr;
+    void (*destroy_fn)(CppHandle) = nullptr;
+};
+
+/// @brief Virtual table for class methods
+struct FfiClassVTable {
+    // Lifecycle
+    void (*begin_play)(CppHandle) = nullptr;
+    void (*tick)(CppHandle, float delta_time) = nullptr;
+    void (*fixed_tick)(CppHandle, float delta_time) = nullptr;
+    void (*end_play)(CppHandle) = nullptr;
+
+    // Collision events
+    void (*on_collision_enter)(CppHandle, FfiEntityId other, FfiHitResult hit) = nullptr;
+    void (*on_collision_exit)(CppHandle, FfiEntityId other) = nullptr;
+    void (*on_trigger_enter)(CppHandle, FfiEntityId other) = nullptr;
+    void (*on_trigger_exit)(CppHandle, FfiEntityId other) = nullptr;
+
+    // Combat events
+    void (*on_damage)(CppHandle, FfiDamageInfo damage) = nullptr;
+    void (*on_death)(CppHandle, FfiEntityId killer) = nullptr;
+    void (*on_heal)(CppHandle, float amount, FfiEntityId healer) = nullptr;
+
+    // Interaction events
+    void (*on_interact)(CppHandle, FfiEntityId interactor) = nullptr;
+    void (*on_input_action)(CppHandle, FfiInputAction action) = nullptr;
+
+    // Hot-reload serialization
+    std::size_t (*get_serialized_size)(CppHandle) = nullptr;
+    std::size_t (*serialize)(CppHandle, std::uint8_t* buffer, std::size_t buffer_size) = nullptr;
+    bool (*deserialize)(CppHandle, const std::uint8_t* data, std::size_t data_size) = nullptr;
+
+    // On hot-reload callback
+    void (*on_reload)(CppHandle) = nullptr;
+};
+
+/// @brief Library info from C++ library
+struct FfiLibraryInfo {
+    const char* name = nullptr;
+    const char* version = nullptr;
+    const char* author = nullptr;
+    std::uint32_t api_version = VOID_CPP_API_VERSION;
+    std::uint32_t class_count = 0;
+};
+
+// Forward declare world context (defined in instance.hpp)
+struct FfiWorldContext;
+
+/// @brief Function types for library exports
+using GetLibraryInfoFn = FfiLibraryInfo (*)();
+using GetClassInfoFn = const FfiClassInfo* (*)(std::uint32_t index);
+using GetClassVTableFn = const FfiClassVTable* (*)(const char* class_name);
+using SetEntityIdFn = void (*)(CppHandle, FfiEntityId);
+using SetWorldContextFn = void (*)(CppHandle, const FfiWorldContext*);
+
+// =============================================================================
+// Property Types
+// =============================================================================
+
+/// @brief Property value types
+enum class PropertyType : std::uint8_t {
+    Null,
+    Bool,
+    Int,
+    Float,
+    String,
+    Vec2,
+    Vec3,
+    Vec4,
+    Color,
+    Entity,
+    Asset,
+    Array,
+    Object
+};
+
+/// @brief Property value (variant type)
+struct PropertyValue {
+    PropertyType type = PropertyType::Null;
+
+    // Union-like storage (using variant for safety)
+    std::variant<
+        std::nullptr_t,
+        bool,
+        std::int64_t,
+        double,
+        std::string,
+        std::array<float, 2>,
+        std::array<float, 3>,
+        std::array<float, 4>,
+        std::vector<PropertyValue>,
+        std::unordered_map<std::string, PropertyValue>
+    > data;
+
+    // Constructors
+    PropertyValue() : type(PropertyType::Null), data(nullptr) {}
+    PropertyValue(bool v) : type(PropertyType::Bool), data(v) {}
+    PropertyValue(std::int64_t v) : type(PropertyType::Int), data(v) {}
+    PropertyValue(int v) : type(PropertyType::Int), data(static_cast<std::int64_t>(v)) {}
+    PropertyValue(double v) : type(PropertyType::Float), data(v) {}
+    PropertyValue(float v) : type(PropertyType::Float), data(static_cast<double>(v)) {}
+    PropertyValue(const std::string& v) : type(PropertyType::String), data(v) {}
+    PropertyValue(const char* v) : type(PropertyType::String), data(std::string(v)) {}
+    PropertyValue(std::array<float, 3> v) : type(PropertyType::Vec3), data(v) {}
+
+    // Accessors
+    [[nodiscard]] bool as_bool() const { return std::get<bool>(data); }
+    [[nodiscard]] std::int64_t as_int() const { return std::get<std::int64_t>(data); }
+    [[nodiscard]] double as_float() const { return std::get<double>(data); }
+    [[nodiscard]] const std::string& as_string() const { return std::get<std::string>(data); }
+    [[nodiscard]] std::array<float, 3> as_vec3() const { return std::get<std::array<float, 3>>(data); }
+};
+
+/// @brief Property map type
+using PropertyMap = std::unordered_map<std::string, PropertyValue>;
+
+// =============================================================================
+// Instance Types
+// =============================================================================
+
+/// @brief Instance state
+enum class InstanceState : std::uint8_t {
+    Created,        ///< Just created, not yet begun
+    Active,         ///< BeginPlay called, ticking
+    Paused,         ///< Temporarily paused
+    Ending,         ///< EndPlay in progress
+    Destroyed       ///< Destroyed, awaiting cleanup
+};
+
+/// @brief Instance ID type
+using InstanceId = std::uint64_t;
+
+/// @brief Invalid instance ID
+constexpr InstanceId INVALID_INSTANCE_ID = 0;
+
+// =============================================================================
 // Error Types
 // =============================================================================
 
@@ -430,3 +653,14 @@ constexpr const char* cpp_error_name(CppError error) {
 }
 
 } // namespace void_cpp
+
+// Hash specialization for FfiEntityId
+namespace std {
+template <>
+struct hash<void_cpp::FfiEntityId> {
+    std::size_t operator()(const void_cpp::FfiEntityId& id) const noexcept {
+        return std::hash<std::uint64_t>{}(
+            (static_cast<std::uint64_t>(id.index) << 32) | id.generation);
+    }
+};
+} // namespace std

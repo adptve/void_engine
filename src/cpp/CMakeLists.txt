@@ -4,6 +4,7 @@ void_add_module(NAME void_cpp
         types.cpp
         compiler.cpp
         module.cpp
+        instance.cpp
         hot_reload.cpp
         system.cpp
     DEPENDENCIES

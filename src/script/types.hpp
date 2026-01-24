@@ -69,6 +69,7 @@ enum class TokenType : std::uint8_t {
     Type,               ///< type
     Interface,          ///< interface
     Impl,               ///< impl
+    Static,             ///< static
 
     // Operators
     Plus,               ///< +
@@ -503,6 +504,7 @@ constexpr const char* token_type_name(TokenType type) {
         case TokenType::Type: return "type";
         case TokenType::Interface: return "interface";
         case TokenType::Impl: return "impl";
+        case TokenType::Static: return "static";
         case TokenType::Plus: return "+";
         case TokenType::Minus: return "-";
         case TokenType::Star: return "*";

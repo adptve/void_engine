@@ -392,7 +392,8 @@ void HudManager::dismiss_notification(HudElementId id) {
         if ((*it)->id() == id) {
             auto* notification = *it;
             m_animator.fade_out(notification, 0.2f);
-            // Would need delayed removal
+            // Move to fading list for delayed removal after animation completes
+            m_fading_notifications.push_back(notification);
             m_active_notifications.erase(it);
             break;
         }
@@ -404,14 +405,34 @@ void HudManager::clear_notifications() {
         remove_element(notification);
     }
     m_active_notifications.clear();
+
+    // Also clear any fading notifications
+    for (auto* notification : m_fading_notifications) {
+        remove_element(notification);
+    }
+    m_fading_notifications.clear();
 }
 
 void HudManager::cleanup_expired_notifications() {
+    // Move expired active notifications to fading list
     for (auto it = m_active_notifications.begin(); it != m_active_notifications.end();) {
         if ((*it)->is_expired()) {
             auto* notification = *it;
             m_animator.fade_out(notification, 0.2f);
+            m_fading_notifications.push_back(notification);
             it = m_active_notifications.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    // Remove fading notifications that have completed their fade animation
+    for (auto it = m_fading_notifications.begin(); it != m_fading_notifications.end();) {
+        auto* notification = *it;
+        // Check if fade animation is complete (element no longer animating or opacity is 0)
+        if (!m_animator.is_animating(notification) || notification->opacity() <= 0.001f) {
+            remove_element(notification);
+            it = m_fading_notifications.erase(it);
         } else {
             ++it;
         }
@@ -459,6 +480,7 @@ void HudManager::clear() {
     }
     m_elements.clear();
     m_active_notifications.clear();
+    m_fading_notifications.clear();
     m_active_tooltip = nullptr;
     m_hovered_element = nullptr;
     m_pressed_element = nullptr;

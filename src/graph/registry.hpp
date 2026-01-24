@@ -111,6 +111,33 @@ public:
     /// @brief Register debug nodes
     void register_debug_nodes();
 
+    /// @brief Register entity operation nodes
+    void register_entity_nodes();
+
+    /// @brief Register physics operation nodes
+    void register_physics_nodes();
+
+    /// @brief Register audio operation nodes
+    void register_audio_nodes();
+
+    /// @brief Register combat operation nodes
+    void register_combat_nodes();
+
+    /// @brief Register inventory operation nodes
+    void register_inventory_nodes();
+
+    /// @brief Register AI operation nodes
+    void register_ai_nodes();
+
+    /// @brief Register input operation nodes
+    void register_input_nodes();
+
+    /// @brief Register UI operation nodes
+    void register_ui_nodes();
+
+    /// @brief Register time operation nodes
+    void register_time_nodes();
+
     // ==========================================================================
     // Type ID Generation
     // ==========================================================================
@@ -359,6 +386,103 @@ inline const NodeTypeId GetVariable = NodeTypeId::create(902, 0);
 inline const NodeTypeId SetVariable = NodeTypeId::create(903, 0);
 inline const NodeTypeId CallFunction = NodeTypeId::create(904, 0);
 inline const NodeTypeId Return = NodeTypeId::create(905, 0);
+
+// Entity Operations
+inline const NodeTypeId SpawnEntity = NodeTypeId::create(1000, 0);
+inline const NodeTypeId DestroyEntity = NodeTypeId::create(1001, 0);
+inline const NodeTypeId GetEntityLocation = NodeTypeId::create(1002, 0);
+inline const NodeTypeId SetEntityLocation = NodeTypeId::create(1003, 0);
+inline const NodeTypeId GetEntityRotation = NodeTypeId::create(1004, 0);
+inline const NodeTypeId SetEntityRotation = NodeTypeId::create(1005, 0);
+inline const NodeTypeId GetComponent = NodeTypeId::create(1006, 0);
+inline const NodeTypeId AddComponent = NodeTypeId::create(1007, 0);
+inline const NodeTypeId RemoveComponent = NodeTypeId::create(1008, 0);
+inline const NodeTypeId HasComponent = NodeTypeId::create(1009, 0);
+inline const NodeTypeId GetEntityById = NodeTypeId::create(1010, 0);
+inline const NodeTypeId GetAllEntities = NodeTypeId::create(1011, 0);
+inline const NodeTypeId GetEntityName = NodeTypeId::create(1012, 0);
+inline const NodeTypeId SetEntityName = NodeTypeId::create(1013, 0);
+
+// Physics Operations
+inline const NodeTypeId AddForce = NodeTypeId::create(1100, 0);
+inline const NodeTypeId AddImpulse = NodeTypeId::create(1101, 0);
+inline const NodeTypeId SetVelocity = NodeTypeId::create(1102, 0);
+inline const NodeTypeId GetVelocity = NodeTypeId::create(1103, 0);
+inline const NodeTypeId SetAngularVelocity = NodeTypeId::create(1104, 0);
+inline const NodeTypeId GetAngularVelocity = NodeTypeId::create(1105, 0);
+inline const NodeTypeId Raycast = NodeTypeId::create(1106, 0);
+inline const NodeTypeId RaycastAll = NodeTypeId::create(1107, 0);
+inline const NodeTypeId OverlapSphere = NodeTypeId::create(1108, 0);
+inline const NodeTypeId OverlapBox = NodeTypeId::create(1109, 0);
+inline const NodeTypeId SetPhysicsEnabled = NodeTypeId::create(1110, 0);
+inline const NodeTypeId SetGravityEnabled = NodeTypeId::create(1111, 0);
+inline const NodeTypeId SetKinematic = NodeTypeId::create(1112, 0);
+
+// Audio Operations
+inline const NodeTypeId PlaySound = NodeTypeId::create(1200, 0);
+inline const NodeTypeId PlaySoundAtLocation = NodeTypeId::create(1201, 0);
+inline const NodeTypeId StopSound = NodeTypeId::create(1202, 0);
+inline const NodeTypeId SetSoundVolume = NodeTypeId::create(1203, 0);
+inline const NodeTypeId SetSoundPitch = NodeTypeId::create(1204, 0);
+inline const NodeTypeId PlayMusic = NodeTypeId::create(1205, 0);
+inline const NodeTypeId StopMusic = NodeTypeId::create(1206, 0);
+inline const NodeTypeId SetMusicVolume = NodeTypeId::create(1207, 0);
+inline const NodeTypeId CrossfadeMusic = NodeTypeId::create(1208, 0);
+
+// Combat Operations
+inline const NodeTypeId ApplyDamage = NodeTypeId::create(1300, 0);
+inline const NodeTypeId GetHealth = NodeTypeId::create(1301, 0);
+inline const NodeTypeId SetHealth = NodeTypeId::create(1302, 0);
+inline const NodeTypeId GetMaxHealth = NodeTypeId::create(1303, 0);
+inline const NodeTypeId SetMaxHealth = NodeTypeId::create(1304, 0);
+inline const NodeTypeId Heal = NodeTypeId::create(1305, 0);
+inline const NodeTypeId Kill = NodeTypeId::create(1306, 0);
+inline const NodeTypeId SpawnProjectile = NodeTypeId::create(1307, 0);
+
+// Inventory Operations
+inline const NodeTypeId AddItem = NodeTypeId::create(1400, 0);
+inline const NodeTypeId RemoveItem = NodeTypeId::create(1401, 0);
+inline const NodeTypeId HasItem = NodeTypeId::create(1402, 0);
+inline const NodeTypeId GetItemCount = NodeTypeId::create(1403, 0);
+inline const NodeTypeId EquipItem = NodeTypeId::create(1404, 0);
+inline const NodeTypeId UnequipItem = NodeTypeId::create(1405, 0);
+inline const NodeTypeId GetEquippedItem = NodeTypeId::create(1406, 0);
+inline const NodeTypeId ClearInventory = NodeTypeId::create(1407, 0);
+
+// AI Operations
+inline const NodeTypeId MoveTo = NodeTypeId::create(1500, 0);
+inline const NodeTypeId StopMovement = NodeTypeId::create(1501, 0);
+inline const NodeTypeId SetAIState = NodeTypeId::create(1502, 0);
+inline const NodeTypeId GetAIState = NodeTypeId::create(1503, 0);
+inline const NodeTypeId FindPath = NodeTypeId::create(1504, 0);
+inline const NodeTypeId SetMoveSpeed = NodeTypeId::create(1505, 0);
+inline const NodeTypeId LookAt = NodeTypeId::create(1506, 0);
+inline const NodeTypeId GetNearestEnemy = NodeTypeId::create(1507, 0);
+inline const NodeTypeId IsInRange = NodeTypeId::create(1508, 0);
+
+// Input Operations
+inline const NodeTypeId IsKeyPressed = NodeTypeId::create(1600, 0);
+inline const NodeTypeId IsKeyJustPressed = NodeTypeId::create(1601, 0);
+inline const NodeTypeId IsKeyJustReleased = NodeTypeId::create(1602, 0);
+inline const NodeTypeId GetMousePosition = NodeTypeId::create(1603, 0);
+inline const NodeTypeId GetMouseDelta = NodeTypeId::create(1604, 0);
+inline const NodeTypeId IsMouseButtonPressed = NodeTypeId::create(1605, 0);
+inline const NodeTypeId GetAxisValue = NodeTypeId::create(1606, 0);
+inline const NodeTypeId IsActionPressed = NodeTypeId::create(1607, 0);
+
+// UI Operations
+inline const NodeTypeId ShowWidget = NodeTypeId::create(1700, 0);
+inline const NodeTypeId HideWidget = NodeTypeId::create(1701, 0);
+inline const NodeTypeId SetWidgetText = NodeTypeId::create(1702, 0);
+inline const NodeTypeId SetProgressBar = NodeTypeId::create(1703, 0);
+inline const NodeTypeId ShowNotification = NodeTypeId::create(1704, 0);
+inline const NodeTypeId SetWidgetVisible = NodeTypeId::create(1705, 0);
+
+// Time Operations
+inline const NodeTypeId GetDeltaTime = NodeTypeId::create(1800, 0);
+inline const NodeTypeId GetTimeSeconds = NodeTypeId::create(1801, 0);
+inline const NodeTypeId SetTimeScale = NodeTypeId::create(1802, 0);
+inline const NodeTypeId GetTimeScale = NodeTypeId::create(1803, 0);
 
 } // namespace builtin
 

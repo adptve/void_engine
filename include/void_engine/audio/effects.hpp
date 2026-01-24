@@ -349,6 +349,206 @@ private:
 };
 
 // =============================================================================
+// Limiter Effect
+// =============================================================================
+
+/// Limiter configuration
+struct LimiterConfig : EffectConfig {
+    LimiterConfig() { type = EffectType::Limiter; }
+
+    float threshold = -1.0f;        ///< Threshold in dB
+    float release = 0.1f;           ///< Release time in seconds
+    float ceiling = -0.1f;          ///< Output ceiling in dB
+    bool soft_knee = true;          ///< Use soft knee
+};
+
+/// Limiter effect implementation (brickwall limiter with lookahead)
+class LimiterEffect : public AudioEffectBase {
+public:
+    LimiterEffect();
+    explicit LimiterEffect(const LimiterConfig& config);
+
+    void process(float* samples, std::size_t sample_count, std::uint32_t channels) override;
+    void reset() override;
+
+    void set_config(const LimiterConfig& config);
+    [[nodiscard]] const LimiterConfig& config() const { return m_config; }
+
+    void set_threshold(float db);
+    void set_release(float seconds);
+    void set_ceiling(float db);
+
+    /// Get current gain reduction in dB
+    [[nodiscard]] float gain_reduction() const { return m_gain_reduction; }
+
+private:
+    LimiterConfig m_config;
+
+    float m_envelope = 0;
+    float m_gain_reduction = 0;
+    std::uint32_t m_sample_rate = 44100;
+
+    // Lookahead buffer
+    static constexpr std::size_t LOOKAHEAD_SAMPLES = 64;
+    std::vector<float> m_lookahead_buffer;
+    std::size_t m_lookahead_index = 0;
+};
+
+// =============================================================================
+// Flanger Effect
+// =============================================================================
+
+/// Flanger configuration
+struct FlangerConfig : EffectConfig {
+    FlangerConfig() { type = EffectType::Flanger; }
+
+    float rate = 0.5f;              ///< LFO rate in Hz
+    float depth = 0.7f;             ///< Modulation depth 0 to 1
+    float delay = 0.005f;           ///< Base delay in seconds (typically 1-10ms)
+    float feedback = 0.5f;          ///< Feedback amount -1 to 1
+    float stereo_phase = 0.5f;      ///< Stereo LFO phase offset (0 to 1)
+};
+
+/// Flanger effect implementation
+class FlangerEffect : public AudioEffectBase {
+public:
+    FlangerEffect();
+    explicit FlangerEffect(const FlangerConfig& config);
+
+    void process(float* samples, std::size_t sample_count, std::uint32_t channels) override;
+    void reset() override;
+
+    void set_config(const FlangerConfig& config);
+    [[nodiscard]] const FlangerConfig& config() const { return m_config; }
+
+    void set_rate(float hz);
+    void set_depth(float depth);
+    void set_feedback(float feedback);
+
+private:
+    FlangerConfig m_config;
+
+    std::vector<float> m_delay_buffer_l;
+    std::vector<float> m_delay_buffer_r;
+    std::size_t m_write_index = 0;
+    float m_lfo_phase = 0;
+    std::uint32_t m_sample_rate = 44100;
+
+    float read_delay_interpolated(const std::vector<float>& buffer, float delay_samples);
+};
+
+// =============================================================================
+// Phaser Effect
+// =============================================================================
+
+/// Phaser configuration
+struct PhaserConfig : EffectConfig {
+    PhaserConfig() { type = EffectType::Phaser; }
+
+    float rate = 0.5f;              ///< LFO rate in Hz
+    float depth = 0.7f;             ///< Modulation depth 0 to 1
+    float feedback = 0.5f;          ///< Feedback amount 0 to 1
+    float min_freq = 200.0f;        ///< Minimum notch frequency
+    float max_freq = 2000.0f;       ///< Maximum notch frequency
+    std::uint8_t stages = 4;        ///< Number of allpass stages (2, 4, 6, 8, 12)
+    float stereo_phase = 0.25f;     ///< Stereo LFO phase offset
+};
+
+/// Phaser effect implementation (multi-stage allpass filter)
+class PhaserEffect : public AudioEffectBase {
+public:
+    PhaserEffect();
+    explicit PhaserEffect(const PhaserConfig& config);
+
+    void process(float* samples, std::size_t sample_count, std::uint32_t channels) override;
+    void reset() override;
+
+    void set_config(const PhaserConfig& config);
+    [[nodiscard]] const PhaserConfig& config() const { return m_config; }
+
+    void set_rate(float hz);
+    void set_depth(float depth);
+    void set_stages(std::uint8_t count);
+
+private:
+    PhaserConfig m_config;
+
+    // Allpass filter state per stage, per channel
+    static constexpr std::size_t MAX_STAGES = 12;
+    struct AllpassStage {
+        float a1 = 0;       // Coefficient
+        float z1_l = 0;     // State left
+        float z1_r = 0;     // State right
+    };
+    std::array<AllpassStage, MAX_STAGES> m_stages;
+
+    float m_lfo_phase = 0;
+    float m_feedback_l = 0;
+    float m_feedback_r = 0;
+    std::uint32_t m_sample_rate = 44100;
+};
+
+// =============================================================================
+// Pitch Shifter Effect
+// =============================================================================
+
+/// Pitch shifter configuration
+struct PitchConfig : EffectConfig {
+    PitchConfig() { type = EffectType::Pitch; }
+
+    float semitones = 0.0f;         ///< Pitch shift in semitones (-12 to +12)
+    float cents = 0.0f;             ///< Fine tuning in cents (-100 to +100)
+    float window_size = 0.05f;      ///< Analysis window size in seconds
+    float overlap = 0.75f;          ///< Window overlap (0.5 to 0.9)
+    bool formant_preserve = false;  ///< Preserve formants (for voice)
+};
+
+/// Pitch shifter effect implementation (granular time-domain)
+class PitchShifterEffect : public AudioEffectBase {
+public:
+    PitchShifterEffect();
+    explicit PitchShifterEffect(const PitchConfig& config);
+
+    void process(float* samples, std::size_t sample_count, std::uint32_t channels) override;
+    void reset() override;
+
+    void set_config(const PitchConfig& config);
+    [[nodiscard]] const PitchConfig& config() const { return m_config; }
+
+    void set_semitones(float semitones);
+    void set_cents(float cents);
+
+    /// Get the current pitch ratio
+    [[nodiscard]] float pitch_ratio() const;
+
+private:
+    PitchConfig m_config;
+
+    // Circular buffer for input
+    std::vector<float> m_input_buffer_l;
+    std::vector<float> m_input_buffer_r;
+    std::size_t m_input_write_index = 0;
+
+    // Grain playback positions
+    struct Grain {
+        float position = 0;     // Read position in input buffer
+        float window_pos = 0;   // Position in window (0-1)
+        bool active = false;
+    };
+    static constexpr std::size_t NUM_GRAINS = 4;
+    std::array<Grain, NUM_GRAINS> m_grains;
+
+    std::uint32_t m_sample_rate = 44100;
+    std::size_t m_window_samples = 2048;
+    float m_grain_spacing = 0;
+    std::size_t m_samples_since_grain = 0;
+    std::size_t m_next_grain = 0;
+
+    void update_parameters();
+    float read_with_window(const std::vector<float>& buffer, float position, float window_pos);
+};
+
+// =============================================================================
 // Effect Factory
 // =============================================================================
 
@@ -378,6 +578,18 @@ public:
 
     /// Create EQ effect
     static EffectPtr create_eq(const EQConfig& config = EQConfig{});
+
+    /// Create limiter effect
+    static EffectPtr create_limiter(const LimiterConfig& config = LimiterConfig{});
+
+    /// Create flanger effect
+    static EffectPtr create_flanger(const FlangerConfig& config = FlangerConfig{});
+
+    /// Create phaser effect
+    static EffectPtr create_phaser(const PhaserConfig& config = PhaserConfig{});
+
+    /// Create pitch shifter effect
+    static EffectPtr create_pitch(const PitchConfig& config = PitchConfig{});
 };
 
 // =============================================================================

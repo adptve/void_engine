@@ -7,6 +7,7 @@
 
 #include <void_engine/ecs/ecs.hpp>
 #include <void_engine/event/event.hpp>
+#include <void_engine/graph/snapshot.hpp>
 
 namespace void_graph {
 
@@ -186,7 +187,7 @@ public:
     [[nodiscard]] std::vector<ExecutionId> get_active_executions() const;
 
     // ==========================================================================
-    // Hot Reload
+    // Hot Reload & Snapshots
     // ==========================================================================
 
     /// @brief Reload a graph from file
@@ -197,6 +198,18 @@ public:
 
     /// @brief Check for file changes
     void check_hot_reload();
+
+    /// @brief Create a snapshot of the entire graph system state
+    [[nodiscard]] GraphSystemSnapshot create_snapshot() const;
+
+    /// @brief Restore state from a snapshot
+    bool restore_snapshot(const GraphSystemSnapshot& snapshot);
+
+    /// @brief Serialize snapshot to binary data
+    [[nodiscard]] std::vector<std::uint8_t> serialize_state() const;
+
+    /// @brief Restore state from binary data
+    bool restore_state(const std::vector<std::uint8_t>& data);
 
     // ==========================================================================
     // Events

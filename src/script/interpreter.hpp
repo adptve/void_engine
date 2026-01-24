@@ -260,6 +260,21 @@ public:
     /// @brief Print a value
     void print(const std::string& text);
 
+    // ==========================================================================
+    // Hot-Reload Support
+    // ==========================================================================
+
+    /// @brief Snapshot for preserving state during hot-reload
+    struct Snapshot {
+        std::unordered_map<std::string, Value> global_variables;
+    };
+
+    /// @brief Take a snapshot of current state
+    [[nodiscard]] Snapshot take_snapshot() const;
+
+    /// @brief Restore state from a snapshot
+    void apply_snapshot(const Snapshot& snapshot);
+
 private:
     // Expression evaluation
     Value visit(const LiteralExpr& expr);
@@ -277,6 +292,9 @@ private:
     Value visit(const NewExpr& expr);
     Value visit(const ThisExpr& expr);
     Value visit(const SuperExpr& expr);
+    Value visit(const RangeExpr& expr);
+    Value visit(const AwaitExpr& expr);
+    Value visit(const YieldExpr& expr);
 
     // Statement execution
     void visit(const ExprStatement& stmt);
@@ -322,6 +340,12 @@ private:
 
     // For 'this' binding
     std::shared_ptr<ClassInstance> current_instance_;
+
+    // Lambda storage (owns lambda function declarations)
+    std::vector<std::unique_ptr<FunctionDecl>> lambda_storage_;
+
+    // Module cache
+    std::unordered_map<std::string, std::unique_ptr<Environment>> modules_;
 };
 
 // =============================================================================

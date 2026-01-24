@@ -83,6 +83,13 @@ public:
     // Statistics
     std::uint32_t activation_count() const { return m_activation_count; }
     double last_activation_time() const { return m_last_activation; }
+    float cooldown_remaining() const { return m_cooldown_remaining; }
+
+    // State restoration (for hot reload)
+    void set_state(TriggerState state) { m_state = state; }
+    void set_activation_count(std::uint32_t count) { m_activation_count = count; }
+    void set_last_activation(double time) { m_last_activation = time; }
+    void set_cooldown_remaining(float time) { m_cooldown_remaining = time; }
 
     // Entities inside
     const std::unordered_set<EntityId>& entities_inside() const { return m_entities_inside; }
@@ -244,6 +251,10 @@ public:
     void set_position_getter(EntityPositionCallback callback) { m_position_getter = std::move(callback); }
     void set_tags_getter(EntityTagsCallback callback) { m_tags_getter = std::move(callback); }
 
+    /// @brief Set player check callback
+    using IsPlayerCallback = std::function<bool(EntityId entity)>;
+    void set_player_checker(IsPlayerCallback callback) { m_is_player = std::move(callback); }
+
     // Global callbacks
     void set_on_trigger_enter(TriggerCallback callback) { m_on_trigger_enter = std::move(callback); }
     void set_on_trigger_exit(TriggerCallback callback) { m_on_trigger_exit = std::move(callback); }
@@ -272,6 +283,7 @@ public:
             std::uint8_t state;
             std::uint32_t activation_count;
             double last_activation;
+            float cooldown_remaining;
             bool enabled;
         };
         std::vector<TriggerData> triggers;
@@ -310,6 +322,7 @@ private:
 
     EntityPositionCallback m_position_getter;
     EntityTagsCallback m_tags_getter;
+    IsPlayerCallback m_is_player;
 
     TriggerCallback m_on_trigger_enter;
     TriggerCallback m_on_trigger_exit;

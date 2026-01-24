@@ -66,6 +66,9 @@
 #include "query.hpp"
 #include "world.hpp"
 #include "system.hpp"
+#include "snapshot.hpp"
+#include "hierarchy.hpp"
+#include "bundle.hpp"
 
 namespace void_ecs {
 

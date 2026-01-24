@@ -188,6 +188,7 @@ private:
     DataBindingManager m_bindings;
 
     std::vector<HudNotification*> m_active_notifications;
+    std::vector<HudNotification*> m_fading_notifications;
     HudTooltip* m_active_tooltip{nullptr};
 
     IHudElement* m_hovered_element{nullptr};

@@ -1,11 +1,12 @@
 # void_physics - Physics simulation
 #
 # Provides comprehensive physics simulation:
-# - Multi-backend support (Jolt, PhysX, Bullet)
+# - Custom GJK/EPA collision detection
+# - Dynamic BVH broadphase acceleration
+# - Sequential impulse constraint solver
 # - Rigidbody dynamics with full constraint system
-# - Collision detection with layers and masks
 # - Scene queries (raycast, shape cast, overlap)
-# - Character controller
+# - Character controller (first/third person)
 # - Hot-reload support for physics state
 
 void_add_module(NAME void_physics
@@ -15,6 +16,10 @@ void_add_module(NAME void_physics
         body.cpp
         world.cpp
         backend.cpp
+        simulation.cpp
+        query.cpp
+        character.cpp
+        snapshot.cpp
     DEPENDENCIES
         void_core
         void_math

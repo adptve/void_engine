@@ -365,4 +365,96 @@ GraphSystem::Stats GraphSystem::stats() const {
     return s;
 }
 
+// =============================================================================
+// Snapshot Methods
+// =============================================================================
+
+GraphSystemSnapshot GraphSystem::create_snapshot() const {
+    GraphSystemSnapshot snapshot;
+    snapshot.debug_mode = debug_mode_;
+    snapshot.hot_reload_enabled = hot_reload_enabled_;
+
+    // Snapshot each entity component's graph instance
+    for (const auto& [entity_id, comp] : entity_components_) {
+        if (!comp.instance) continue;
+
+        GraphInstanceSnapshot instance_snap;
+        instance_snap.graph_id = comp.graph_id;
+        instance_snap.owner_entity = entity_id;
+
+        const ExecutionContext& ctx = comp.instance->context();
+        instance_snap.state = ctx.state;
+        instance_snap.total_time = ctx.total_time;
+        instance_snap.frame_count = ctx.frame_count;
+
+        // Snapshot variables
+        const Graph& graph = comp.instance->graph();
+        for (const GraphVariable& var : graph.variables()) {
+            VariableSnapshot var_snap;
+            var_snap.id = var.id;
+            var_snap.name = var.name;
+            var_snap.type = var.type;
+
+            // Get current value from execution context
+            auto it = ctx.variables.find(var.id);
+            if (it != ctx.variables.end()) {
+                var_snap.value = it->second;
+            } else {
+                var_snap.value = var.default_value.value;
+            }
+
+            instance_snap.variables.push_back(std::move(var_snap));
+        }
+
+        snapshot.instances.push_back(std::move(instance_snap));
+    }
+
+    return snapshot;
+}
+
+bool GraphSystem::restore_snapshot(const GraphSystemSnapshot& snapshot) {
+    if (!snapshot.is_valid()) {
+        return false;
+    }
+
+    debug_mode_ = snapshot.debug_mode;
+    hot_reload_enabled_ = snapshot.hot_reload_enabled;
+
+    // Restore each instance's state
+    for (const GraphInstanceSnapshot& instance_snap : snapshot.instances) {
+        auto it = entity_components_.find(instance_snap.owner_entity);
+        if (it == entity_components_.end()) continue;
+
+        GraphComponent& comp = it->second;
+        if (!comp.instance) continue;
+
+        // Verify graph ID matches
+        if (comp.graph_id != instance_snap.graph_id) continue;
+
+        ExecutionContext& ctx = comp.instance->context();
+        ctx.state = instance_snap.state;
+        ctx.total_time = instance_snap.total_time;
+        ctx.frame_count = instance_snap.frame_count;
+
+        // Restore variables
+        for (const VariableSnapshot& var_snap : instance_snap.variables) {
+            ctx.variables[var_snap.id] = var_snap.value;
+        }
+    }
+
+    return true;
+}
+
+std::vector<std::uint8_t> GraphSystem::serialize_state() const {
+    return create_snapshot().serialize();
+}
+
+bool GraphSystem::restore_state(const std::vector<std::uint8_t>& data) {
+    auto snapshot = GraphSystemSnapshot::deserialize(data);
+    if (!snapshot) {
+        return false;
+    }
+    return restore_snapshot(*snapshot);
+}
+
 } // namespace void_graph

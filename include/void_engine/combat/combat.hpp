@@ -207,6 +207,13 @@ public:
                                            const void_math::Vec3& hit_point, float damage)>;
     void on_hit(HitCallback callback) { m_on_hit = std::move(callback); }
 
+    /// @brief Set target position callback (for homing projectiles)
+    using GetTargetPositionFunc = std::function<void_math::Vec3(EntityId target)>;
+    void set_target_position_func(GetTargetPositionFunc func) { m_get_target_position = std::move(func); }
+
+    /// @brief Set target for a homing projectile
+    void set_projectile_target(ProjectileId projectile, EntityId target);
+
     /// @brief Get active projectile count
     std::size_t active_count() const { return m_projectiles.size(); }
 
@@ -224,6 +231,7 @@ private:
     std::uint32_t m_next_id{1};
     RaycastFunc m_raycast;
     HitCallback m_on_hit;
+    GetTargetPositionFunc m_get_target_position;
 };
 
 // =============================================================================
@@ -382,7 +390,29 @@ public:
 
     // Hot reload support
     struct Snapshot {
-        // Serialize current combat state for hot reload
+        CombatConfig config;
+        Stats stats;
+
+        // Projectile state
+        struct ProjectileSnapshot {
+            std::uint32_t id;
+            ProjectileConfig config;
+            ProjectileState state;
+        };
+        std::vector<ProjectileSnapshot> projectiles;
+        std::uint32_t next_projectile_id{1};
+
+        // Kill tracker state
+        struct KillStatsSnapshot {
+            std::uint64_t entity_id;
+            std::uint32_t kills;
+            std::uint32_t deaths;
+            std::uint32_t assists;
+            float total_damage_dealt;
+            float total_damage_taken;
+        };
+        std::vector<KillStatsSnapshot> kill_stats;
+        float kill_tracker_time{0};
     };
     Snapshot take_snapshot() const;
     void apply_snapshot(const Snapshot& snapshot);

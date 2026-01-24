@@ -496,10 +496,10 @@ ItemInstance LootGenerator::generate_item(const LootEntry& entry, float luck) {
     // Determine quality
     item.quality = entry.quality_min + random_float() * (entry.quality_max - entry.quality_min);
 
-    // Apply modifiers
+    // Apply modifiers from pool
     std::uint32_t modifier_count = random_uint(entry.modifier_count_min, entry.modifier_count_max);
-    if (modifier_count > 0) {
-        // Would apply random modifiers from pool
+    if (modifier_count > 0 && m_factory) {
+        m_factory->apply_random_modifiers(item, modifier_count);
     }
 
     return item;

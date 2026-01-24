@@ -20,6 +20,13 @@
 
 namespace void_physics {
 
+// Forward declarations
+class PhysicsPipeline;
+class QuerySystem;
+class CharacterControllerImpl;
+class BroadPhaseBvh;
+class IJointConstraint;
+
 // =============================================================================
 // Physics World Interface
 // =============================================================================
@@ -473,18 +480,22 @@ public:
 
     void clear() override;
 
-private:
-    void integrate_velocities(float dt);
-    void detect_collisions();
-    void solve_constraints(float dt);
-    void integrate_positions(float dt);
-    void update_sleep_states(float dt);
-    void fire_collision_events();
+    /// Get broadphase (for internal use)
+    [[nodiscard]] BroadPhaseBvh& broadphase();
+    [[nodiscard]] const BroadPhaseBvh& broadphase() const;
 
+private:
+    void fire_collision_events();
     bool passes_filter(const IRigidbody& body, QueryFilter filter, CollisionLayer layer_mask) const;
 
 private:
     PhysicsConfig m_config;
+
+    // Simulation pipeline
+    std::unique_ptr<PhysicsPipeline> m_pipeline;
+
+    // Query system
+    std::unique_ptr<QuerySystem> m_query_system;
 
     // Bodies
     std::unordered_map<std::uint64_t, std::unique_ptr<Rigidbody>> m_bodies;
@@ -495,9 +506,9 @@ private:
         JointType type;
         BodyId body_a;
         BodyId body_b;
-        // Additional joint data...
     };
     std::unordered_map<std::uint64_t, JointData> m_joints;
+    std::vector<std::unique_ptr<IJointConstraint>> m_joint_constraints;
     std::uint64_t m_next_joint_id = 1;
 
     // Materials
@@ -505,7 +516,7 @@ private:
     std::uint64_t m_next_material_id = 1;
     MaterialId m_default_material;
 
-    // Collision detection
+    // Collision tracking
     struct CollisionPair {
         BodyId body_a;
         BodyId body_b;
@@ -534,6 +545,9 @@ private:
 
     // Time accumulator for fixed step
     float m_time_accumulator = 0.0f;
+
+    // Character controller implementation
+    std::unique_ptr<CharacterControllerImpl> m_impl;
 };
 
 // =============================================================================

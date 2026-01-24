@@ -5,6 +5,7 @@
 
 #include "node.hpp"
 
+#include <filesystem>
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
@@ -187,6 +188,12 @@ public:
 
     /// @brief Deserialize from JSON
     static std::unique_ptr<Graph> from_json(const std::string& json, const NodeRegistry& registry);
+
+    /// @brief Load from TOML blueprint file
+    static std::unique_ptr<Graph> from_toml(const std::string& toml, const NodeRegistry& registry);
+
+    /// @brief Load from file (auto-detects format)
+    static std::unique_ptr<Graph> load(const std::filesystem::path& path, const NodeRegistry& registry);
 
     /// @brief Serialize to binary
     void serialize(std::ostream& out) const;
