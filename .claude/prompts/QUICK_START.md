@@ -20,6 +20,15 @@ Phase 1 (void_core, void_ir) is complete. Proceed to Phase 2.
 
 ## Phase 2: Open 5 Terminals
 
+**IMPORTANT LESSON: Phase 2 modules were initially implemented as "ghost code" - they existed but weren't integrated into the engine. Each module SHOULD modify src/main.cpp to wire into the render loop. If they don't, you'll need to integrate them manually afterward.**
+
+**Already integrated in src/main.cpp:**
+- void_ecs: World, LiveSceneManager, AnimationSystem::update()
+- void_asset: AssetServer with TextureLoader, ModelLoader, process(), drain_events()
+- void_physics: PhysicsWorld with step(delta_time), collision callbacks
+- void_services: ServiceRegistry, EventBus with publish/subscribe
+- void_presenter: FrameTiming for delta_time() and average_fps()
+
 ### Terminal 3 - ECS Module
 
 **COPY EVERYTHING BELOW AND PASTE:**
@@ -470,6 +479,17 @@ cmake -B build && cmake --build build
 
 ## Phase 3: Open 2 Terminals
 
+**CRITICAL: Phase 3 modules MUST be integrated into src/main.cpp, NOT ghost code!**
+
+The following modules from Phase 2 are already integrated into main.cpp:
+- void_ecs (World, LiveSceneManager, AnimationSystem)
+- void_asset (AssetServer, TextureLoader, ModelLoader)
+- void_physics (PhysicsWorld with step() in main loop)
+- void_services (ServiceRegistry, EventBus)
+- void_presenter (FrameTiming for delta time and statistics)
+
+Phase 3 modules MUST follow the same pattern.
+
 ### Terminal 8 - Render Module
 
 **COPY EVERYTHING BELOW AND PASTE:**
@@ -478,6 +498,26 @@ cmake -B build && cmake --build build
 Think deeply and thoroughly about this task before implementing. You are a master senior engineer implementing production code.
 
 You are implementing the void_render module for Void Engine. This code MUST compile without errors on first attempt.
+
+## CRITICAL: ENGINE INTEGRATION REQUIRED
+
+**This is NOT a standalone module. It MUST integrate into src/main.cpp.**
+
+The current main.cpp already has a basic SceneRenderer. Your task is to:
+1. Fix any compilation errors in the render module headers
+2. Ensure the render module integrates cleanly with the existing SceneRenderer
+3. Add any missing implementations that the SceneRenderer depends on
+
+**Look at src/main.cpp to see how SceneRenderer is already used:**
+- `renderer.initialize(window)` - Initialize with GLFW window
+- `renderer.load_scene(scene)` - Load scene data
+- `renderer.update(delta_time)` - Update each frame
+- `renderer.render()` - Render the scene
+- `renderer.stats()` - Get render statistics
+- `renderer.camera().orbit/pan/zoom` - Camera controls
+- `renderer.reload_shaders()` - Hot-reload shaders
+
+**Your implementations must support this existing API.**
 
 ## ABSOLUTE RULES - VIOLATION = FAILURE
 
@@ -525,16 +565,29 @@ return void_core::Err<ReturnType>("message");
 
 ---
 
+## KNOWN ISSUES TO FIX
+
+The render module has compilation errors in:
+- `pass.hpp` - constexpr operator| issues, ClearValue static member issues, missing std::sort include
+- `compositor.hpp` - constexpr LayerFlags issues, const correctness
+- `render_graph.cpp` - API mismatches with headers
+
+**Fix these compilation errors as part of your implementation.**
+
+---
+
 ## YOUR TASK
 
-**Your files:** `src/render/` and `include/void_engine/render/` ONLY.
+**Your files:** `src/render/` and `include/void_engine/render/`
+
+**ALSO modify:** `src/main.cpp` to verify integration works
 
 **Implement:**
 1. `camera.hpp` → `src/render/camera.cpp`
 2. `light.hpp` → `src/render/light.cpp`
 3. `material.hpp` → `src/render/material.cpp`
 4. `mesh.hpp` → `src/render/mesh.cpp`
-5. `pass.hpp` → `src/render/pass.cpp`
+5. `pass.hpp` → `src/render/pass.cpp` (FIX header issues first!)
 6. `resource.hpp` → `src/render/resource.cpp`
 7. `shadow.hpp` → `src/render/shadow.cpp`
 8. `debug.hpp` → `src/render/debug.cpp`
@@ -546,11 +599,15 @@ return void_core::Err<ReturnType>("message");
 ## DELIVERABLES
 1. All .cpp files (that compile without errors)
 2. CMakeLists.txt additions
-3. `doc/diagrams/render_integration.md`
-4. `doc/validation/render_validation.md`
+3. **Fixed header files** (pass.hpp, compositor.hpp, etc.)
+4. Verified that `src/main.cpp` still compiles and runs
+5. `doc/diagrams/render_integration.md`
+6. `doc/validation/render_validation.md`
 
 ## START NOW
-Read include/void_engine/render/render.hpp first.
+1. First run `cmake --build build 2>&1 | head -100` to see current errors
+2. Read include/void_engine/render/pass.hpp and fix compilation errors
+3. Then implement the .cpp files
 ```
 
 ---
@@ -563,6 +620,49 @@ Read include/void_engine/render/render.hpp first.
 Think deeply and thoroughly about this task before implementing. You are a master senior engineer implementing production code.
 
 You are implementing the void_compositor module for Void Engine. This code MUST compile without errors on first attempt.
+
+## CRITICAL: ENGINE INTEGRATION REQUIRED
+
+**This is NOT a standalone module. It MUST integrate into src/main.cpp.**
+
+The compositor manages post-processing, HDR, and final output composition. After implementing, you MUST:
+
+1. Add compositor include to main.cpp:
+```cpp
+#include <void_engine/compositor/compositor_module.hpp>
+```
+
+2. Initialize compositor after renderer in main.cpp:
+```cpp
+// ==========================================================================
+// Compositor - Post-processing and final output
+// ==========================================================================
+spdlog::info("Initializing Compositor...");
+
+void_compositor::CompositorConfig compositor_config;
+compositor_config.enable_hdr = false;  // Start with SDR
+compositor_config.enable_vrr = false;
+compositor_config.output_width = config.window_width;
+compositor_config.output_height = config.window_height;
+
+void_compositor::Compositor compositor(compositor_config);
+compositor.initialize();
+
+spdlog::info("Compositor initialized:");
+spdlog::info("  - HDR: {}", compositor_config.enable_hdr ? "ON" : "OFF");
+spdlog::info("  - VRR: {}", compositor_config.enable_vrr ? "ON" : "OFF");
+```
+
+3. Use compositor in main loop (after renderer.render()):
+```cpp
+// Compositor post-processing
+compositor.begin_frame();
+compositor.apply_post_processing(renderer.output_texture());
+compositor.end_frame();
+```
+
+4. Add compositor stats to FPS logging
+5. Add compositor shutdown
 
 ## ABSOLUTE RULES - VIOLATION = FAILURE
 
@@ -610,7 +710,9 @@ return void_core::Err<ReturnType>("message");
 
 ## YOUR TASK
 
-**Your files:** `src/compositor/` and `include/void_engine/compositor/` ONLY.
+**Your files:** `src/compositor/` and `include/void_engine/compositor/`
+
+**ALSO modify:** `src/main.cpp` to integrate the compositor
 
 **Implement:**
 1. `frame.hpp` → `src/compositor/frame.cpp`
@@ -626,11 +728,35 @@ return void_core::Err<ReturnType>("message");
 ## DELIVERABLES
 1. All .cpp files (that compile without errors)
 2. CMakeLists.txt additions
-3. `doc/diagrams/compositor_integration.md`
-4. `doc/validation/compositor_validation.md`
+3. **Updated src/main.cpp** with compositor integration
+4. `doc/diagrams/compositor_integration.md`
+5. `doc/validation/compositor_validation.md`
+
+## INTEGRATION VERIFICATION
+
+After implementation, main.cpp should have this structure in the main loop:
+```
+while (!glfwWindowShouldClose(window)) {
+    frame_timing.begin_frame();
+    event_bus.process();
+    asset_server.process();
+    physics_world->step(delta_time);
+    live_scene_mgr.update(delta_time);
+    AnimationSystem::update(ecs_world, delta_time);
+    renderer.update(delta_time);
+    renderer.render();
+    compositor.begin_frame();           // NEW
+    compositor.apply_post_processing(); // NEW
+    compositor.end_frame();             // NEW
+    glfwSwapBuffers(window);
+}
+```
 
 ## START NOW
-Read include/void_engine/compositor/compositor.hpp first.
+1. Read include/void_engine/compositor/compositor.hpp first
+2. Implement the .cpp files
+3. THEN modify src/main.cpp to integrate
+4. Verify the build compiles and runs
 ```
 
 ---
@@ -641,8 +767,18 @@ Read include/void_engine/compositor/compositor.hpp first.
 rm -rf build
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
-./build/void_engine
+./build/void_engine examples/model-viewer
 ```
+
+**VERIFY:** The engine should start with all systems logging:
+- Service Registry: health monitoring ON
+- Event Bus: inter-system messaging ON
+- Frame Timing: statistics ON
+- ECS World: entity capacity
+- Physics World: body capacity
+- Asset Server: hot-reload ON
+- Renderer: shader hot-reload ON
+- Compositor: HDR/VRR status (NEW)
 
 ---
 
@@ -659,3 +795,21 @@ cmake --build build --parallel
 | No faking | "NO stubs, NO TODOs" |
 | Senior engineer | "master senior engineer" framing |
 | Must compile | "MUST compile without errors on first attempt" |
+| **Engine integration** | **Phase 3: "MUST integrate into src/main.cpp"** |
+| **Not ghost code** | **Phase 3: explicit main.cpp modifications required** |
+| **Verification** | **Phase 3: "verify the build compiles and runs"** |
+
+---
+
+## Integration Checklist (Phase 3)
+
+Before marking a Phase 3 module complete, verify:
+
+- [ ] Include added to src/main.cpp
+- [ ] Initialization code added after existing systems
+- [ ] Main loop integration (update/process calls)
+- [ ] Statistics added to FPS logging
+- [ ] Shutdown code added in reverse order
+- [ ] Build compiles without errors
+- [ ] Engine runs with `./build/void_engine examples/model-viewer`
+- [ ] System logs appear at startup

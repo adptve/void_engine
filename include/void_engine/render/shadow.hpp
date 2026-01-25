@@ -11,6 +11,8 @@
 #include <vector>
 #include <algorithm>
 #include <cmath>
+#include <cfloat>
+#include <numbers>
 
 namespace void_render {
 

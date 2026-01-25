@@ -151,7 +151,11 @@ public:
         bool process_immediate = false;         ///< Process events immediately on publish
     };
 
-    explicit EventBus(Config config = {})
+    /// Default constructor
+    EventBus() : m_config{}, m_next_subscription_id(1), m_enabled(true) {}
+
+    /// Constructor with custom config
+    explicit EventBus(Config config)
         : m_config(config), m_next_subscription_id(1), m_enabled(true) {}
 
     ~EventBus() = default;

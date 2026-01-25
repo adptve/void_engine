@@ -13,6 +13,7 @@
 #include <memory>
 #include <functional>
 #include <optional>
+#include <algorithm>
 
 namespace void_render {
 
@@ -64,20 +65,20 @@ enum class PassFlags : std::uint32_t {
 };
 
 /// Bitwise operators for PassFlags
-inline PassFlags operator|(PassFlags a, PassFlags b) {
+[[nodiscard]] constexpr PassFlags operator|(PassFlags a, PassFlags b) noexcept {
     return static_cast<PassFlags>(static_cast<std::uint32_t>(a) | static_cast<std::uint32_t>(b));
 }
 
-inline PassFlags operator&(PassFlags a, PassFlags b) {
+[[nodiscard]] constexpr PassFlags operator&(PassFlags a, PassFlags b) noexcept {
     return static_cast<PassFlags>(static_cast<std::uint32_t>(a) & static_cast<std::uint32_t>(b));
 }
 
-inline PassFlags& operator|=(PassFlags& a, PassFlags b) {
+constexpr PassFlags& operator|=(PassFlags& a, PassFlags b) noexcept {
     a = a | b;
     return a;
 }
 
-inline bool has_flag(PassFlags flags, PassFlags flag) {
+[[nodiscard]] constexpr bool has_flag(PassFlags flags, PassFlags flag) noexcept {
     return (static_cast<std::uint32_t>(flags) & static_cast<std::uint32_t>(flag)) != 0;
 }
 
@@ -175,7 +176,7 @@ struct PassAttachment {
         att.format = format;
         att.load_op = load;
         att.store_op = store;
-        att.clear_value = ClearValue::color(0, 0, 0, 1);
+        att.clear_value = ClearValue::with_color(0, 0, 0, 1);
         return att;
     }
 
@@ -191,7 +192,7 @@ struct PassAttachment {
         att.format = format;
         att.load_op = load;
         att.store_op = store;
-        att.clear_value = ClearValue::depth(0.0f);  // Reverse-Z: 0 is far
+        att.clear_value = ClearValue::depth_value(0.0f);  // Reverse-Z: 0 is far
         return att;
     }
 
@@ -206,7 +207,7 @@ struct PassAttachment {
         att.format = TextureFormat::Depth24PlusStencil8;
         att.load_op = load;
         att.store_op = store;
-        att.clear_value = ClearValue::depth_stencil(0.0f, 0);
+        att.clear_value = ClearValue::depth_stencil_value(0.0f, 0);
         return att;
     }
 };
@@ -687,7 +688,7 @@ namespace builtin_passes {
     desc.color_attachments = {
         PassAttachment::color("hdr_color", TextureFormat::Rgba16Float, LoadOp::Load),
     };
-    desc.depth_attachment = PassAttachment::depth("scene_depth", TextureFormat::Depth32Float, LoadOp::Load, StoreOp::DontCare);
+    desc.depth_attachment = PassAttachment::depth("scene_depth", TextureFormat::Depth32Float, LoadOp::Load, StoreOp::Discard);
     return desc;
 }
 
@@ -702,7 +703,7 @@ namespace builtin_passes {
     desc.color_attachments = {
         PassAttachment::color("hdr_color", TextureFormat::Rgba16Float, LoadOp::Load),
     };
-    desc.depth_attachment = PassAttachment::depth("scene_depth", TextureFormat::Depth32Float, LoadOp::Load, StoreOp::DontCare);
+    desc.depth_attachment = PassAttachment::depth("scene_depth", TextureFormat::Depth32Float, LoadOp::Load, StoreOp::Discard);
     return desc;
 }
 

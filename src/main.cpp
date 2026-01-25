@@ -2,11 +2,15 @@
 /// @brief void_runtime entry point - loads and runs void_engine projects
 ///
 /// This is the main runtime that loads manifest.toml, parses scene.toml,
-/// and renders using the SceneRenderer with full ECS, asset, and hot-reload support.
+/// and renders using the SceneRenderer with full ECS, asset, physics, services, presenter, and hot-reload support.
 ///
 /// Architecture:
+/// - ServiceRegistry: Manages engine service lifecycles with health monitoring
+/// - EventBus: Inter-system communication via publish/subscribe
+/// - FrameTiming: Frame pacing, delta time tracking, and performance statistics
 /// - ECS World: Authoritative source of scene entities
 /// - AssetServer: Loads textures, models, shaders with 3-tier cache
+/// - PhysicsWorld: Simulates rigidbody dynamics, collision detection, raycasting
 /// - LiveSceneManager: Loads scenes into ECS with hot-reload
 /// - SceneRenderer: Renders entities (synced from ECS via callbacks)
 /// - AnimationSystem: Updates ECS entity transforms each frame
@@ -19,7 +23,12 @@
 #include <void_engine/asset/server.hpp>
 #include <void_engine/asset/loaders/texture_loader.hpp>
 #include <void_engine/asset/loaders/model_loader.hpp>
+#include <void_engine/physics/physics.hpp>
+#include <void_engine/services/services.hpp>
+#include <void_engine/presenter/timing.hpp>
+#include <void_engine/presenter/frame.hpp>
 #include <void_engine/core/hot_reload.hpp>
+#include <void_engine/compositor/compositor_module.hpp>
 
 #include <GLFW/glfw3.h>
 #include <spdlog/spdlog.h>
@@ -383,6 +392,55 @@ int main(int argc, char** argv) {
     }
 
     // ==========================================================================
+    // Service Registry & Event Bus - Engine lifecycle management
+    // ==========================================================================
+    spdlog::info("Initializing Service Registry and Event Bus...");
+
+    // Create the central event bus for inter-system communication
+    void_services::EventBus event_bus;
+
+    // Create service registry for lifecycle management
+    void_services::ServiceRegistry service_registry;
+
+    // Subscribe to service lifecycle events for logging
+    service_registry.on_event([](const void_services::ServiceEvent& event) {
+        switch (event.type) {
+            case void_services::ServiceEventType::Started:
+                spdlog::info("Service started: {}", event.service_id.name);
+                break;
+            case void_services::ServiceEventType::Stopped:
+                spdlog::info("Service stopped: {}", event.service_id.name);
+                break;
+            case void_services::ServiceEventType::Failed:
+                spdlog::error("Service failed: {} - {}", event.service_id.name, event.message);
+                break;
+            case void_services::ServiceEventType::HealthChanged:
+                spdlog::debug("Service health changed: {}", event.service_id.name);
+                break;
+            default:
+                break;
+        }
+    });
+
+    // Define engine events for the event bus
+    struct FrameStartEvent { float delta_time; };
+    struct FrameEndEvent { int frame_number; };
+    struct SceneLoadedEvent { std::string scene_path; std::size_t entity_count; };
+    struct AssetLoadedEvent { std::string asset_path; };
+
+    // Subscribe to engine events for debugging/extension
+    event_bus.subscribe<SceneLoadedEvent>([](const SceneLoadedEvent& e) {
+        spdlog::debug("EventBus: Scene loaded - {} ({} entities)", e.scene_path, e.entity_count);
+    });
+
+    event_bus.subscribe<AssetLoadedEvent>([](const AssetLoadedEvent& e) {
+        spdlog::debug("EventBus: Asset loaded - {}", e.asset_path);
+    });
+
+    spdlog::info("Service Registry initialized");
+    spdlog::info("Event Bus initialized with engine event types");
+
+    // ==========================================================================
     // Asset Server - 3-tier cache with hot-reload
     // ==========================================================================
     spdlog::info("Initializing Asset Server...");
@@ -435,6 +493,40 @@ int main(int argc, char** argv) {
     });
 
     // ==========================================================================
+    // Physics World - Rigidbody dynamics and collision detection
+    // ==========================================================================
+    spdlog::info("Initializing Physics World...");
+
+    // Build physics world with sensible defaults and hot-reload enabled
+    auto physics_world = void_physics::PhysicsWorldBuilder()
+        .gravity(0.0f, -9.81f, 0.0f)
+        .fixed_timestep(1.0f / 60.0f)
+        .max_substeps(4)
+        .max_bodies(10000)
+        .enable_ccd(true)
+        .hot_reload(true)
+        .debug_rendering(false)
+        .build();
+
+    // Set up collision callbacks for debugging/game logic
+    physics_world->on_collision_begin([](const void_physics::CollisionEvent& event) {
+        spdlog::debug("Collision begin: body {} <-> body {}",
+                      event.body_a.value, event.body_b.value);
+    });
+
+    physics_world->on_trigger_enter([](const void_physics::TriggerEvent& event) {
+        spdlog::debug("Trigger enter: {} entered trigger {}",
+                      event.other_body.value, event.trigger_body.value);
+    });
+
+    spdlog::info("Physics World initialized:");
+    spdlog::info("  - Gravity: (0, -9.81, 0)");
+    spdlog::info("  - Fixed timestep: 60 Hz");
+    spdlog::info("  - Max bodies: 10000");
+    spdlog::info("  - CCD: enabled");
+    spdlog::info("  - Hot-reload: enabled");
+
+    // ==========================================================================
     // Load Initial Scene
     // ==========================================================================
     if (!config.scene_file.empty()) {
@@ -450,6 +542,9 @@ int main(int argc, char** argv) {
         }
 
         spdlog::info("Scene loaded into ECS - {} entities active", ecs_world.entity_count());
+
+        // Publish scene loaded event through event bus
+        event_bus.publish(SceneLoadedEvent{scene_path.string(), ecs_world.entity_count()});
     } else {
         spdlog::error("No scene file specified in manifest");
         glfwDestroyWindow(window);
@@ -461,26 +556,82 @@ int main(int argc, char** argv) {
     renderer.set_shader_hot_reload(true);
     live_scene_mgr.set_hot_reload_enabled(true);
 
+    // Start health monitoring for registered services
+    service_registry.start_health_monitor();
+
+    // ==========================================================================
+    // Frame Timing - Presenter's frame pacing and statistics
+    // ==========================================================================
+    spdlog::info("Initializing Frame Timing...");
+
+    // Create frame timing with 60 FPS target (VSync handles actual pacing via glfwSwapInterval)
+    void_presenter::FrameTiming frame_timing(60);
+
+    spdlog::info("Frame Timing initialized:");
+    spdlog::info("  - Target FPS: {}", 60);
+    spdlog::info("  - History size: 120 frames");
+
+    // ==========================================================================
+    // Compositor - Post-processing and final output
+    // ==========================================================================
+    spdlog::info("Initializing Compositor...");
+
+    void_compositor::CompositorConfig compositor_config;
+    compositor_config.target_fps = 60;
+    compositor_config.vsync = true;
+    compositor_config.enable_vrr = false;
+    compositor_config.enable_hdr = false;  // Start with SDR
+    compositor_config.preferred_format = void_compositor::RenderFormat::Bgra8UnormSrgb;
+
+    auto compositor = void_compositor::CompositorFactory::create(compositor_config);
+    if (!compositor) {
+        spdlog::warn("Compositor creation failed, using null compositor");
+        compositor = void_compositor::CompositorFactory::create_null(compositor_config);
+    }
+
+    spdlog::info("Compositor initialized:");
+    spdlog::info("  - Backend: {}", void_compositor::CompositorFactory::backend_name());
+    spdlog::info("  - HDR: {}", compositor_config.enable_hdr ? "ON" : "OFF");
+    spdlog::info("  - VRR: {}", compositor_config.enable_vrr ? "ON" : "OFF");
+    spdlog::info("  - Target FPS: {}", compositor_config.target_fps);
+
     spdlog::info("=== void_engine Runtime Started ===");
     spdlog::info("Systems active:");
+    spdlog::info("  - Service Registry: health monitoring ON");
+    spdlog::info("  - Event Bus: inter-system messaging ON");
+    spdlog::info("  - Frame Timing: 60 FPS target, statistics ON");
     spdlog::info("  - ECS World: {} entity capacity", 1024);
+    spdlog::info("  - Physics World: {} body capacity", 10000);
     spdlog::info("  - Asset Server: hot-reload {}", asset_config.hot_reload ? "ON" : "OFF");
     spdlog::info("  - Scene Manager: {}", config.scene_file);
     spdlog::info("  - Renderer: shader hot-reload ON");
+    spdlog::info("  - Compositor: {}, HDR={}, VRR={}",
+                 void_compositor::CompositorFactory::backend_name(),
+                 compositor_config.enable_hdr ? "ON" : "OFF",
+                 compositor_config.enable_vrr ? "ON" : "OFF");
     spdlog::info("Controls: Left-drag=orbit, Middle-drag=pan, Scroll=zoom, R=reload shaders, ESC=quit");
 
     // Main loop
     int frame_count = 0;
     auto last_fps_time = std::chrono::steady_clock::now();
-    auto last_frame_time = last_fps_time;
     float hot_reload_timer = 0.0f;
 
     while (!glfwWindowShouldClose(window)) {
-        auto now = std::chrono::steady_clock::now();
-        float delta_time = std::chrono::duration<float>(now - last_frame_time).count();
-        last_frame_time = now;
+        // Use FrameTiming for accurate delta time tracking and statistics
+        auto now = frame_timing.begin_frame();
+        float delta_time = frame_timing.delta_time();
 
         glfwPollEvents();
+
+        // =======================================================================
+        // Service & Event Bus Update Phase
+        // =======================================================================
+
+        // Publish frame start event for subscribers
+        event_bus.publish(FrameStartEvent{delta_time});
+
+        // Process any queued events
+        event_bus.process();
 
         // =======================================================================
         // Asset Server Update Phase
@@ -490,25 +641,47 @@ int main(int argc, char** argv) {
         asset_server.process();
 
         // Handle asset events (loaded, failed, reloaded)
-        for (const auto& event : asset_server.drain_events()) {
-            switch (event.type) {
+        for (const auto& asset_event : asset_server.drain_events()) {
+            switch (asset_event.type) {
                 case void_asset::AssetEventType::Loaded:
-                    spdlog::debug("Asset loaded: {}", event.path.str());
+                    spdlog::debug("Asset loaded: {}", asset_event.path.str());
+                    // Publish through event bus for any subscribers
+                    event_bus.publish(AssetLoadedEvent{asset_event.path.str()});
                     break;
                 case void_asset::AssetEventType::Failed:
-                    spdlog::warn("Asset failed: {} - {}", event.path.str(), event.error);
+                    spdlog::warn("Asset failed: {} - {}", asset_event.path.str(), asset_event.error);
                     break;
                 case void_asset::AssetEventType::Reloaded:
-                    spdlog::info("Asset hot-reloaded: {}", event.path.str());
+                    spdlog::info("Asset hot-reloaded: {}", asset_event.path.str());
+                    event_bus.publish(AssetLoadedEvent{asset_event.path.str()});
                     break;
                 case void_asset::AssetEventType::Unloaded:
-                    spdlog::debug("Asset unloaded: {}", event.path.str());
+                    spdlog::debug("Asset unloaded: {}", asset_event.path.str());
                     break;
                 case void_asset::AssetEventType::FileChanged:
-                    spdlog::debug("Asset file changed: {}", event.path.str());
+                    spdlog::debug("Asset file changed: {}", asset_event.path.str());
                     break;
             }
         }
+
+        // =======================================================================
+        // Physics Update Phase
+        // =======================================================================
+
+        // Step physics simulation (uses fixed timestep internally with accumulator)
+        physics_world->step(delta_time);
+
+        // TODO: Sync physics transforms back to ECS entities
+        // When we add RigidbodyComponent to ECS, we'll iterate physics bodies
+        // and update their corresponding TransformComponents here.
+        // Example:
+        // physics_world->for_each_body([&ecs_world](const void_physics::IRigidbody& body) {
+        //     auto entity_id = body.user_id();
+        //     if (auto* transform = ecs_world.get_component<TransformComponent>(entity_id)) {
+        //         transform->position = body.position();
+        //         transform->rotation = body.rotation();
+        //     }
+        // });
 
         // =======================================================================
         // ECS Update Phase
@@ -534,17 +707,53 @@ int main(int argc, char** argv) {
         // Render the scene
         renderer.render();
 
+        // =======================================================================
+        // Compositor Post-Processing Phase
+        // =======================================================================
+
+        // Dispatch compositor events (VRR timing, input, etc.)
+        compositor->dispatch();
+
+        // Begin compositor frame if we should render
+        if (compositor->should_render()) {
+            auto render_target = compositor->begin_frame();
+            if (render_target) {
+                // In a full GPU pipeline, post-processing would happen here
+                // For now, we just end the frame
+                compositor->end_frame(std::move(render_target));
+            }
+        }
+
+        // Update content velocity for VRR adaptation
+        compositor->update_content_velocity(0.5f);  // Mid-velocity for typical 3D scene
+
         glfwSwapBuffers(window);
 
-        // FPS counter with ECS and Asset stats
+        // Publish frame end event
+        event_bus.publish(FrameEndEvent{frame_count});
+
+        // FPS counter with ECS, Physics, Services, Presenter, and Asset stats
         frame_count++;
         auto fps_elapsed = std::chrono::duration<double>(now - last_fps_time).count();
         if (fps_elapsed >= 1.0) {
-            auto& stats = renderer.stats();
-            spdlog::info("FPS: {} | Draws: {} | Tris: {} | ECS: {} | Assets: {}/{}",
-                         frame_count, stats.draw_calls, stats.triangles,
+            auto& render_stats = renderer.stats();
+            auto physics_stats = physics_world->stats();
+            auto service_stats = service_registry.stats();
+            auto event_stats = event_bus.stats();
+
+            // Use frame_timing for accurate FPS reporting
+            double avg_fps = frame_timing.average_fps();
+            float frame_ms = std::chrono::duration<float, std::milli>(
+                frame_timing.average_frame_duration()).count();
+
+            auto& compositor_scheduler = compositor->frame_scheduler();
+            spdlog::info("FPS: {:.1f} ({:.2f}ms) | Draws: {} | Tris: {} | ECS: {} | Physics: {}/{} | Assets: {} | Comp: {:.1f}fps",
+                         avg_fps, frame_ms,
+                         render_stats.draw_calls, render_stats.triangles,
                          ecs_world.entity_count(),
-                         asset_server.loaded_count(), asset_server.total_count());
+                         physics_stats.active_bodies, physics_world->body_count(),
+                         asset_server.loaded_count(),
+                         compositor_scheduler.current_fps());
             frame_count = 0;
             last_fps_time = now;
 
@@ -553,19 +762,72 @@ int main(int argc, char** argv) {
             if (gc_count > 0) {
                 spdlog::debug("Asset GC: {} unreferenced assets cleaned", gc_count);
             }
+
+            // Log service health if any services are degraded
+            if (service_stats.degraded_services > 0 || service_stats.failed_services > 0) {
+                spdlog::warn("Services: {} running, {} degraded, {} failed",
+                             service_stats.running_services,
+                             service_stats.degraded_services,
+                             service_stats.failed_services);
+            }
+
+            // Log event bus throughput
+            if (event_stats.events_processed > 0) {
+                spdlog::debug("Events: {} processed, {} subscriptions",
+                              event_stats.events_processed, event_stats.active_subscriptions);
+            }
         }
     }
 
     spdlog::info("Shutting down...");
 
+    // Log final frame timing statistics
+    spdlog::info("Frame Timing final stats: {} total frames, {:.1f} avg FPS, {:.2f}ms avg frame time",
+                 frame_timing.frame_count(),
+                 frame_timing.average_fps(),
+                 std::chrono::duration<float, std::milli>(frame_timing.average_frame_duration()).count());
+
     // Shutdown in reverse order of initialization
+
+    // Stop service health monitoring first
+    service_registry.stop_health_monitor();
+    spdlog::info("Service health monitor stopped");
+
+    // Stop all registered services
+    service_registry.stop_all();
+    auto final_service_stats = service_registry.stats();
+    spdlog::info("Services stopped: {} total, {} restarts during session",
+                 final_service_stats.total_services, final_service_stats.total_restarts);
+
+    // Log final event bus statistics
+    auto final_event_stats = event_bus.stats();
+    spdlog::info("Event Bus final stats: {} published, {} processed, {} dropped",
+                 final_event_stats.events_published,
+                 final_event_stats.events_processed,
+                 final_event_stats.events_dropped);
+
     live_scene_mgr.shutdown();       // Unload all scenes, destroy ECS entities
     ecs_world.clear();               // Clear any remaining ECS state
+
+    // Log final physics statistics
+    auto final_physics_stats = physics_world->stats();
+    spdlog::info("Physics World final stats: {} bodies, {} active, {} sleeping",
+                 physics_world->body_count(),
+                 final_physics_stats.active_bodies,
+                 final_physics_stats.sleeping_bodies);
+    physics_world->clear();          // Destroy all physics bodies and joints
+
     asset_server.collect_garbage();  // Clean up unreferenced assets
 
     // Log final asset statistics
     spdlog::info("Asset Server final stats: {} loaded, {} pending",
                  asset_server.loaded_count(), asset_server.pending_count());
+
+    // Shutdown compositor
+    spdlog::info("Compositor final stats: {} frames, {:.1f} avg FPS",
+                 compositor->frame_number(),
+                 compositor->frame_scheduler().current_fps());
+    compositor->shutdown();
 
     g_renderer = nullptr;
     renderer.shutdown();

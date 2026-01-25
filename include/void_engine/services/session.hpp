@@ -40,8 +40,21 @@ struct SessionId {
     [[nodiscard]] bool is_valid() const { return id != 0; }
 
     bool operator==(const SessionId& other) const { return id == other.id; }
+    bool operator!=(const SessionId& other) const { return id != other.id; }
     bool operator<(const SessionId& other) const { return id < other.id; }
 };
+
+} // namespace void_services
+
+// Hash specialization must be defined before first use in unordered_map
+template<>
+struct std::hash<void_services::SessionId> {
+    std::size_t operator()(const void_services::SessionId& id) const noexcept {
+        return std::hash<std::uint64_t>{}(id.id);
+    }
+};
+
+namespace void_services {
 
 // =============================================================================
 // Session State
@@ -697,11 +710,3 @@ private:
 };
 
 } // namespace void_services
-
-// Hash specialization
-template<>
-struct std::hash<void_services::SessionId> {
-    std::size_t operator()(const void_services::SessionId& id) const noexcept {
-        return std::hash<std::uint64_t>{}(id.id);
-    }
-};

@@ -6,12 +6,20 @@
 # - Input handling (keyboard, mouse, touch)
 # - Multi-display output management
 # - Platform-specific compositor backends
+# - Post-processing and final output composition
 #
 void_add_module(NAME void_compositor
     SOURCES
         stub.cpp
         compositor.cpp
+        compositor_module.cpp
         layer_compositor.cpp
+        frame.cpp
+        hdr.cpp
+        vrr.cpp
+        output.cpp
+        input.cpp
+        rehydration.cpp
     DEPENDENCIES
         void_core
         void_render

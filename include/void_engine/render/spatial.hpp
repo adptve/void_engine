@@ -13,6 +13,7 @@
 #include <limits>
 #include <algorithm>
 #include <cmath>
+#include <cfloat>
 #include <functional>
 
 namespace void_render {

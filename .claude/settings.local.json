@@ -101,7 +101,11 @@
       "Bash(C:/msys64/msys2_shell.cmd -mingw64 -defterm -no-start -c \"cd /c/code/github/time3cap/void_engine && g++ -c -std=c++20 -I./include -I./build/_deps/glm-src -I./build/_deps/spdlog-src/include src/ecs/stub.cpp -o build/test_manual.obj 2>&1\")",
       "Bash(C:/msys64/msys2_shell.cmd -mingw64 -defterm -no-start -c \"cd /c/code/github/time3cap/void_engine/build && ninja void_ecs 2>&1\")",
       "Bash(C:/msys64/msys2_shell.cmd -mingw64 -defterm -no-start -c \"cd /c/code/github/time3cap/void_engine/build && ninja -j4 2>&1\")",
-      "Bash(C:/msys64/msys2_shell.cmd -mingw64 -defterm -no-start -c \"cd /c/code/github/time3cap/void_engine/build && ninja void_scene 2>&1\")"
+      "Bash(C:/msys64/msys2_shell.cmd -mingw64 -defterm -no-start -c \"cd /c/code/github/time3cap/void_engine/build && ninja void_scene 2>&1\")",
+      "Bash(C:/msys64/msys2_shell.cmd -mingw64 -defterm -no-start -c \"cd /c/code/github/time3cap/void_engine && cmake --build build 2>&1\")",
+      "Bash(test:*)",
+      "Bash(xargs:*)",
+      "Bash(git checkout:*)"
     ]
   }
 }

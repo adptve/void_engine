@@ -97,15 +97,15 @@ enum class LayerFlags : std::uint32_t {
     Culled          = 1 << 10,  // Frustum culled
 };
 
-inline LayerFlags operator|(LayerFlags a, LayerFlags b) {
+[[nodiscard]] constexpr LayerFlags operator|(LayerFlags a, LayerFlags b) noexcept {
     return static_cast<LayerFlags>(static_cast<std::uint32_t>(a) | static_cast<std::uint32_t>(b));
 }
 
-inline LayerFlags operator&(LayerFlags a, LayerFlags b) {
+[[nodiscard]] constexpr LayerFlags operator&(LayerFlags a, LayerFlags b) noexcept {
     return static_cast<LayerFlags>(static_cast<std::uint32_t>(a) & static_cast<std::uint32_t>(b));
 }
 
-inline bool has_flag(LayerFlags flags, LayerFlags flag) {
+[[nodiscard]] constexpr bool has_flag(LayerFlags flags, LayerFlags flag) noexcept {
     return (static_cast<std::uint32_t>(flags) & static_cast<std::uint32_t>(flag)) != 0;
 }
 
@@ -227,6 +227,13 @@ public:
 
     /// Get layer by ID
     [[nodiscard]] RenderLayer* get(LayerId id) {
+        auto it = m_id_to_index.find(id.value);
+        if (it == m_id_to_index.end()) return nullptr;
+        return &m_layers[it->second];
+    }
+
+    /// Get layer by ID (const)
+    [[nodiscard]] const RenderLayer* get(LayerId id) const {
         auto it = m_id_to_index.find(id.value);
         if (it == m_id_to_index.end()) return nullptr;
         return &m_layers[it->second];
