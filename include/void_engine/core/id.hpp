@@ -4,12 +4,14 @@
 /// @brief ID types and generators for void_core
 
 #include "fwd.hpp"
+#include "error.hpp"
 #include <cstdint>
 #include <string>
 #include <atomic>
 #include <functional>
 #include <compare>
 #include <ostream>
+#include <vector>
 
 namespace void_core {
 
@@ -211,6 +213,85 @@ inline std::ostream& operator<<(std::ostream& os, const Id& id) {
 inline std::ostream& operator<<(std::ostream& os, const NamedId& id) {
     return os << "NamedId(\"" << id.name << "\")";
 }
+
+// =============================================================================
+// Global ID Generators (Implemented in id.cpp)
+// =============================================================================
+
+/// Get the global entity ID generator
+IdGenerator& entity_id_generator();
+
+/// Get the global resource ID generator
+IdGenerator& resource_id_generator();
+
+/// Get the global component ID generator
+IdGenerator& component_id_generator();
+
+/// Get the global system ID generator
+IdGenerator& system_id_generator();
+
+/// Generate a new entity ID
+Id next_entity_id();
+
+/// Generate a new resource ID
+Id next_resource_id();
+
+/// Generate a new component ID
+Id next_component_id();
+
+/// Generate a new system ID
+Id next_system_id();
+
+/// Reset all global ID generators (DANGEROUS - only for testing/shutdown)
+void reset_all_id_generators();
+
+// =============================================================================
+// ID Serialization (Implemented in id.cpp)
+// =============================================================================
+
+namespace serialization {
+
+/// Serialize an Id to binary
+std::vector<std::uint8_t> serialize_id(Id id);
+
+/// Deserialize an Id from binary
+Result<Id> deserialize_id(const std::vector<std::uint8_t>& data);
+
+/// Serialize a NamedId to binary
+std::vector<std::uint8_t> serialize_named_id(const NamedId& id);
+
+/// Deserialize a NamedId from binary
+Result<NamedId> deserialize_named_id(const std::vector<std::uint8_t>& data);
+
+} // namespace serialization
+
+// =============================================================================
+// Debug Utilities (Implemented in id.cpp)
+// =============================================================================
+
+namespace debug {
+
+/// Format an ID for debugging
+std::string format_id(Id id);
+
+/// Format a NamedId for debugging
+std::string format_named_id(const NamedId& id);
+
+/// Get generator statistics as formatted string
+std::string format_generator_stats();
+
+} // namespace debug
+
+// =============================================================================
+// Hash Verification (Implemented in id.cpp)
+// =============================================================================
+
+namespace hash {
+
+/// Verify FNV-1a hash implementation against known test vectors
+bool verify_fnv1a_implementation();
+
+} // namespace hash
 
 } // namespace void_core
 

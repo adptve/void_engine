@@ -462,4 +462,86 @@ private:
     std::map<std::type_index, Constructor> m_constructors;
 };
 
+// =============================================================================
+// Global Type Registry (Implemented in type_registry.cpp)
+// =============================================================================
+
+/// Get the global type registry
+TypeRegistry& global_type_registry();
+
+/// Thread-safe type registration
+template<typename T>
+void register_global_type();
+
+/// Thread-safe type registration with name
+template<typename T>
+void register_global_type_with_name(const std::string& name);
+
+/// Register all built-in primitive types
+void register_builtin_types();
+
+/// Check if built-in types are registered
+bool are_builtins_registered();
+
+// =============================================================================
+// Type Schema Builders (Implemented in type_registry.cpp)
+// =============================================================================
+
+namespace schema {
+
+/// Build schema for primitive types
+TypeSchema build_primitive_schema(PrimitiveType type);
+
+/// Create an array schema
+TypeSchema array_of(const TypeSchema& element);
+
+/// Create an optional schema
+TypeSchema optional_of(const TypeSchema& inner);
+
+/// Create a map schema
+TypeSchema map_of(const TypeSchema& key, const TypeSchema& value);
+
+} // namespace schema
+
+// =============================================================================
+// Type Serialization (Implemented in type_registry.cpp)
+// =============================================================================
+
+namespace serialization {
+
+/// Serialize TypeInfo to binary (metadata only)
+std::vector<std::uint8_t> serialize_type_info(const TypeInfo& info);
+
+/// Deserialize TypeInfo from binary
+Result<TypeInfo> deserialize_type_info(const std::vector<std::uint8_t>& data);
+
+} // namespace serialization
+
+// =============================================================================
+// Hot-Reload Support (Implemented in type_registry.cpp)
+// =============================================================================
+
+/// Snapshot the type registry for hot-reload
+std::vector<std::uint8_t> snapshot_type_registry();
+
+/// Verify type registry compatibility after hot-reload
+Result<void> verify_type_registry_compatibility(const std::vector<std::uint8_t>& snapshot);
+
+// =============================================================================
+// Debug Utilities (Implemented in type_registry.cpp)
+// =============================================================================
+
+namespace debug {
+
+/// Format TypeInfo for debugging
+std::string format_type_info(const TypeInfo& info);
+
+/// Format TypeSchema for debugging
+std::string format_type_schema(const TypeSchema& schema, int indent = 0);
+
+/// Dump all registered types
+std::string dump_type_registry();
+
+} // namespace debug
+
 } // namespace void_core

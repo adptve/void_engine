@@ -392,6 +392,78 @@ std::ostream& operator<<(std::ostream& os, const Handle<T>& h) {
     return os << "Handle<T>(" << h.index() << "v" << static_cast<int>(h.generation()) << ")";
 }
 
+// =============================================================================
+// Handle Pool Statistics (Implemented in handle.cpp)
+// =============================================================================
+
+/// Statistics for a handle allocator
+struct HandlePoolStats {
+    std::size_t total_allocated = 0;      // Total slots ever allocated
+    std::size_t active_count = 0;         // Currently active handles
+    std::size_t free_count = 0;           // Handles in free list
+    std::size_t peak_active = 0;          // Peak concurrent active handles
+    float fragmentation_ratio = 0.0f;     // free_count / total_allocated
+};
+
+/// Compute statistics for a handle allocator
+template<typename T>
+HandlePoolStats compute_pool_stats(const HandleAllocator<T>& allocator);
+
+// =============================================================================
+// Handle Serialization (Implemented in handle.cpp)
+// =============================================================================
+
+namespace serialization {
+
+/// Serialize a handle to binary
+template<typename T>
+std::vector<std::uint8_t> serialize_handle(Handle<T> handle);
+
+/// Deserialize a handle from binary
+template<typename T>
+Result<Handle<T>> deserialize_handle(const std::vector<std::uint8_t>& data);
+
+} // namespace serialization
+
+// =============================================================================
+// Handle Compaction (Implemented in handle.cpp)
+// =============================================================================
+
+/// Compaction result for handle allocators
+struct CompactionResult {
+    std::size_t handles_moved = 0;
+    std::size_t bytes_saved = 0;
+    bool success = false;
+};
+
+/// Compact a HandleMap by removing gaps in storage
+/// NOTE: This invalidates all handles! Only use during controlled shutdown/reload.
+template<typename T>
+CompactionResult compact_handle_map(HandleMap<T>& map);
+
+// =============================================================================
+// Debug Utilities (Implemented in handle.cpp)
+// =============================================================================
+
+namespace debug {
+
+/// Format a raw handle value for debugging
+std::string format_handle_bits(std::uint32_t bits);
+
+/// Handle validation result
+struct HandleValidation {
+    bool is_valid = false;
+    bool index_in_range = false;
+    bool generation_matches = false;
+    std::string error_message;
+};
+
+/// Validate a handle against allocator state
+template<typename T>
+HandleValidation validate_handle(Handle<T> handle, const HandleAllocator<T>& allocator);
+
+} // namespace debug
+
 } // namespace void_core
 
 /// Hash specialization for Handle

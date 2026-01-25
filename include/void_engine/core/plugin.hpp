@@ -556,6 +556,106 @@ private:
         return ::void_core::Version{MajorVer, MinorVer, PatchVer}; \
     }
 
+// =============================================================================
+// Plugin State Serialization (Implemented in plugin.cpp)
+// =============================================================================
+
+namespace serialization {
+
+/// Serialize a PluginState to binary
+std::vector<std::uint8_t> serialize_plugin_state(const PluginState& state);
+
+/// Deserialize a PluginState from binary
+Result<PluginState> deserialize_plugin_state(const std::vector<std::uint8_t>& data);
+
+} // namespace serialization
+
+// =============================================================================
+// Plugin Dependency Resolution (Implemented in plugin.cpp)
+// =============================================================================
+
+/// Topologically sort plugins by dependencies
+Result<std::vector<PluginId>> resolve_load_order(
+    const std::vector<PluginId>& plugins,
+    const std::function<std::vector<PluginId>(const PluginId&)>& get_dependencies);
+
+/// Check if all dependencies are satisfied
+Result<void> check_dependencies(
+    const PluginId& plugin,
+    const std::vector<PluginId>& dependencies,
+    const std::function<bool(const PluginId&)>& is_loaded);
+
+// =============================================================================
+// Plugin Validation (Implemented in plugin.cpp)
+// =============================================================================
+
+/// Validate a plugin before registration
+Result<void> validate_plugin(const Plugin& plugin);
+
+/// Validate plugin state before restore
+Result<void> validate_plugin_state(const PluginState& state, const Plugin& plugin);
+
+// =============================================================================
+// Plugin Statistics (Implemented in plugin.cpp)
+// =============================================================================
+
+/// Plugin statistics
+struct PluginStatistics {
+    std::uint64_t total_loads = 0;
+    std::uint64_t total_unloads = 0;
+    std::uint64_t total_hot_reloads = 0;
+    std::uint64_t failed_loads = 0;
+    std::uint64_t failed_hot_reloads = 0;
+};
+
+/// Record a plugin load
+void record_plugin_load(bool success);
+
+/// Record a plugin unload
+void record_plugin_unload();
+
+/// Record a plugin hot-reload
+void record_plugin_hot_reload(bool success);
+
+/// Get plugin statistics
+PluginStatistics get_plugin_statistics();
+
+/// Reset plugin statistics
+void reset_plugin_statistics();
+
+/// Format plugin statistics
+std::string format_plugin_statistics();
+
+// =============================================================================
+// Global Plugin Registry (Implemented in plugin.cpp)
+// =============================================================================
+
+/// Get or create the global plugin registry
+PluginRegistry& global_plugin_registry();
+
+/// Shutdown the global plugin registry
+void shutdown_plugin_registry();
+
+// =============================================================================
+// Debug Utilities (Implemented in plugin.cpp)
+// =============================================================================
+
+namespace debug {
+
+/// Format a PluginId for debugging
+std::string format_plugin_id(const PluginId& id);
+
+/// Format a PluginInfo for debugging
+std::string format_plugin_info(const PluginInfo& info);
+
+/// Format PluginRegistry state for debugging
+std::string format_registry_state(const PluginRegistry& registry);
+
+/// Format a PluginState for debugging
+std::string format_plugin_state(const PluginState& state);
+
+} // namespace debug
+
 } // namespace void_core
 
 /// Hash specialization

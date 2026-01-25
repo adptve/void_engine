@@ -2,10 +2,14 @@
 void_add_module(NAME void_core
     SOURCES
         stub.cpp
-        # TODO: Add during migration:
-        # types.cpp
-        # handle.cpp
-        # result.cpp
+        error.cpp
+        handle.cpp
+        id.cpp
+        log.cpp
+        type_registry.cpp
+        hot_reload.cpp
+        plugin.cpp
+        version.cpp
     DEPENDENCIES
         void_math
         void_memory

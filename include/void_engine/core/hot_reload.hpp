@@ -787,4 +787,99 @@ private:
     std::chrono::milliseconds m_poll_interval{100};
 };
 
+// =============================================================================
+// Snapshot Serialization (Implemented in hot_reload.cpp)
+// =============================================================================
+
+namespace serialization {
+
+/// Serialize a HotReloadSnapshot to binary
+std::vector<std::uint8_t> serialize_snapshot(const HotReloadSnapshot& snapshot);
+
+/// Deserialize a HotReloadSnapshot from binary
+Result<HotReloadSnapshot> deserialize_snapshot(const std::vector<std::uint8_t>& data);
+
+} // namespace serialization
+
+// =============================================================================
+// Hot-Reload Validation (Implemented in hot_reload.cpp)
+// =============================================================================
+
+/// Validate a snapshot before restore
+Result<void> validate_snapshot_for_restore(
+    const HotReloadSnapshot& snapshot,
+    const HotReloadable& target);
+
+/// Compute a checksum for snapshot data
+std::uint32_t compute_snapshot_checksum(const HotReloadSnapshot& snapshot);
+
+// =============================================================================
+// Hot-Reload Statistics (Implemented in hot_reload.cpp)
+// =============================================================================
+
+/// Hot-reload statistics
+struct HotReloadStatistics {
+    std::uint64_t total_reloads = 0;
+    std::uint64_t successful_reloads = 0;
+    std::uint64_t failed_reloads = 0;
+    std::uint64_t total_snapshot_bytes = 0;
+    std::uint64_t total_restore_bytes = 0;
+};
+
+/// Record a successful reload
+void record_reload_success(std::size_t snapshot_bytes);
+
+/// Record a failed reload
+void record_reload_failure();
+
+/// Get hot-reload statistics
+HotReloadStatistics get_hot_reload_statistics();
+
+/// Reset hot-reload statistics
+void reset_hot_reload_statistics();
+
+/// Format hot-reload statistics
+std::string format_hot_reload_statistics();
+
+// =============================================================================
+// File Watcher Utilities (Implemented in hot_reload.cpp)
+// =============================================================================
+
+/// Filter reload events by file extension
+std::vector<ReloadEvent> filter_events_by_extension(
+    const std::vector<ReloadEvent>& events,
+    const std::vector<std::string>& extensions);
+
+/// Debounce reload events (remove duplicates within time window)
+std::vector<ReloadEvent> debounce_events(
+    const std::vector<ReloadEvent>& events,
+    std::chrono::milliseconds window);
+
+// =============================================================================
+// Global Hot-Reload System (Implemented in hot_reload.cpp)
+// =============================================================================
+
+/// Get or create the global hot-reload system
+HotReloadSystem& global_hot_reload_system();
+
+/// Shutdown the global hot-reload system
+void shutdown_hot_reload_system();
+
+// =============================================================================
+// Debug Utilities (Implemented in hot_reload.cpp)
+// =============================================================================
+
+namespace debug {
+
+/// Format a HotReloadSnapshot for debugging
+std::string format_snapshot(const HotReloadSnapshot& snapshot);
+
+/// Format a ReloadEvent for debugging
+std::string format_reload_event(const ReloadEvent& event);
+
+/// Format HotReloadManager state for debugging
+std::string format_manager_state(const HotReloadManager& manager);
+
+} // namespace debug
+
 } // namespace void_core

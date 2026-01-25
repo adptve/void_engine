@@ -4,11 +4,13 @@
 /// @brief Semantic versioning for void_core
 
 #include "fwd.hpp"
+#include "error.hpp"
 #include <cstdint>
 #include <string>
 #include <sstream>
 #include <optional>
 #include <compare>
+#include <vector>
 
 namespace void_core {
 
@@ -128,6 +130,106 @@ struct Version {
 inline std::ostream& operator<<(std::ostream& os, const Version& v) {
     return os << v.major << '.' << v.minor << '.' << v.patch;
 }
+
+// =============================================================================
+// Module Version (Implemented in version.cpp)
+// =============================================================================
+
+/// Get the void_core module version
+Version void_core_version();
+
+// =============================================================================
+// Extended Version Parsing (Implemented in version.cpp)
+// =============================================================================
+
+/// Parse version with optional prerelease/build metadata
+Result<Version> parse_version_extended(const std::string& str);
+
+/// Version range for dependency constraints
+struct VersionRange {
+    Version min_version;
+    Version max_version;
+    bool min_inclusive = true;
+    bool max_inclusive = false;
+    bool has_min = false;
+    bool has_max = false;
+
+    /// Check if a version is within this range
+    [[nodiscard]] bool contains(const Version& v) const;
+};
+
+/// Parse a version range string (e.g., ">=1.0.0,<2.0.0")
+Result<VersionRange> parse_version_range(const std::string& str);
+
+// =============================================================================
+// Version Serialization (Implemented in version.cpp)
+// =============================================================================
+
+namespace serialization {
+
+/// Serialize a Version to binary
+std::vector<std::uint8_t> serialize_version(const Version& version);
+
+/// Deserialize a Version from binary
+Result<Version> deserialize_version(const std::vector<std::uint8_t>& data);
+
+} // namespace serialization
+
+// =============================================================================
+// Version Formatting (Implemented in version.cpp)
+// =============================================================================
+
+/// Format version with optional prefix
+std::string format_version(const Version& version, const std::string& prefix = "");
+
+/// Format version with "v" prefix
+std::string format_version_prefixed(const Version& version);
+
+// =============================================================================
+// Version Comparison (Implemented in version.cpp)
+// =============================================================================
+
+/// Detailed version comparison result
+struct VersionComparison {
+    int major_diff = 0;
+    int minor_diff = 0;
+    int patch_diff = 0;
+    bool is_major_change = false;
+    bool is_minor_change = false;
+    bool is_patch_change = false;
+    bool is_upgrade = false;
+    bool is_downgrade = false;
+    bool is_equal = false;
+};
+
+/// Compare two versions in detail
+VersionComparison compare_versions(const Version& from, const Version& to);
+
+/// Format version comparison as human-readable string
+std::string format_version_comparison(const Version& from, const Version& to);
+
+// =============================================================================
+// Build Information (Implemented in version.cpp)
+// =============================================================================
+
+namespace build {
+
+/// Build configuration
+struct BuildInfo {
+    const char* version;
+    const char* build_date;
+    const char* build_type;
+    const char* compiler;
+    const char* platform;
+};
+
+/// Get build information
+BuildInfo get_build_info();
+
+/// Format build information
+std::string format_build_info();
+
+} // namespace build
 
 } // namespace void_core
 

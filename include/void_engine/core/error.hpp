@@ -496,4 +496,27 @@ Result<T> Err(const std::string& message) {
     return Result<T>(Error(message));
 }
 
+// =============================================================================
+// Error Utilities (Implemented in error.cpp)
+// =============================================================================
+
+/// Build a full error message with context chain
+std::string build_error_chain(const Error& error);
+
+namespace debug {
+
+/// Record error occurrence (for statistics)
+void record_error(const Error& error);
+
+/// Get total error count
+std::uint64_t total_error_count();
+
+/// Reset error statistics
+void reset_error_stats();
+
+/// Get error statistics as formatted string
+std::string error_stats_summary();
+
+} // namespace debug
+
 } // namespace void_core
