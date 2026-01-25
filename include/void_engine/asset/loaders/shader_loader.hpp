@@ -257,6 +257,9 @@ public:
     }
 
 private:
+    std::string process_includes(const std::string& source,
+                                  const std::string& base_path,
+                                  int depth);
     std::optional<std::string> resolve_include(const std::string& include_path,
                                                 const std::string& base_path);
     std::optional<std::string> read_file(const std::string& path);

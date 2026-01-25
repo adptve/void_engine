@@ -4,6 +4,7 @@
 #include <void_engine/asset/loaders/shader_loader.hpp>
 
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <regex>
 #include <sstream>

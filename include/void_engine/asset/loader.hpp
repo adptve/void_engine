@@ -14,6 +14,7 @@
 #include <functional>
 #include <typeindex>
 #include <type_traits>
+#include <utility>
 
 namespace void_asset {
 
@@ -365,5 +366,61 @@ public:
         return "TextAsset";
     }
 };
+
+// =============================================================================
+// Loader Utilities (Implemented in loader.cpp)
+// =============================================================================
+
+/// Normalize extension (lowercase, no leading dot)
+std::string normalize_extension(const std::string& ext);
+
+/// Check if extension is supported by registry
+bool is_supported_extension(const LoaderRegistry& registry, const std::string& ext);
+
+/// Get all extensions for a type
+std::vector<std::string> get_extensions_for_type(const LoaderRegistry& registry, std::type_index type);
+
+/// Check if extension indicates binary content
+bool is_binary_extension(const std::string& ext);
+
+// =============================================================================
+// Loader Statistics (Implemented in loader.cpp)
+// =============================================================================
+
+/// Record a loader operation
+void record_loader_operation(bool success, std::size_t bytes = 0);
+
+/// Format loader statistics
+std::string format_loader_statistics();
+
+/// Reset loader statistics
+void reset_loader_statistics();
+
+// =============================================================================
+// MIME Type Utilities (Implemented in loader.cpp)
+// =============================================================================
+
+/// Convert extension to MIME type
+std::string extension_to_mime_type(const std::string& ext);
+
+/// Convert MIME type to extension
+std::string mime_type_to_extension(const std::string& mime);
+
+// =============================================================================
+// Debug Utilities (Implemented in loader.cpp)
+// =============================================================================
+
+namespace debug {
+
+/// Format LoadContext for debugging
+std::string format_load_context(const LoadContext& ctx);
+
+/// Format LoaderRegistry for debugging
+std::string format_loader_registry(const LoaderRegistry& registry);
+
+/// Format ErasedLoader for debugging
+std::string format_erased_loader(const ErasedLoader& loader);
+
+} // namespace debug
 
 } // namespace void_asset

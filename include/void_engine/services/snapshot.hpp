@@ -185,7 +185,7 @@ inline ServiceStateSnapshot deserialize_service_state(BinaryReader& reader) {
             auto health = service->health();
             sss.health_score = health.score;
             sss.restart_count = health.restart_count;
-            sss.last_error = health.last_error.value_or("");
+            sss.last_error = health.message;
 
             snapshot.services.push_back(std::move(sss));
         }
@@ -254,11 +254,7 @@ inline std::size_t restore_registry_snapshot(
     }
 
     // Restore enabled state
-    if (snapshot.enabled) {
-        registry.enable();
-    } else {
-        registry.disable();
-    }
+    registry.set_enabled(snapshot.enabled);
 
     // Match and restore service states by name
     std::size_t restored = 0;
@@ -271,12 +267,12 @@ inline std::size_t restore_registry_snapshot(
                 switch (sss.state) {
                     case ServiceState::Running:
                         if (service->state() != ServiceState::Running) {
-                            registry.start(id);
+                            registry.start_service(id);
                         }
                         break;
                     case ServiceState::Stopped:
                         if (service->state() == ServiceState::Running) {
-                            registry.stop(id);
+                            registry.stop_service(id);
                         }
                         break;
                     default:

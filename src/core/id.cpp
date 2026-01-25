@@ -8,9 +8,11 @@
 /// - ID serialization support
 
 #include <void_engine/core/id.hpp>
-#include <sstream>
+#include <cassert>
+#include <cstring>
 #include <iomanip>
 #include <mutex>
+#include <sstream>
 
 namespace void_core {
 

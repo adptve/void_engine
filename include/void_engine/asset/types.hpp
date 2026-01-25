@@ -372,6 +372,80 @@ struct AssetError {
     }
 };
 
+// =============================================================================
+// Path Utilities (Implemented in asset.cpp)
+// =============================================================================
+
+/// Normalize an asset path (convert backslashes, remove duplicates/trailing)
+std::string normalize_asset_path(const std::string& path);
+
+/// Get extension from path
+std::string get_asset_extension(const std::string& path);
+
+/// Get filename from path
+std::string get_asset_filename(const std::string& path);
+
+/// Get directory from path
+std::string get_asset_directory(const std::string& path);
+
+/// Join two paths
+std::string join_asset_paths(const std::string& base, const std::string& relative);
+
+// =============================================================================
+// Statistics (Implemented in asset.cpp)
+// =============================================================================
+
+/// Record an asset load
+void record_asset_load(bool success, std::size_t bytes = 0);
+
+/// Record an asset unload
+void record_asset_unload();
+
+/// Record an asset reload
+void record_asset_reload();
+
+/// Format asset statistics
+std::string format_asset_statistics();
+
+/// Reset asset statistics
+void reset_asset_statistics();
+
+// =============================================================================
+// Debug Utilities (Implemented in asset.cpp)
+// =============================================================================
+
+namespace debug {
+
+/// Format an AssetId for debugging
+std::string format_asset_id(AssetId id);
+
+/// Format an AssetPath for debugging
+std::string format_asset_path(const AssetPath& path);
+
+/// Format AssetMetadata for debugging
+std::string format_asset_metadata(const AssetMetadata& meta);
+
+/// Format AssetEvent for debugging
+std::string format_asset_event(const AssetEvent& event);
+
+/// Format LoadState for debugging
+std::string format_load_state(LoadState state);
+
+} // namespace debug
+
+// =============================================================================
+// Module Initialization (Implemented in asset.cpp)
+// =============================================================================
+
+/// Initialize the asset system
+bool init_asset_system();
+
+/// Shutdown the asset system
+void shutdown_asset_system();
+
+/// Check if asset system is initialized
+bool is_asset_system_initialized();
+
 } // namespace void_asset
 
 /// Hash specializations

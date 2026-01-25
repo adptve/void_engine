@@ -11,9 +11,10 @@
 #include <void_engine/core/type_registry.hpp>
 #include <void_engine/core/id.hpp>
 #include <void_engine/core/version.hpp>
+#include <cstring>
+#include <iomanip>
 #include <mutex>
 #include <sstream>
-#include <iomanip>
 
 namespace void_core {
 
@@ -192,7 +193,7 @@ std::string format_type_info(const TypeInfo& info) {
 }
 
 /// Format TypeSchema for debugging
-std::string format_type_schema(const TypeSchema& schema, int indent = 0) {
+std::string format_type_schema(const TypeSchema& schema, int indent) {
     std::string pad(indent * 2, ' ');
     std::ostringstream oss;
 

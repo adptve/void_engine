@@ -8,6 +8,9 @@
 #include <atomic>
 #include <memory>
 #include <functional>
+#include <mutex>
+#include <vector>
+#include <string>
 
 namespace void_asset {
 
@@ -464,5 +467,57 @@ private:
     std::string m_path;
     Handle<T> m_handle;
 };
+
+// =============================================================================
+// Handle Utilities (Implemented in handle.cpp)
+// =============================================================================
+
+/// Create handle data with initial state
+std::shared_ptr<HandleData> create_handle_data(AssetId id, LoadState initial_state = LoadState::NotLoaded);
+
+/// Check if state is terminal (Loaded or Failed)
+bool is_terminal_state(LoadState state);
+
+/// Check if state is loading (Loading or Reloading)
+bool is_loading_state(LoadState state);
+
+/// Check if state transition is valid
+bool can_transition_to(LoadState from, LoadState to);
+
+// =============================================================================
+// Handle Pool (Implemented in handle.cpp)
+// =============================================================================
+
+/// Acquire handle data from pool
+std::shared_ptr<HandleData> acquire_handle_data();
+
+/// Release handle data back to pool
+void release_handle_data(std::shared_ptr<HandleData> data);
+
+/// Get current pool size
+std::size_t handle_pool_size();
+
+/// Clear handle pool
+void clear_handle_pool();
+
+/// Set maximum pool size
+void set_handle_pool_max_size(std::size_t size);
+
+// =============================================================================
+// Debug Utilities (Implemented in handle.cpp)
+// =============================================================================
+
+namespace debug {
+
+/// Format handle data for debugging
+std::string format_handle_data(const HandleData& data);
+
+/// Format load state for debugging
+std::string format_load_state(LoadState state);
+
+/// Format untyped handle for debugging
+std::string format_untyped_handle(const UntypedHandle& handle);
+
+} // namespace debug
 
 } // namespace void_asset

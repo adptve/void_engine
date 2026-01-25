@@ -8,8 +8,9 @@
 /// - Handle debugging and validation utilities
 
 #include <void_engine/core/handle.hpp>
-#include <sstream>
+#include <cstring>
 #include <iomanip>
+#include <sstream>
 
 namespace void_core {
 
@@ -33,14 +34,6 @@ std::string format_handle_bits(std::uint32_t bits) {
         << ", bits=0x" << std::hex << std::setfill('0') << std::setw(8) << bits << ")";
     return oss.str();
 }
-
-/// Validate handle consistency
-struct HandleValidation {
-    bool is_valid = false;
-    bool index_in_range = false;
-    bool generation_matches = false;
-    std::string error_message;
-};
 
 /// Validate a handle against allocator state
 template<typename T>
@@ -82,15 +75,6 @@ HandleValidation validate_handle(
 // =============================================================================
 // Handle Pool Statistics
 // =============================================================================
-
-/// Statistics for a handle allocator
-struct HandlePoolStats {
-    std::size_t total_allocated = 0;      // Total slots ever allocated
-    std::size_t active_count = 0;         // Currently active handles
-    std::size_t free_count = 0;           // Handles in free list
-    std::size_t peak_active = 0;          // Peak concurrent active handles
-    float fragmentation_ratio = 0.0f;     // free_count / total_allocated
-};
 
 /// Compute statistics for a handle allocator
 template<typename T>
@@ -221,13 +205,6 @@ template Result<Handle<void>> deserialize_handle<void>(const std::vector<std::ui
 // =============================================================================
 // Handle Allocator Compaction
 // =============================================================================
-
-/// Compaction result for handle allocators
-struct CompactionResult {
-    std::size_t handles_moved = 0;
-    std::size_t bytes_saved = 0;
-    bool success = false;
-};
 
 /// Compact a HandleMap by removing gaps in storage
 /// NOTE: This invalidates all handles! Only use during controlled shutdown/reload.

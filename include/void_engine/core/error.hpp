@@ -496,6 +496,11 @@ Result<T> Err(const std::string& message) {
     return Result<T>(Error(message));
 }
 
+template<typename T = void>
+Result<T> Err(const char* message) {
+    return Result<T>(Error(std::string(message)));
+}
+
 // =============================================================================
 // Error Utilities (Implemented in error.cpp)
 // =============================================================================

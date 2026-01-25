@@ -42,7 +42,26 @@ struct TransactionId {
     constexpr bool operator<(const TransactionId& other) const noexcept {
         return value < other.value;
     }
+
+    // Hash support for unordered containers
+    struct Hash {
+        std::size_t operator()(const TransactionId& id) const noexcept {
+            return std::hash<std::uint64_t>{}(id.value);
+        }
+    };
 };
+
+} // namespace void_ir
+
+// Hash specialization must come before use in unordered containers
+template<>
+struct std::hash<void_ir::TransactionId> {
+    std::size_t operator()(const void_ir::TransactionId& id) const noexcept {
+        return std::hash<std::uint64_t>{}(id.value);
+    }
+};
+
+namespace void_ir {
 
 // =============================================================================
 // TransactionState
@@ -806,11 +825,3 @@ private:
 };
 
 } // namespace void_ir
-
-// Hash specialization
-template<>
-struct std::hash<void_ir::TransactionId> {
-    std::size_t operator()(const void_ir::TransactionId& id) const noexcept {
-        return std::hash<std::uint64_t>{}(id.value);
-    }
-};

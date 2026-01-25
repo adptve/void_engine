@@ -737,7 +737,7 @@ inline void serialize_value(BinaryWriter& writer, const Value& value) {
         case ValueType::EntityRef:
             {
                 const auto& ref = value.as_entity_ref();
-                writer.write_u32(ref.namespace_id.value);
+                writer.write_u32(ref.namespace_id);
                 writer.write_u64(ref.entity_id);
             }
             break;
@@ -745,10 +745,7 @@ inline void serialize_value(BinaryWriter& writer, const Value& value) {
             {
                 const auto& ref = value.as_asset_ref();
                 writer.write_string(ref.path);
-                writer.write_bool(ref.uuid.has_value());
-                if (ref.uuid) {
-                    writer.write_string(*ref.uuid);
-                }
+                writer.write_u64(ref.uuid);
             }
             break;
     }
@@ -809,22 +806,15 @@ inline void serialize_value(BinaryWriter& writer, const Value& value) {
             return Value(reader.read_bytes());
         case ValueType::EntityRef:
             {
-                NamespaceId ns{reader.read_u32()};
+                std::uint32_t ns = reader.read_u32();
                 std::uint64_t id = reader.read_u64();
-                return Value::entity_ref(EntityRef(ns, id));
+                return Value(ValueEntityRef{ns, id});
             }
         case ValueType::AssetRef:
             {
                 std::string path = reader.read_string();
-                bool has_uuid = reader.read_bool();
-                if (has_uuid) {
-                    std::string uuid = reader.read_string();
-                    AssetRef ref;
-                    ref.path = std::move(path);
-                    ref.uuid = std::move(uuid);
-                    return Value(ref);
-                }
-                return Value::asset_path(std::move(path));
+                std::uint64_t uuid = reader.read_u64();
+                return Value(ValueAssetRef{std::move(path), uuid});
             }
     }
 

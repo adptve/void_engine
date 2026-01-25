@@ -164,6 +164,21 @@ public:
         m_free_list = k_null_node;
     }
 
+    /// Remove proxies for bodies that no longer exist
+    /// @param predicate Returns true for bodies that should be removed
+    template<typename Predicate>
+    void remove_invalid(Predicate&& predicate) {
+        std::vector<BodyShapeKey> to_remove;
+        for (const auto& [key, node_idx] : m_proxy_map) {
+            if (predicate(key.first)) {
+                to_remove.push_back(key);
+            }
+        }
+        for (const auto& key : to_remove) {
+            remove(key.first, key.second);
+        }
+    }
+
     // =========================================================================
     // Queries
     // =========================================================================

@@ -1,10 +1,18 @@
 # void_asset - Asset management
 void_add_module(NAME void_asset
     SOURCES
-        stub.cpp
+        # Core asset system
+        asset.cpp
+        cache.cpp
+        handle.cpp
+        loader.cpp
+        storage.cpp
+        server.cpp
+        # Network and remote assets
         remote.cpp
         http_client.cpp
         websocket_client.cpp
+        # Asset loaders
         loaders/texture_loader.cpp
         loaders/model_loader.cpp
         loaders/shader_loader.cpp

@@ -9,10 +9,11 @@
 
 #include <void_engine/core/plugin.hpp>
 #include <void_engine/core/log.hpp>
-#include <sstream>
-#include <iomanip>
 #include <algorithm>
 #include <cstring>
+#include <iomanip>
+#include <set>
+#include <sstream>
 
 namespace void_core {
 

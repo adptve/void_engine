@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <filesystem>
 #include <sstream>
 
 // tinygltf forward declarations (assuming linked)

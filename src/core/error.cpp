@@ -8,7 +8,9 @@
 /// - Error formatting utilities
 
 #include <void_engine/core/error.hpp>
+#include <atomic>
 #include <sstream>
+#include <vector>
 
 namespace void_core {
 
@@ -107,12 +109,12 @@ std::string build_error_chain(const Error& error) {
 // =============================================================================
 
 // Common Result types used throughout the engine
+// Note: std::size_t == std::uint64_t on this platform, so we only instantiate once
 template class Result<void, Error>;
 template class Result<bool, Error>;
 template class Result<int, Error>;
 template class Result<std::uint32_t, Error>;
 template class Result<std::uint64_t, Error>;
-template class Result<std::size_t, Error>;
 template class Result<float, Error>;
 template class Result<double, Error>;
 template class Result<std::string, Error>;

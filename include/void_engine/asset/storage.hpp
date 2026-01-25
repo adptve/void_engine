@@ -9,11 +9,13 @@
 #include <cstdint>
 #include <string>
 #include <map>
+#include <set>
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
 #include <functional>
 #include <atomic>
+#include <utility>
 
 namespace void_asset {
 
@@ -350,5 +352,73 @@ private:
     std::atomic<std::uint64_t> m_next_id{1};
     mutable std::shared_mutex m_mutex;
 };
+
+// =============================================================================
+// Storage Statistics (Implemented in storage.cpp)
+// =============================================================================
+
+/// Record an asset stored
+void record_asset_stored(std::size_t bytes = 0);
+
+/// Record an asset removed
+void record_asset_removed(std::size_t bytes = 0);
+
+/// Record a garbage collection
+void record_garbage_collection(std::size_t count);
+
+/// Format storage statistics
+std::string format_storage_statistics();
+
+/// Reset storage statistics
+void reset_storage_statistics();
+
+// =============================================================================
+// Storage Validation (Implemented in storage.cpp)
+// =============================================================================
+
+/// Validate storage contents
+std::vector<std::string> validate_storage(const AssetStorage& storage);
+
+// =============================================================================
+// Dependency Graph Utilities (Implemented in storage.cpp)
+// =============================================================================
+
+/// Get all dependents (transitive)
+std::vector<AssetId> get_all_dependents(const AssetStorage& storage, AssetId id);
+
+/// Get all dependencies (transitive)
+std::vector<AssetId> get_all_dependencies(const AssetStorage& storage, AssetId id);
+
+/// Check for circular dependencies
+bool has_circular_dependency(const AssetStorage& storage, AssetId id);
+
+// =============================================================================
+// Storage Serialization (Implemented in storage.cpp)
+// =============================================================================
+
+namespace serialization {
+
+/// Serialize storage manifest (for hot-reload)
+std::vector<std::uint8_t> serialize_storage_manifest(const AssetStorage& storage);
+
+/// Deserialize storage manifest
+void_core::Result<std::vector<std::pair<AssetId, AssetPath>>> deserialize_storage_manifest(
+    const std::vector<std::uint8_t>& data);
+
+} // namespace serialization
+
+// =============================================================================
+// Debug Utilities (Implemented in storage.cpp)
+// =============================================================================
+
+namespace debug {
+
+/// Format asset entry for debugging
+std::string format_asset_entry(const AssetEntry& entry);
+
+/// Format asset storage for debugging
+std::string format_asset_storage(const AssetStorage& storage);
+
+} // namespace debug
 
 } // namespace void_asset

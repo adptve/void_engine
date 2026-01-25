@@ -10,7 +10,7 @@ This directory contains Mermaid diagrams documenting the integration of each mod
 | `presenter_integration.md` | void_presenter | ⬜ TODO |
 | `render_integration.md` | void_render | ⬜ TODO |
 | `asset_integration.md` | void_asset | ⬜ TODO |
-| `ecs_integration.md` | void_ecs | ⬜ TODO |
+| `ecs_integration.md` | void_ecs | ✅ Complete |
 | `compositor_integration.md` | void_compositor | ⬜ TODO |
 | `core_integration.md` | void_core | ⬜ TODO |
 | `physics_integration.md` | void_physics | ⬜ TODO |

@@ -57,37 +57,6 @@ Result<Version> parse_version_extended(const std::string& str) {
     }
 }
 
-/// Parse version range (e.g., ">=1.0.0,<2.0.0")
-struct VersionRange {
-    Version min_version;
-    Version max_version;
-    bool min_inclusive = true;
-    bool max_inclusive = false;
-    bool has_min = false;
-    bool has_max = false;
-
-    /// Check if a version is within this range
-    [[nodiscard]] bool contains(const Version& v) const {
-        if (has_min) {
-            if (min_inclusive) {
-                if (v < min_version) return false;
-            } else {
-                if (v <= min_version) return false;
-            }
-        }
-
-        if (has_max) {
-            if (max_inclusive) {
-                if (v > max_version) return false;
-            } else {
-                if (v >= max_version) return false;
-            }
-        }
-
-        return true;
-    }
-};
-
 /// Parse a version range string
 Result<VersionRange> parse_version_range(const std::string& str) {
     VersionRange range;
@@ -283,19 +252,6 @@ std::string format_version_prefixed(const Version& version) {
 // Version Comparison Utilities
 // =============================================================================
 
-/// Compare two versions and return detailed result
-struct VersionComparison {
-    int major_diff = 0;
-    int minor_diff = 0;
-    int patch_diff = 0;
-    bool is_major_change = false;
-    bool is_minor_change = false;
-    bool is_patch_change = false;
-    bool is_upgrade = false;
-    bool is_downgrade = false;
-    bool is_equal = false;
-};
-
 /// Compare two versions in detail
 VersionComparison compare_versions(const Version& from, const Version& to) {
     VersionComparison result;
@@ -354,15 +310,6 @@ std::string format_version_comparison(const Version& from, const Version& to) {
 // =============================================================================
 
 namespace build {
-
-/// Build configuration
-struct BuildInfo {
-    const char* version;
-    const char* build_date;
-    const char* build_type;
-    const char* compiler;
-    const char* platform;
-};
 
 /// Get build information
 BuildInfo get_build_info() {

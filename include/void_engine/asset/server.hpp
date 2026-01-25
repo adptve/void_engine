@@ -17,6 +17,8 @@
 #include <functional>
 #include <filesystem>
 #include <fstream>
+#include <thread>
+#include <chrono>
 
 namespace void_asset {
 
@@ -389,5 +391,90 @@ private:
     std::vector<AssetEvent> m_events;
     mutable std::mutex m_events_mutex;
 };
+
+// =============================================================================
+// Server Statistics (Implemented in server.cpp)
+// =============================================================================
+
+/// Record a server request
+void record_server_request(bool cache_hit);
+
+/// Record a load completed
+void record_load_completed(bool success);
+
+/// Record a reload completed
+void record_reload_completed();
+
+/// Record a garbage collection run
+void record_gc_run();
+
+/// Format server statistics
+std::string format_server_statistics();
+
+/// Reset server statistics
+void reset_server_statistics();
+
+// =============================================================================
+// Hot-Reload Support (Implemented in server.cpp)
+// =============================================================================
+
+// Forward declaration
+namespace void_core {
+    class HotReloadable;
+}
+
+/// Create a hot-reloadable adapter for an asset server
+std::unique_ptr<void_core::HotReloadable> make_hot_reloadable(AssetServer& server);
+
+// =============================================================================
+// Global Asset Server (Implemented in server.cpp)
+// =============================================================================
+
+/// Get or create global asset server
+AssetServer& global_asset_server();
+
+/// Get or create global asset server with config
+AssetServer& global_asset_server(AssetServerConfig config);
+
+/// Shutdown global asset server
+void shutdown_global_asset_server();
+
+/// Check if global asset server exists
+bool has_global_asset_server();
+
+// =============================================================================
+// Batch Loading Utilities (Implemented in server.cpp)
+// =============================================================================
+
+/// Load multiple assets at once
+std::vector<AssetId> load_batch(AssetServer& server, const std::vector<std::string>& paths);
+
+/// Wait for loads to complete with timeout
+void wait_for_loads(AssetServer& server, const std::vector<AssetId>& ids,
+                   std::chrono::milliseconds timeout = std::chrono::milliseconds{5000});
+
+// =============================================================================
+// Validation Utilities (Implemented in server.cpp)
+// =============================================================================
+
+/// Validate asset server configuration and state
+std::vector<std::string> validate_asset_server(const AssetServer& server);
+
+// =============================================================================
+// Debug Utilities (Implemented in server.cpp)
+// =============================================================================
+
+namespace debug {
+
+/// Format AssetServerConfig for debugging
+std::string format_asset_server_config(const AssetServerConfig& config);
+
+/// Format PendingLoad for debugging
+std::string format_pending_load(const PendingLoad& pending);
+
+/// Format AssetServer for debugging
+std::string format_asset_server(const AssetServer& server);
+
+} // namespace debug
 
 } // namespace void_asset

@@ -8,6 +8,10 @@
 
 namespace void_ir {
 
+// Forward declarations from patch.cpp
+void serialize_patch(BinaryWriter& writer, const Patch& patch);
+Patch deserialize_patch(BinaryReader& reader);
+
 namespace {
     constexpr std::uint32_t TX_MAGIC = 0x54584E53;    // "TXNS"
     constexpr std::uint32_t TX_VERSION = 1;
@@ -398,7 +402,7 @@ public:
     }
 
     bool is_compatible(const void_core::Version& new_version) const override {
-        return new_version.major() == MAJOR_VERSION;
+        return new_version.major == MAJOR_VERSION;
     }
 
     void_core::Result<void> prepare_reload() override {
@@ -502,7 +506,7 @@ public:
     }
 
     bool is_compatible(const void_core::Version& new_version) const override {
-        return new_version.major() == MAJOR_VERSION;
+        return new_version.major == MAJOR_VERSION;
     }
 
     void_core::Result<void> prepare_reload() override {

@@ -555,26 +555,70 @@ void LiveSceneManager::handle_scene_reload(
 // =============================================================================
 
 void AnimationSystem::update(void_ecs::World& world, float delta_time) {
-    // Query for entities with both transform and animation components
-    // For now, iterate through all entities (proper query system would be more efficient)
-    // This is a simplified implementation
+    // Get component IDs (register if not yet registered)
+    auto transform_id_opt = world.component_id<TransformComponent>();
+    auto anim_id_opt = world.component_id<AnimationComponent>();
 
-    // Note: A proper implementation would use the ECS query system
-    // For demonstration, we show the pattern but actual iteration
-    // requires building a query descriptor
+    // If components aren't registered yet, nothing to animate
+    if (!transform_id_opt || !anim_id_opt) {
+        return;
+    }
 
-    (void)world;
-    (void)delta_time;
+    void_ecs::ComponentId transform_id = *transform_id_opt;
+    void_ecs::ComponentId anim_id = *anim_id_opt;
 
-    // TODO: Implement proper query iteration when QueryDescriptor is available
-    // QueryDescriptor desc;
-    // desc.with<TransformComponent>();
-    // desc.with<AnimationComponent>();
-    // auto state = world.query(desc);
-    // for (auto iter = world.query_iter(state); iter.has_next(); ) {
-    //     auto [transform, anim] = iter.next<TransformComponent, AnimationComponent>();
-    //     update_animation(transform, anim, delta_time);
-    // }
+    // Build query: write access to both Transform and Animation
+    void_ecs::QueryDescriptor desc;
+    desc.write(transform_id)
+        .write(anim_id)
+        .build();
+
+    // Create and update query state
+    void_ecs::QueryState state(std::move(desc));
+    world.update_query(state);
+
+    // Iterate over all matching entities
+    void_ecs::QueryIter iter = world.query_iter(state);
+
+    while (!iter.empty()) {
+        // Get mutable access to archetype (need const_cast since QueryIter is const)
+        void_ecs::Archetype* arch = const_cast<void_ecs::Archetype*>(iter.archetype());
+        if (!arch) {
+            iter.next();
+            continue;
+        }
+
+        std::size_t row = iter.row();
+
+        // Get component pointers
+        TransformComponent* transform = arch->get_component<TransformComponent>(transform_id, row);
+        AnimationComponent* anim = arch->get_component<AnimationComponent>(anim_id, row);
+
+        if (transform && anim && anim->type != AnimationType::None) {
+            // Update based on animation type
+            switch (anim->type) {
+                case AnimationType::Rotation:
+                    update_rotation(*transform, *anim, delta_time);
+                    break;
+                case AnimationType::Oscillation:
+                    update_oscillation(*transform, *anim, delta_time);
+                    break;
+                case AnimationType::Orbit:
+                    update_orbit(*transform, *anim, delta_time);
+                    break;
+                case AnimationType::Pulse:
+                    update_pulse(*transform, *anim, delta_time);
+                    break;
+                case AnimationType::Path:
+                    update_path(*transform, *anim, delta_time);
+                    break;
+                case AnimationType::None:
+                    break;
+            }
+        }
+
+        iter.next();
+    }
 }
 
 void AnimationSystem::update_rotation(

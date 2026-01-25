@@ -3,6 +3,7 @@
 
 #include <void_engine/ir/patch.hpp>
 #include <void_engine/ir/snapshot.hpp>
+#include <unordered_set>
 
 namespace void_ir {
 

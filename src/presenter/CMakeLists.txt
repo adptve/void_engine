@@ -11,6 +11,15 @@ void_add_module(NAME void_presenter
     SOURCES
         stub.cpp
         backend_factory.cpp
+        presenter.cpp
+        multi_backend_presenter.cpp
+        swapchain.cpp
+        surface.cpp
+        frame.cpp
+        timing.cpp
+        rehydration.cpp
+        backends/null_backend.cpp
+        backends/wgpu_backend.cpp
     DEPENDENCIES
         void_core
         void_render  # For GLFW/glad when using OpenGL backend

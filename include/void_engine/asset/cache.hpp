@@ -30,6 +30,7 @@
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace void_asset {
@@ -675,5 +676,63 @@ private:
     WarmCache m_warm_cache;
     mutable CacheStats m_stats;
 };
+
+// =============================================================================
+// Cache Utilities (Implemented in cache.cpp)
+// =============================================================================
+
+/// Format cache statistics
+std::string format_cache_stats(const CacheStats& stats);
+
+/// Compute content hash for data
+std::string compute_content_hash(const std::vector<std::uint8_t>& data);
+std::string compute_content_hash(const std::uint8_t* data, std::size_t size);
+
+/// Create a cache entry with computed metadata
+CacheEntry create_cache_entry(
+    std::vector<std::uint8_t> data,
+    CachePriority priority = CachePriority::Normal,
+    const std::string& asset_type = "",
+    const std::string& source_url = "");
+
+/// Get validation result name
+std::string validation_result_name(ValidationResult result);
+
+/// Get cache priority name
+std::string cache_priority_name(CachePriority priority);
+
+/// Make cache key from path and variant
+std::string make_cache_key(const std::string& path, const std::string& variant = "");
+
+/// Parse cache key into path and variant
+std::pair<std::string, std::string> parse_cache_key(const std::string& key);
+
+// =============================================================================
+// Compression Utilities (Implemented in cache.cpp)
+// =============================================================================
+
+namespace compression {
+
+/// Simple RLE compression (for warm cache)
+std::vector<std::uint8_t> compress_rle(const std::vector<std::uint8_t>& data);
+
+/// RLE decompression
+std::vector<std::uint8_t> decompress_rle(const std::vector<std::uint8_t>& compressed);
+
+} // namespace compression
+
+// =============================================================================
+// Debug Utilities (Implemented in cache.cpp)
+// =============================================================================
+
+namespace debug {
+
+/// Format cache entry metadata for debugging
+std::string format_cache_entry_meta(const CacheEntryMeta& meta);
+
+/// Format tiered cache config for debugging
+std::string format_tiered_cache_config(const TieredCacheConfig& config);
+
+} // namespace debug
 
 } // namespace void_asset

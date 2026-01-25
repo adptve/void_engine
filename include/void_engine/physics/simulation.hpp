@@ -18,6 +18,7 @@
 #include <chrono>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <memory>
 #include <algorithm>
 #include <cmath>
@@ -303,10 +304,10 @@ private:
             if (!shape_a || !shape_b) continue;
 
             // Perform narrowphase collision detection
-            TransformedShape ts_a{*shape_a, body_a.position(), body_a.rotation()};
-            TransformedShape ts_b{*shape_b, body_b.position(), body_b.rotation()};
+            CollisionDetector::TransformedShape ts_a{shape_a, body_a.position(), body_a.rotation()};
+            CollisionDetector::TransformedShape ts_b{shape_b, body_b.position(), body_b.rotation()};
 
-            auto manifold = m_collision_detector.collide(ts_a, ts_b, pair.body_a, pair.body_b);
+            auto manifold = CollisionDetector::collide(ts_a, ts_b, pair.body_a, pair.body_b);
 
             if (manifold && !manifold->contacts.empty()) {
                 std::uint64_t pair_key = make_pair_key(pair.body_a, pair.body_b);
@@ -336,7 +337,7 @@ private:
                 constraint.body_b = pair.body_b;
                 constraint.index_a = get_body_index(pair.body_a);
                 constraint.index_b = get_body_index(pair.body_b);
-                constraint.normal = manifold->normal;
+                constraint.normal = manifold->average_normal();
                 build_tangent_basis(constraint.normal, constraint.tangent_1, constraint.tangent_2);
 
                 // Combine material properties
@@ -711,6 +712,9 @@ struct TimeOfImpact {
     void_math::Vec3 point;   ///< Contact point
 };
 
+/// Type alias for convenience
+using TransformedShape = CollisionDetector::TransformedShape;
+
 /// Compute time of impact between two moving shapes
 [[nodiscard]] inline TimeOfImpact compute_toi(
     const TransformedShape& shape_a,
@@ -768,7 +772,7 @@ struct TimeOfImpact {
 
         auto manifold = CollisionDetector::collide(moved_a, moved_b, BodyId{0}, BodyId{0});
         if (manifold && !manifold->contacts.empty()) {
-            result.normal = manifold->normal;
+            result.normal = manifold->average_normal();
             result.point = manifold->contacts[0].point_a;
         }
     }

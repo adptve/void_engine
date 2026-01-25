@@ -8,6 +8,7 @@
 #include "version.hpp"
 #include "id.hpp"
 #include "type_registry.hpp"
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <vector>

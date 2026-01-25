@@ -17,6 +17,10 @@ void_add_module(NAME void_physics
         world.cpp
         backend.cpp
         simulation.cpp
+        broadphase.cpp
+        collision.cpp
+        solver.cpp
+        physics.cpp
         query.cpp
         character.cpp
         snapshot.cpp

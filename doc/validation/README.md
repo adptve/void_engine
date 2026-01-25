@@ -10,7 +10,7 @@ This directory contains validation reports for each implemented module.
 | `presenter_validation.md` | void_presenter | ⬜ TODO |
 | `render_validation.md` | void_render | ⬜ TODO |
 | `asset_validation.md` | void_asset | ⬜ TODO |
-| `ecs_validation.md` | void_ecs | ⬜ TODO |
+| `ecs_validation.md` | void_ecs | ✅ Complete |
 | `compositor_validation.md` | void_compositor | ⬜ TODO |
 | `core_validation.md` | void_core | ⬜ TODO |
 | `physics_validation.md` | void_physics | ⬜ TODO |
