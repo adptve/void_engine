@@ -121,7 +121,13 @@
       "Bash(export PATH=\"$PATH:/c/msys64/mingw64/bin\")",
       "Bash(g++.exe:*)",
       "Bash(PATH=\"$PATH:/c/msys64/mingw64/bin\" /c/msys64/mingw64/bin/g++.exe:*)",
-      "Bash(PATH=\"$PATH:/c/msys64/mingw64/bin\" cmake --build:*)"
+      "Bash(PATH=\"$PATH:/c/msys64/mingw64/bin\" cmake --build:*)",
+      "Bash(repl)",
+      "Bash(vsh)",
+      "Bash(cmd \")",
+      "Bash(for dir in include/void_engine/*/)",
+      "Bash(for dir in src/*/)",
+      "Bash(do if [ -d \"$dir\" ])"
     ]
   }
 }
