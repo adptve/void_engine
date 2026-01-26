@@ -4,6 +4,7 @@
 #include <void_engine/asset/loaders/shader_loader.hpp>
 
 #include <algorithm>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <regex>
@@ -340,20 +341,20 @@ LoadResult<ShaderAsset> ShaderLoader::load_glsl(LoadContext& ctx) {
     std::string source(reinterpret_cast<const char*>(data.data()), data.size());
 
     ShaderAsset asset;
-    asset.name = ctx.name();
-    asset.source_path = ctx.path().string();
+    asset.name = ctx.path().stem();
+    asset.source_path = ctx.path().str();
     asset.language = ShaderLanguage::GLSL;
     asset.defines = m_config.defines;
 
     // Detect shader stage
-    ShaderStage stage = detect_stage(ctx.path().string());
+    ShaderStage stage = detect_stage(ctx.path().str());
 
     // Preprocess
-    std::string processed = preprocess(source, ctx.path().parent_path().string());
+    std::string processed = preprocess(source, ctx.path().directory());
 
     // Create module
     ShaderModule module;
-    module.name = ctx.name();
+    module.name = ctx.path().stem();
     module.stage = stage;
     module.language = ShaderLanguage::GLSL;
     module.source = processed;
@@ -404,7 +405,7 @@ LoadResult<ShaderAsset> ShaderLoader::load_glsl(LoadContext& ctx) {
     combine_vars(asset.tess_control);
     combine_vars(asset.tess_evaluation);
 
-    return asset;
+    return void_core::Ok(std::make_unique<ShaderAsset>(std::move(asset)));
 }
 
 LoadResult<ShaderAsset> ShaderLoader::load_wgsl(LoadContext& ctx) {
@@ -412,21 +413,21 @@ LoadResult<ShaderAsset> ShaderLoader::load_wgsl(LoadContext& ctx) {
     std::string source(reinterpret_cast<const char*>(data.data()), data.size());
 
     ShaderAsset asset;
-    asset.name = ctx.name();
-    asset.source_path = ctx.path().string();
+    asset.name = ctx.path().stem();
+    asset.source_path = ctx.path().str();
     asset.language = ShaderLanguage::WGSL;
 
     // WGSL can contain multiple entry points
     // Parse @vertex and @fragment annotations
 
     ShaderModule vertex_module;
-    vertex_module.name = ctx.name() + "_vertex";
+    vertex_module.name = ctx.path().stem() + "_vertex";
     vertex_module.stage = ShaderStage::Vertex;
     vertex_module.language = ShaderLanguage::WGSL;
     vertex_module.source = source;
 
     ShaderModule fragment_module;
-    fragment_module.name = ctx.name() + "_fragment";
+    fragment_module.name = ctx.path().stem() + "_fragment";
     fragment_module.stage = ShaderStage::Fragment;
     fragment_module.language = ShaderLanguage::WGSL;
     fragment_module.source = source;
@@ -449,7 +450,7 @@ LoadResult<ShaderAsset> ShaderLoader::load_wgsl(LoadContext& ctx) {
 
     if (std::regex_search(source, match, compute_entry_regex)) {
         ShaderModule compute_module;
-        compute_module.name = ctx.name() + "_compute";
+        compute_module.name = ctx.path().stem() + "_compute";
         compute_module.stage = ShaderStage::Compute;
         compute_module.language = ShaderLanguage::WGSL;
         compute_module.source = source;
@@ -488,7 +489,7 @@ LoadResult<ShaderAsset> ShaderLoader::load_wgsl(LoadContext& ctx) {
         asset.uniforms.push_back(var);
     }
 
-    return asset;
+    return void_core::Ok(std::make_unique<ShaderAsset>(std::move(asset)));
 }
 
 LoadResult<ShaderAsset> ShaderLoader::load_hlsl(LoadContext& ctx) {
@@ -496,15 +497,15 @@ LoadResult<ShaderAsset> ShaderLoader::load_hlsl(LoadContext& ctx) {
     std::string source(reinterpret_cast<const char*>(data.data()), data.size());
 
     ShaderAsset asset;
-    asset.name = ctx.name();
-    asset.source_path = ctx.path().string();
+    asset.name = ctx.path().stem();
+    asset.source_path = ctx.path().str();
     asset.language = ShaderLanguage::HLSL;
 
     // Detect stage from filename
-    ShaderStage stage = detect_stage(ctx.path().string());
+    ShaderStage stage = detect_stage(ctx.path().str());
 
     ShaderModule module;
-    module.name = ctx.name();
+    module.name = ctx.path().stem();
     module.stage = stage;
     module.language = ShaderLanguage::HLSL;
     module.source = source;
@@ -584,7 +585,7 @@ LoadResult<ShaderAsset> ShaderLoader::load_hlsl(LoadContext& ctx) {
             break;
     }
 
-    return asset;
+    return void_core::Ok(std::make_unique<ShaderAsset>(std::move(asset)));
 }
 
 LoadResult<ShaderAsset> ShaderLoader::load_spirv(LoadContext& ctx) {
@@ -592,24 +593,24 @@ LoadResult<ShaderAsset> ShaderLoader::load_spirv(LoadContext& ctx) {
 
     // Validate SPIR-V magic number
     if (data.size() < 4) {
-        return LoadError{LoadErrorCode::InvalidFormat, "SPIR-V file too small"};
+        return void_core::Err<std::unique_ptr<ShaderAsset>>("SPIR-V file too small");
     }
 
     std::uint32_t magic = *reinterpret_cast<const std::uint32_t*>(data.data());
     if (magic != 0x07230203) {
-        return LoadError{LoadErrorCode::InvalidFormat, "Invalid SPIR-V magic number"};
+        return void_core::Err<std::unique_ptr<ShaderAsset>>("Invalid SPIR-V magic number");
     }
 
     ShaderAsset asset;
-    asset.name = ctx.name();
-    asset.source_path = ctx.path().string();
+    asset.name = ctx.path().stem();
+    asset.source_path = ctx.path().str();
     asset.language = ShaderLanguage::SPIRV;
 
     // Detect stage from filename
-    ShaderStage stage = detect_stage(ctx.path().string());
+    ShaderStage stage = detect_stage(ctx.path().str());
 
     ShaderModule module;
-    module.name = ctx.name();
+    module.name = ctx.path().stem();
     module.stage = stage;
     module.language = ShaderLanguage::SPIRV;
     module.entry_point = "main";
@@ -645,7 +646,7 @@ LoadResult<ShaderAsset> ShaderLoader::load_spirv(LoadContext& ctx) {
             break;
     }
 
-    return asset;
+    return void_core::Ok(std::make_unique<ShaderAsset>(std::move(asset)));
 }
 
 } // namespace void_asset

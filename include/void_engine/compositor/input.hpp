@@ -7,6 +7,7 @@
 
 #include "fwd.hpp"
 
+#include <cmath>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -61,15 +62,16 @@ struct Modifiers {
     bool ctrl = false;
     bool alt = false;
     bool logo = false;  // Windows/Super/Command key
+    bool super = false; // Alias for logo (Windows/Super/Command key)
     bool caps_lock = false;
     bool num_lock = false;
 
     [[nodiscard]] bool none() const {
-        return !shift && !ctrl && !alt && !logo;
+        return !shift && !ctrl && !alt && !logo && !super;
     }
 
     [[nodiscard]] bool any() const {
-        return shift || ctrl || alt || logo;
+        return shift || ctrl || alt || logo || super;
     }
 };
 
@@ -87,6 +89,8 @@ struct KeyboardEvent {
     std::uint32_t time_ms = 0;
     /// Modifier state at time of event
     Modifiers modifiers;
+    /// UTF-8 encoded character (if applicable)
+    std::string utf8;
 };
 
 // =============================================================================
@@ -132,13 +136,18 @@ struct PointerMotionEvent {
     std::optional<Vec2> position;
     /// Delta movement
     Vec2 delta;
+    /// Surface-local X coordinate
+    double surface_x = 0.0;
+    /// Surface-local Y coordinate
+    double surface_y = 0.0;
     /// Timestamp in milliseconds
     std::uint32_t time_ms = 0;
 };
 
 /// Pointer button event
 struct PointerButtonEvent {
-    PointerButton button = PointerButton::Left;
+    /// Button code (raw uint32_t for flexibility)
+    std::uint32_t button = 0x110;  // BTN_LEFT
     ButtonState state = ButtonState::Released;
     std::uint32_t time_ms = 0;
 };
@@ -154,8 +163,25 @@ struct PointerAxisEvent {
     std::uint32_t time_ms = 0;
 };
 
+/// Pointer enter event (pointer entered surface)
+struct PointerEnterEvent {
+    /// Surface-local X coordinate
+    double surface_x = 0.0;
+    /// Surface-local Y coordinate
+    double surface_y = 0.0;
+    /// Timestamp in milliseconds
+    std::uint32_t time_ms = 0;
+};
+
+/// Pointer leave event (pointer left surface)
+struct PointerLeaveEvent {
+    /// Timestamp in milliseconds
+    std::uint32_t time_ms = 0;
+};
+
 /// Pointer event variant
-using PointerEvent = std::variant<PointerMotionEvent, PointerButtonEvent, PointerAxisEvent>;
+using PointerEvent = std::variant<PointerMotionEvent, PointerButtonEvent, PointerAxisEvent,
+                                   PointerEnterEvent, PointerLeaveEvent>;
 
 // =============================================================================
 // Touch Events
@@ -164,20 +190,27 @@ using PointerEvent = std::variant<PointerMotionEvent, PointerButtonEvent, Pointe
 /// Touch down event
 struct TouchDownEvent {
     std::int32_t slot = 0;
+    std::int32_t id = 0;    // Touch point ID
     Vec2 position;
+    double x = 0.0;         // Surface-local X
+    double y = 0.0;         // Surface-local Y
     std::uint32_t time_ms = 0;
 };
 
 /// Touch motion event
 struct TouchMotionEvent {
     std::int32_t slot = 0;
+    std::int32_t id = 0;    // Touch point ID
     Vec2 position;
+    double x = 0.0;         // Surface-local X
+    double y = 0.0;         // Surface-local Y
     std::uint32_t time_ms = 0;
 };
 
 /// Touch up event
 struct TouchUpEvent {
     std::int32_t slot = 0;
+    std::int32_t id = 0;    // Touch point ID
     std::uint32_t time_ms = 0;
 };
 
@@ -304,9 +337,14 @@ public:
         return m_pressed_keys.count(keycode) > 0;
     }
 
-    /// Check if a button is pressed
+    /// Check if a button is pressed (by enum)
     [[nodiscard]] bool is_button_pressed(PointerButton button) const {
         return m_pressed_buttons.count(static_cast<std::uint32_t>(button)) > 0;
+    }
+
+    /// Check if a button is pressed (by raw code)
+    [[nodiscard]] bool is_button_pressed(std::uint32_t code) const {
+        return m_pressed_buttons.count(code) > 0;
     }
 
     /// Get pointer position

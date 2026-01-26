@@ -72,10 +72,21 @@ public:
     [[nodiscard]] const void_math::Vec3& local_offset() const noexcept { return m_local_offset; }
     [[nodiscard]] const void_math::Quat& local_rotation() const noexcept { return m_local_rotation; }
 
+    /// Get local transform as struct
+    [[nodiscard]] void_math::Transform local_transform() const noexcept {
+        return void_math::Transform{m_local_offset, m_local_rotation, void_math::Vec3{1, 1, 1}};
+    }
+
     /// Set local transform
     void set_local_transform(const void_math::Vec3& offset, const void_math::Quat& rotation = {}) {
         m_local_offset = offset;
         m_local_rotation = rotation;
+    }
+
+    /// Set local transform from Transform struct
+    void set_local_transform(const void_math::Transform& t) {
+        m_local_offset = t.position;
+        m_local_rotation = t.rotation;
     }
 
 protected:
@@ -169,6 +180,9 @@ public:
     /// Get radius
     [[nodiscard]] float radius() const noexcept { return m_radius; }
 
+    /// Get center position (local space)
+    [[nodiscard]] void_math::Vec3 center() const noexcept { return m_local_offset; }
+
 private:
     float m_radius;
 };
@@ -216,6 +230,113 @@ public:
 
     /// Get the two endpoint centers
     [[nodiscard]] std::pair<void_math::Vec3, void_math::Vec3> endpoints() const;
+
+private:
+    float m_radius;
+    float m_half_height;
+    int m_axis;
+};
+
+// =============================================================================
+// Cylinder Shape
+// =============================================================================
+
+/// Cylinder collision shape (flat ends, no caps)
+class CylinderShape : public IShape {
+public:
+    /// Create cylinder along axis
+    /// @param radius Cylinder radius
+    /// @param height Total height
+    /// @param axis 0=X, 1=Y (default), 2=Z
+    CylinderShape(float radius, float height, int axis = 1)
+        : m_radius(radius)
+        , m_half_height(height * 0.5f)
+        , m_axis(axis) {}
+
+    [[nodiscard]] ShapeType type() const noexcept override { return ShapeType::Cylinder; }
+    [[nodiscard]] ShapeId id() const noexcept override { return m_id; }
+
+    [[nodiscard]] void_math::AABB local_bounds() const override {
+        void_math::Vec3 ext{m_radius, m_radius, m_radius};
+        ext[m_axis] = m_half_height;
+        return void_math::AABB{m_local_offset - ext, m_local_offset + ext};
+    }
+
+    [[nodiscard]] float volume() const override {
+        return 3.14159265359f * m_radius * m_radius * (2.0f * m_half_height);
+    }
+
+    [[nodiscard]] MassProperties compute_mass(float density) const override {
+        float mass = volume() * density;
+        // Moment of inertia for cylinder
+        float r2 = m_radius * m_radius;
+        float h2 = (2.0f * m_half_height) * (2.0f * m_half_height);
+        float ix = mass * (3.0f * r2 + h2) / 12.0f;
+        float iy = mass * r2 / 2.0f;
+        void_math::Vec3 inertia{ix, iy, ix};
+        if (m_axis == 0) inertia = {iy, ix, ix};
+        else if (m_axis == 2) inertia = {ix, ix, iy};
+        return MassProperties{mass, inertia, center_of_mass()};
+    }
+
+    [[nodiscard]] void_math::Vec3 center_of_mass() const override { return m_local_offset; }
+
+    [[nodiscard]] bool contains_point(const void_math::Vec3& point) const override {
+        void_math::Vec3 local = point - m_local_offset;
+        float axial = local[m_axis];
+        if (std::abs(axial) > m_half_height) return false;
+        local[m_axis] = 0;
+        return void_math::length(local) <= m_radius;
+    }
+
+    [[nodiscard]] void_math::Vec3 closest_point(const void_math::Vec3& point) const override {
+        void_math::Vec3 local = point - m_local_offset;
+        float axial = std::clamp(local[m_axis], -m_half_height, m_half_height);
+        local[m_axis] = 0;
+        float dist = void_math::length(local);
+        if (dist > m_radius) {
+            local = local * (m_radius / dist);
+        }
+        local[m_axis] = axial;
+        return local + m_local_offset;
+    }
+
+    [[nodiscard]] void_math::Vec3 support(const void_math::Vec3& direction) const override {
+        void_math::Vec3 result = m_local_offset;
+        // Axial component
+        result[m_axis] += (direction[m_axis] > 0) ? m_half_height : -m_half_height;
+        // Radial component
+        void_math::Vec3 radial = direction;
+        radial[m_axis] = 0;
+        float len = void_math::length(radial);
+        if (len > 0.0001f) {
+            radial = radial * (m_radius / len);
+            result = result + radial;
+        }
+        return result;
+    }
+
+    [[nodiscard]] std::unique_ptr<IShape> clone() const override {
+        auto c = std::make_unique<CylinderShape>(m_radius, m_half_height * 2.0f, m_axis);
+        c->set_material(m_material);
+        c->set_local_transform(m_local_offset, m_local_rotation);
+        c->set_id(m_id);
+        return c;
+    }
+
+    [[nodiscard]] bool is_convex() const noexcept override { return true; }
+
+    /// Get radius
+    [[nodiscard]] float radius() const noexcept { return m_radius; }
+
+    /// Get half height
+    [[nodiscard]] float half_height() const noexcept { return m_half_height; }
+
+    /// Get total height
+    [[nodiscard]] float height() const noexcept { return 2.0f * m_half_height; }
+
+    /// Get axis (0=X, 1=Y, 2=Z)
+    [[nodiscard]] int axis() const noexcept { return m_axis; }
 
 private:
     float m_radius;

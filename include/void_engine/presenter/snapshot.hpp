@@ -276,13 +276,19 @@ struct PresenterManagerSnapshot {
 
     PresenterManagerSnapshot snapshot;
     snapshot.version = PresenterManagerSnapshot::VERSION;
-    snapshot.primary_id = manager.primary_id().value_or(PresenterId{}).id;
-    snapshot.next_id = manager.count() + 1;  // Approximate
+
+    // Get primary presenter ID if any
+    const auto* primary = manager.primary();
+    snapshot.primary_id = primary ? primary->id().id : 0;
+    snapshot.next_id = manager.all_ids().size() + 1;  // Approximate
 
     // Get rehydration states from all presenters
-    manager.for_each([&](const PresenterId& id, const IPresenter& presenter) {
-        snapshot.presenter_states.push_back({id.id, presenter.dehydrate()});
-    });
+    for (const auto& id : manager.all_ids()) {
+        const auto* presenter = manager.get(id);
+        if (presenter) {
+            snapshot.presenter_states.push_back({id.id, presenter->dehydrate()});
+        }
+    }
 
     return snapshot;
 }

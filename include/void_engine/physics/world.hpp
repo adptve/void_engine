@@ -23,7 +23,6 @@ namespace void_physics {
 // Forward declarations
 class PhysicsPipeline;
 class QuerySystem;
-class CharacterControllerImpl;
 class BroadPhaseBvh;
 class IJointConstraint;
 
@@ -545,9 +544,6 @@ private:
 
     // Time accumulator for fixed step
     float m_time_accumulator = 0.0f;
-
-    // Character controller implementation
-    std::unique_ptr<CharacterControllerImpl> m_impl;
 };
 
 // =============================================================================

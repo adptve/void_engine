@@ -11,6 +11,7 @@
 #include "compositor.hpp"
 #include "rehydration.hpp"
 
+#include <cmath>
 #include <cstdint>
 #include <functional>
 #include <memory>

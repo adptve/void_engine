@@ -261,6 +261,8 @@ struct BackendConfig {
     bool enable_validation = false;     ///< Enable API validation layers
     bool enable_debug_markers = false;  ///< Enable debug markers/labels
     bool prefer_low_latency = false;    ///< Prefer low latency over throughput
+    bool enable_gpu_timing = false;     ///< Enable GPU timestamp queries
+    bool allow_software_fallback = true;  ///< Allow software rendering fallback
     std::vector<BackendType> fallback_types;  ///< Fallback if preferred unavailable
 
     /// Builder pattern
@@ -320,6 +322,10 @@ struct BackendError {
 
     [[nodiscard]] static BackendError out_of_memory() {
         return {BackendErrorKind::OutOfMemory, "Out of GPU memory", std::nullopt};
+    }
+
+    [[nodiscard]] static BackendError surface_failed(std::string msg) {
+        return {BackendErrorKind::SurfaceError, std::move(msg), std::nullopt};
     }
 };
 

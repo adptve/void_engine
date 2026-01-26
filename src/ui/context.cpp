@@ -4,6 +4,7 @@
 #include <void_engine/ui/context.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <functional>
 

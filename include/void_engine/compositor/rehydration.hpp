@@ -8,6 +8,9 @@
 /// across compositor restarts.
 
 #include "fwd.hpp"
+#include "vrr.hpp"
+#include "hdr.hpp"
+#include "frame.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -132,6 +135,16 @@ public:
         return std::nullopt;
     }
 
+    /// Set uint value
+    void set_uint(const std::string& key, std::uint64_t value) {
+        m_int_values[key] = static_cast<std::int64_t>(value);
+    }
+
+    /// Set uint32 value
+    void set_u32(const std::string& key, std::uint32_t value) {
+        m_int_values[key] = static_cast<std::int64_t>(value);
+    }
+
     /// Builder pattern
     [[nodiscard]] RehydrationState& with_int(const std::string& key, std::int64_t value) {
         set_int(key, value);
@@ -140,13 +153,13 @@ public:
 
     /// Builder pattern (uint)
     [[nodiscard]] RehydrationState& with_uint(const std::string& key, std::uint64_t value) {
-        set_int(key, static_cast<std::int64_t>(value));
+        set_uint(key, value);
         return *this;
     }
 
     /// Builder pattern (uint32)
     [[nodiscard]] RehydrationState& with_u32(const std::string& key, std::uint32_t value) {
-        set_int(key, static_cast<std::int64_t>(value));
+        set_u32(key, value);
         return *this;
     }
 
@@ -500,8 +513,8 @@ inline bool deserialize_hdr_config(const RehydrationState& state, struct HdrConf
 inline RehydrationState serialize_frame_scheduler(const struct FrameScheduler& scheduler) {
     RehydrationState state;
     state.set_int("target_fps", scheduler.target_fps());
-    state.set_uint("frame_number", scheduler.frame_number());
-    state.set_uint("dropped_count", scheduler.dropped_frame_count());
+    state.set_int("frame_number", scheduler.frame_number());
+    state.set_int("dropped_count", scheduler.dropped_frame_count());
     state.set_float("content_velocity", scheduler.content_velocity());
 
     if (scheduler.vrr_config()) {

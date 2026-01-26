@@ -139,6 +139,7 @@ target_link_libraries(void_runtime
         void_render
         void_scene
         void_compositor
+        void_physics
         glfw
         OpenGL::GL
         glm::glm

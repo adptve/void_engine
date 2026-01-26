@@ -311,7 +311,7 @@ struct FlagSpec {
 
 /// @brief Command metadata
 struct CommandInfo {
-    CommandId id = 0;
+    CommandId id = {};
     std::string name;
     std::string description;
     std::string usage;

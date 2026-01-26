@@ -1,8 +1,7 @@
 /// @file render_graph.cpp
 /// @brief Render graph implementation for declarative render pipeline
 
-#include <void_engine/render/pass.hpp>
-#include <void_engine/render/compositor.hpp>
+#include <void_engine/render/render_graph.hpp>
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
@@ -48,11 +47,7 @@ PassDescriptor PassDescriptor::shadow_pass(std::string name, std::uint32_t resol
 // RenderPass Implementation
 // =============================================================================
 
-RenderPass::RenderPass(const PassDescriptor& descriptor)
-    : m_descriptor(descriptor)
-    , m_id(ResourceId::from_name(descriptor.name))
-{
-}
+// Note: RenderPass constructor is defined inline in pass.hpp
 
 void RenderPass::add_dependency(ResourceId pass_id) {
     m_dependencies.push_back(pass_id);
@@ -66,21 +61,7 @@ void RenderPass::declare_output(ResourceId resource, ResourceState output_state)
     m_outputs.push_back({resource, output_state});
 }
 
-// =============================================================================
-// CallbackPass Implementation
-// =============================================================================
-
-CallbackPass::CallbackPass(const PassDescriptor& descriptor, RenderCallback callback)
-    : RenderPass(descriptor)
-    , m_callback(std::move(callback))
-{
-}
-
-void CallbackPass::execute(const RenderContext& ctx) {
-    if (m_callback) {
-        m_callback(ctx);
-    }
-}
+// Note: CallbackPass is defined inline in pass.hpp
 
 // =============================================================================
 // PassRegistry Implementation

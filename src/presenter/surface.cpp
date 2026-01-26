@@ -5,10 +5,12 @@
 #include <void_engine/presenter/backend.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstring>
 #include <memory>
 #include <mutex>
+#include <sstream>
 #include <vector>
 
 namespace void_presenter {
@@ -285,7 +287,7 @@ std::string format_surface_texture(const SurfaceTexture& texture) {
     result += "  size: " + std::to_string(texture.width) + "x" + std::to_string(texture.height) + "\n";
     result += "  format: " + std::string(to_string(texture.format)) + "\n";
     result += "  suboptimal: " + std::string(texture.suboptimal ? "true" : "false") + "\n";
-    result += "  native_handle: " + (texture.native_handle ? "valid" : "null") + "\n";
+    result += std::string("  native_handle: ") + (texture.native_handle ? "valid" : "null") + "\n";
 
     result += "}";
     return result;

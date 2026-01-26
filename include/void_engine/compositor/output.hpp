@@ -10,6 +10,7 @@
 #include "vrr.hpp"
 #include "hdr.hpp"
 
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <optional>

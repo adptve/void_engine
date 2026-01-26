@@ -7,6 +7,7 @@
 #include "types.hpp"
 #include "body.hpp"
 #include "shape.hpp"
+#include "world.hpp"
 
 #include <void_engine/core/hot_reload.hpp>
 #include <void_engine/core/version.hpp>
@@ -783,7 +784,7 @@ public:
     [[nodiscard]] void_core::Result<void_core::HotReloadSnapshot> snapshot() override {
         auto snap_result = m_world->snapshot();
         if (!snap_result) {
-            return void_core::Err(snap_result.error());
+            return void_core::Err<void_core::HotReloadSnapshot>(snap_result.error());
         }
         return void_core::Ok(std::move(snap_result).value());
     }

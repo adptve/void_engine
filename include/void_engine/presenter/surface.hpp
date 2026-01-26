@@ -58,6 +58,7 @@ struct SurfaceConfig {
     std::uint32_t width = 800;              ///< Width in pixels
     std::uint32_t height = 600;             ///< Height in pixels
     SurfaceFormat format = SurfaceFormat::Bgra8UnormSrgb;  ///< Pixel format
+    VSync vsync = VSync::Adaptive;                         ///< VSync mode
     PresentMode present_mode = PresentMode::Fifo;          ///< Presentation mode
     AlphaMode alpha_mode = AlphaMode::Opaque;              ///< Alpha blending
     std::uint32_t desired_frame_latency = 2;               ///< Max frame latency
@@ -184,6 +185,7 @@ struct SurfaceTexture {
     std::uint32_t height = 0;                   ///< Texture height
     SurfaceFormat format = SurfaceFormat::Bgra8UnormSrgb;  ///< Pixel format
     bool suboptimal = false;                    ///< Should reconfigure soon
+    void* native_handle = nullptr;              ///< Backend-specific handle
 
     /// Create a new surface texture
     [[nodiscard]] static SurfaceTexture create(

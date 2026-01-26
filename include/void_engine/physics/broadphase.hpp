@@ -22,6 +22,21 @@
 #include <unordered_map>
 #include <vector>
 
+// Forward declaration for hash specialization
+namespace void_physics {
+    struct BodyId;
+    struct ShapeId;
+}
+
+// Hash for pair<BodyId, ShapeId> - must be before any unordered_map usage
+template<>
+struct std::hash<std::pair<void_physics::BodyId, void_physics::ShapeId>> {
+    std::size_t operator()(const std::pair<void_physics::BodyId, void_physics::ShapeId>& p) const noexcept {
+        return std::hash<std::uint64_t>{}(p.first.value) ^
+               (std::hash<std::uint64_t>{}(p.second.value) << 1);
+    }
+};
+
 namespace void_physics {
 
 // =============================================================================
@@ -719,12 +734,3 @@ private:
 };
 
 } // namespace void_physics
-
-// Hash for pair<BodyId, ShapeId>
-template<>
-struct std::hash<std::pair<void_physics::BodyId, void_physics::ShapeId>> {
-    std::size_t operator()(const std::pair<void_physics::BodyId, void_physics::ShapeId>& p) const noexcept {
-        return std::hash<std::uint64_t>{}(p.first.value) ^
-               (std::hash<std::uint64_t>{}(p.second.value) << 1);
-    }
-};

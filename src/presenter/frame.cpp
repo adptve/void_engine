@@ -5,12 +5,14 @@
 #include <void_engine/presenter/backend.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstring>
 #include <memory>
 #include <mutex>
 #include <numeric>
+#include <sstream>
 #include <vector>
 
 namespace void_presenter {
@@ -353,14 +355,16 @@ namespace debug {
 std::string format_frame(const Frame& frame) {
     std::string result = "Frame {\n";
 
-    result += "  number: " + std::to_string(frame.number) + "\n";
-    result += "  state: " + std::string(frame_state_name(frame.state)) + "\n";
+    result += "  number: " + std::to_string(frame.number()) + "\n";
+    result += "  state: " + std::string(frame_state_name(frame.state())) + "\n";
 
-    auto cpu_us = std::chrono::duration_cast<std::chrono::microseconds>(
-        frame.cpu_end - frame.cpu_begin).count();
-    result += "  cpu_time: " + std::to_string(cpu_us) + " us\n";
+    if (auto dur = frame.render_duration()) {
+        auto cpu_us = std::chrono::duration_cast<std::chrono::microseconds>(*dur).count();
+        result += "  cpu_time: " + std::to_string(cpu_us) + " us\n";
+    }
 
-    result += "  outputs: " + std::to_string(frame.outputs.size()) + "\n";
+    result += "  width: " + std::to_string(frame.width()) + "\n";
+    result += "  height: " + std::to_string(frame.height()) + "\n";
 
     result += "}";
     return result;

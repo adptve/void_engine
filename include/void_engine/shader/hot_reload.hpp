@@ -105,12 +105,13 @@ public:
         std::chrono::milliseconds debounce_interval{100};
         std::vector<std::string> watch_extensions{".wgsl", ".glsl", ".vert", ".frag", ".comp"};
         bool recursive = true;
+
+        Config() = default;
     };
 
     /// Constructor
-    explicit ShaderWatcher(Config config = {})
-        : m_config(config)
-        , m_watcher(std::make_unique<void_core::PollingFileWatcher>(config.debounce_interval)) {}
+    ShaderWatcher() : m_config(Config{}), m_watcher(std::make_unique<void_core::PollingFileWatcher>(m_config.debounce_interval)) {}
+    explicit ShaderWatcher(const Config& config) : m_config(config), m_watcher(std::make_unique<void_core::PollingFileWatcher>(config.debounce_interval)) {}
 
     /// Start watching a directory
     void_core::Result<void> watch_directory(const std::string& path) {
@@ -212,14 +213,30 @@ public:
         std::chrono::milliseconds debounce_interval{100};
         bool auto_rollback_on_failure = true;
         bool log_events = true;
+
+        Config() = default;
     };
 
     /// Constructor
     ShaderHotReloadManager(
         ShaderRegistry& registry,
         ShaderCompiler& compiler,
+        CompilerConfig compiler_config)
+        : m_registry(registry)
+        , m_compiler(compiler)
+        , m_compiler_config(std::move(compiler_config))
+        , m_config(Config{})
+    {
+        ShaderWatcher::Config watcher_config;
+        watcher_config.debounce_interval = m_config.debounce_interval;
+        m_watcher = std::make_unique<ShaderWatcher>(watcher_config);
+    }
+
+    ShaderHotReloadManager(
+        ShaderRegistry& registry,
+        ShaderCompiler& compiler,
         CompilerConfig compiler_config,
-        Config config = {})
+        const Config& config)
         : m_registry(registry)
         , m_compiler(compiler)
         , m_compiler_config(std::move(compiler_config))

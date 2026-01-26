@@ -54,6 +54,7 @@ typedef ptrdiff_t GLsizeiptr;
 #define GL_DEPTH_COMPONENT24 0x81A6
 #define GL_DEPTH_COMPONENT 0x1902
 #define GL_UNSIGNED_BYTE 0x1401
+#define GL_TEXTURE0 0x84C0
 #endif
 
 // GL function pointer types

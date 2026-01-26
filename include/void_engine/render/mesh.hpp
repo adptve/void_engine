@@ -7,6 +7,7 @@
 #include "resource.hpp"
 #include <cstdint>
 #include <cstddef>
+#include <cmath>
 #include <string>
 #include <vector>
 #include <optional>

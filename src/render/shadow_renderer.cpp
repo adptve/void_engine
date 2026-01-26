@@ -3,6 +3,7 @@
 
 #include <void_engine/render/shadow.hpp>
 #include <void_engine/render/texture.hpp>
+#include <void_engine/render/gl_renderer.hpp>
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
@@ -39,6 +40,12 @@
 #define GL_NONE 0
 #define GL_COLOR_BUFFER_BIT 0x00004000
 #define GL_DEPTH_BUFFER_BIT 0x00000100
+#define GL_RED 0x1903
+#define GL_RG 0x8227
+#define GL_R32F 0x822E
+#define GL_RG32F 0x8230
+#define GL_REPEAT 0x2901
+#define GL_CLAMP_TO_EDGE 0x812F
 
 typedef char GLchar;
 typedef ptrdiff_t GLsizeiptr;
@@ -721,68 +728,16 @@ extern "C" void APIENTRY glTexImage2D(GLenum target, GLint level, GLint internal
 #endif
 
 // =============================================================================
-// Ray-Traced Shadows Implementation
+// RayTracedShadowRenderer Implementation
 // =============================================================================
 
-/// Ray-traced shadow configuration
-struct RayTracedShadowConfig {
-    bool enabled = false;
-    std::uint32_t rays_per_pixel = 1;           // SPP for soft shadows
-    float max_ray_distance = 1000.0f;           // Maximum shadow ray length
-    float shadow_bias = 0.001f;                 // Ray origin offset
-    float soft_shadow_radius = 0.1f;            // Light source radius for soft shadows
-    bool use_blue_noise = true;                 // Blue noise sampling
-    bool temporal_accumulation = true;          // Accumulate across frames
-    std::uint32_t denoiser_iterations = 2;      // Shadow denoiser passes
-};
+RayTracedShadowRenderer::RayTracedShadowRenderer() = default;
 
-/// Ray structure for ray tracing
-struct ShadowRay {
-    glm::vec3 origin;
-    float t_min;
-    glm::vec3 direction;
-    float t_max;
-};
+RayTracedShadowRenderer::~RayTracedShadowRenderer() {
+    shutdown();
+}
 
-/// BLAS (Bottom-Level Acceleration Structure) handle
-struct BlasHandle {
-    std::uint64_t id = 0;
-    [[nodiscard]] bool is_valid() const noexcept { return id != 0; }
-};
-
-/// TLAS (Top-Level Acceleration Structure) handle
-struct TlasHandle {
-    std::uint64_t id = 0;
-    [[nodiscard]] bool is_valid() const noexcept { return id != 0; }
-};
-
-/// Acceleration structure geometry description
-struct AccelerationStructureGeometry {
-    const float* vertices = nullptr;
-    std::uint32_t vertex_count = 0;
-    std::uint32_t vertex_stride = 0;
-    const std::uint32_t* indices = nullptr;
-    std::uint32_t index_count = 0;
-    bool opaque = true;
-};
-
-/// Instance for TLAS
-struct AccelerationStructureInstance {
-    BlasHandle blas;
-    glm::mat4 transform = glm::mat4(1.0f);
-    std::uint32_t instance_id = 0;
-    std::uint32_t mask = 0xFF;
-    bool visible = true;
-};
-
-/// Ray-traced shadow renderer (RTX/DXR)
-class RayTracedShadowRenderer {
-public:
-    RayTracedShadowRenderer() = default;
-    ~RayTracedShadowRenderer() { shutdown(); }
-
-    /// Initialize ray-traced shadows
-    bool initialize(const RayTracedShadowConfig& config, std::uint32_t width, std::uint32_t height) {
+bool RayTracedShadowRenderer::initialize(const RayTracedShadowConfig& config, std::uint32_t width, std::uint32_t height) {
         m_config = config;
         m_width = width;
         m_height = height;
@@ -818,224 +773,161 @@ public:
         return true;
     }
 
-    /// Shutdown and release resources
-    void shutdown() {
-        destroy_acceleration_structures();
-        destroy_rt_pipeline();
-        destroy_shadow_texture();
-        destroy_temporal_resources();
-        m_blas_map.clear();
+void RayTracedShadowRenderer::shutdown() {
+    destroy_acceleration_structures();
+    destroy_rt_pipeline();
+    destroy_shadow_texture();
+    destroy_temporal_resources();
+    m_blas_map.clear();
+}
+
+BlasHandle RayTracedShadowRenderer::build_blas(const AccelerationStructureGeometry& geometry) {
+    if (!m_rt_supported) return BlasHandle{0};
+
+    BlasHandle handle{++m_next_blas_id};
+
+    // Store geometry info for building
+    BlasData data;
+    data.vertex_count = geometry.vertex_count;
+    data.index_count = geometry.index_count;
+    data.opaque = geometry.opaque;
+
+    // In real implementation:
+    // - Create VkAccelerationStructureKHR (Vulkan)
+    // - Create ID3D12Resource with D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE (D3D12)
+    // - Build acceleration structure with vkCmdBuildAccelerationStructuresKHR / BuildRaytracingAccelerationStructure
+
+    m_blas_map[handle.id] = data;
+
+    spdlog::debug("Built BLAS: {} vertices, {} indices",
+                  geometry.vertex_count, geometry.index_count);
+    return handle;
+}
+
+void RayTracedShadowRenderer::destroy_blas(BlasHandle handle) {
+    m_blas_map.erase(handle.id);
+}
+
+bool RayTracedShadowRenderer::build_tlas(const std::vector<AccelerationStructureInstance>& instances) {
+    if (!m_rt_supported || instances.empty()) return false;
+
+    m_instances = instances;
+    m_tlas_dirty = true;
+
+    // In real implementation:
+    // - Create instance buffer with VkAccelerationStructureInstanceKHR / D3D12_RAYTRACING_INSTANCE_DESC
+    // - Build TLAS with vkCmdBuildAccelerationStructuresKHR / BuildRaytracingAccelerationStructure
+
+    spdlog::debug("Built TLAS with {} instances", instances.size());
+    return true;
+}
+
+void RayTracedShadowRenderer::update_tlas() {
+    if (!m_tlas_dirty) return;
+
+    // Rebuild TLAS (or update in place for small changes)
+    m_tlas_dirty = false;
+}
+
+void RayTracedShadowRenderer::trace_directional_shadows(const glm::vec3& light_direction,
+                                const glm::mat4& view_projection,
+                                std::uint32_t depth_texture) {
+    if (!m_rt_supported) return;
+
+    // Bind RT pipeline
+    bind_rt_pipeline();
+
+    // Set uniforms
+    set_light_direction(light_direction);
+    set_view_projection(view_projection);
+    bind_depth_texture(depth_texture);
+
+    // Dispatch rays
+    dispatch_rays(m_width, m_height, 1);
+
+    // Apply temporal accumulation if enabled
+    if (m_config.temporal_accumulation) {
+        apply_temporal_filter();
     }
 
-    /// Build BLAS for mesh geometry
-    [[nodiscard]] BlasHandle build_blas(const AccelerationStructureGeometry& geometry) {
-        if (!m_rt_supported) return BlasHandle{0};
-
-        BlasHandle handle{++m_next_blas_id};
-
-        // Store geometry info for building
-        BlasData data;
-        data.vertex_count = geometry.vertex_count;
-        data.index_count = geometry.index_count;
-        data.opaque = geometry.opaque;
-
-        // In real implementation:
-        // - Create VkAccelerationStructureKHR (Vulkan)
-        // - Create ID3D12Resource with D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE (D3D12)
-        // - Build acceleration structure with vkCmdBuildAccelerationStructuresKHR / BuildRaytracingAccelerationStructure
-
-        m_blas_map[handle.id] = data;
-
-        spdlog::debug("Built BLAS: {} vertices, {} indices",
-                      geometry.vertex_count, geometry.index_count);
-        return handle;
+    // Apply denoiser if configured
+    if (m_config.denoiser_iterations > 0) {
+        apply_denoiser();
     }
+}
 
-    /// Destroy BLAS
-    void destroy_blas(BlasHandle handle) {
-        m_blas_map.erase(handle.id);
+void RayTracedShadowRenderer::trace_point_shadows(const glm::vec3& light_position,
+                                float light_radius,
+                                const glm::mat4& view_projection,
+                                std::uint32_t depth_texture) {
+    if (!m_rt_supported) return;
+
+    bind_rt_pipeline();
+    set_light_position(light_position, light_radius);
+    set_view_projection(view_projection);
+    bind_depth_texture(depth_texture);
+    dispatch_rays(m_width, m_height, 1);
+
+    if (m_config.temporal_accumulation) {
+        apply_temporal_filter();
     }
+}
 
-    /// Build TLAS from instances
-    bool build_tlas(const std::vector<AccelerationStructureInstance>& instances) {
-        if (!m_rt_supported || instances.empty()) return false;
+bool RayTracedShadowRenderer::check_raytracing_support() {
+    // Check for VK_KHR_ray_tracing_pipeline / DXR support
+    // Simplified: check for extension availability
 
-        m_instances = instances;
-        m_tlas_dirty = true;
-
-        // In real implementation:
-        // - Create instance buffer with VkAccelerationStructureInstanceKHR / D3D12_RAYTRACING_INSTANCE_DESC
-        // - Build TLAS with vkCmdBuildAccelerationStructuresKHR / BuildRaytracingAccelerationStructure
-
-        spdlog::debug("Built TLAS with {} instances", instances.size());
+#ifdef _WIN32
+    // Check for DXR support via D3D12
+    HMODULE d3d12 = LoadLibraryA("d3d12.dll");
+    if (d3d12) {
+        FreeLibrary(d3d12);
+        // Would query D3D12_FEATURE_DATA_D3D12_OPTIONS5 for ray tracing tier
+        m_rt_supported = true;
         return true;
     }
-
-    /// Update TLAS (for dynamic scenes)
-    void update_tlas() {
-        if (!m_tlas_dirty) return;
-
-        // Rebuild TLAS (or update in place for small changes)
-        m_tlas_dirty = false;
-    }
-
-    /// Trace shadow rays for directional light
-    void trace_directional_shadows(const glm::vec3& light_direction,
-                                    const glm::mat4& view_projection,
-                                    GLuint depth_texture) {
-        if (!m_rt_supported) return;
-
-        // Bind RT pipeline
-        bind_rt_pipeline();
-
-        // Set uniforms
-        set_light_direction(light_direction);
-        set_view_projection(view_projection);
-        bind_depth_texture(depth_texture);
-
-        // Dispatch rays
-        dispatch_rays(m_width, m_height, 1);
-
-        // Apply temporal accumulation if enabled
-        if (m_config.temporal_accumulation) {
-            apply_temporal_filter();
-        }
-
-        // Apply denoiser if configured
-        if (m_config.denoiser_iterations > 0) {
-            apply_denoiser();
-        }
-    }
-
-    /// Trace shadow rays for point/spot lights
-    void trace_local_light_shadows(const glm::vec3& light_position,
-                                    float light_radius,
-                                    const glm::mat4& view_projection,
-                                    GLuint depth_texture) {
-        if (!m_rt_supported) return;
-
-        bind_rt_pipeline();
-        set_light_position(light_position, light_radius);
-        set_view_projection(view_projection);
-        bind_depth_texture(depth_texture);
-        dispatch_rays(m_width, m_height, 1);
-
-        if (m_config.temporal_accumulation) {
-            apply_temporal_filter();
-        }
-    }
-
-    /// Bind shadow result texture
-    void bind_shadow_texture(std::uint32_t texture_unit) const {
-        if (pfn_glActiveTexture) {
-            pfn_glActiveTexture(0x84C0 + texture_unit);
-        }
-        glBindTexture(GL_TEXTURE_2D, m_shadow_texture);
-    }
-
-    /// Get shadow texture for compositing
-    [[nodiscard]] GLuint shadow_texture() const noexcept { return m_shadow_texture; }
-
-    /// Resize shadow maps
-    void resize(std::uint32_t width, std::uint32_t height) {
-        if (width == m_width && height == m_height) return;
-
-        m_width = width;
-        m_height = height;
-
-        destroy_shadow_texture();
-        create_shadow_texture();
-
-        if (m_config.temporal_accumulation) {
-            destroy_temporal_resources();
-            create_temporal_resources();
-        }
-    }
-
-    /// Check if ray tracing is supported
-    [[nodiscard]] bool is_supported() const noexcept { return m_rt_supported; }
-
-    /// Get config
-    [[nodiscard]] const RayTracedShadowConfig& config() const noexcept { return m_config; }
-
-private:
-    struct BlasData {
-        std::uint32_t vertex_count = 0;
-        std::uint32_t index_count = 0;
-        bool opaque = true;
-        // In real impl: VkAccelerationStructureKHR or ID3D12Resource
-    };
-
-    RayTracedShadowConfig m_config;
-    std::uint32_t m_width = 0;
-    std::uint32_t m_height = 0;
-    bool m_rt_supported = false;
-    bool m_tlas_dirty = false;
-
-    GLuint m_shadow_texture = 0;
-    GLuint m_history_texture = 0;
-    GLuint m_blue_noise_texture = 0;
-
-    std::unordered_map<std::uint64_t, BlasData> m_blas_map;
-    std::vector<AccelerationStructureInstance> m_instances;
-    std::uint64_t m_next_blas_id = 0;
-    std::uint64_t m_frame_count = 0;
-
-    bool check_raytracing_support() {
-        // Check for VK_KHR_ray_tracing_pipeline / DXR support
-        // Simplified: check for extension availability
-
-#ifdef VOID_PLATFORM_WINDOWS
-        // Check for DXR support via D3D12
-        HMODULE d3d12 = LoadLibraryA("d3d12.dll");
-        if (d3d12) {
-            FreeLibrary(d3d12);
-            // Would query D3D12_FEATURE_DATA_D3D12_OPTIONS5 for ray tracing tier
-            m_rt_supported = true;
-            return true;
-        }
 #endif
 
-        // Check for Vulkan ray tracing
-        // Would query VK_KHR_ray_tracing_pipeline extension
+    // Check for Vulkan ray tracing
+    // Would query VK_KHR_ray_tracing_pipeline extension
 
-        // For now, assume supported if we have modern GPU
-        m_rt_supported = true;
-        return m_rt_supported;
+    // For now, assume supported if we have modern GPU
+    m_rt_supported = true;
+    return m_rt_supported;
+}
+
+bool RayTracedShadowRenderer::create_shadow_texture() {
+    glGenTextures(1, &m_shadow_texture);
+    glBindTexture(GL_TEXTURE_2D, m_shadow_texture);
+
+    // R32F for shadow factor (0 = shadow, 1 = lit)
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, m_width, m_height, 0, GL_RED, GL_FLOAT, nullptr);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    return true;
+}
+
+void RayTracedShadowRenderer::destroy_shadow_texture() {
+    if (m_shadow_texture) {
+        glDeleteTextures(1, &m_shadow_texture);
+        m_shadow_texture = 0;
     }
+}
 
-    bool create_shadow_texture() {
-        glGenTextures(1, &m_shadow_texture);
-        glBindTexture(GL_TEXTURE_2D, m_shadow_texture);
+bool RayTracedShadowRenderer::create_rt_pipeline() {
+    // In real implementation:
+    // - Create ray generation shader
+    // - Create miss shader
+    // - Create closest hit shader (optional for shadows)
+    // - Create ray tracing pipeline state
 
-        // R32F for shadow factor (0 = shadow, 1 = lit)
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, m_width, m_height, 0, GL_RED, GL_FLOAT, nullptr);
-
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-        glBindTexture(GL_TEXTURE_2D, 0);
-        return true;
-    }
-
-    void destroy_shadow_texture() {
-        if (m_shadow_texture) {
-            glDeleteTextures(1, &m_shadow_texture);
-            m_shadow_texture = 0;
-        }
-    }
-
-    bool create_rt_pipeline() {
-        // In real implementation:
-        // - Create ray generation shader
-        // - Create miss shader
-        // - Create closest hit shader (optional for shadows)
-        // - Create ray tracing pipeline state
-
-        // Ray generation shader (GLSL for reference, would be compiled to SPIR-V)
-        static const char* RAY_GEN_SHADER = R"(
+    // Ray generation shader (GLSL for reference, would be compiled to SPIR-V)
+    static const char* RAY_GEN_SHADER = R"(
 #version 460
 #extension GL_EXT_ray_tracing : require
 
@@ -1116,8 +1008,8 @@ void main() {
 }
 )";
 
-        // Miss shader
-        static const char* MISS_SHADER = R"(
+    // Miss shader
+    static const char* MISS_SHADER = R"(
 #version 460
 #extension GL_EXT_ray_tracing : require
 
@@ -1128,8 +1020,8 @@ void main() {
 }
 )";
 
-        // Any-hit shader for transparent shadows (optional)
-        static const char* ANY_HIT_SHADER = R"(
+    // Any-hit shader for transparent shadows (optional)
+    static const char* ANY_HIT_SHADER = R"(
 #version 460
 #extension GL_EXT_ray_tracing : require
 
@@ -1142,112 +1034,111 @@ void main() {
 }
 )";
 
-        (void)RAY_GEN_SHADER;
-        (void)MISS_SHADER;
-        (void)ANY_HIT_SHADER;
+    (void)RAY_GEN_SHADER;
+    (void)MISS_SHADER;
+    (void)ANY_HIT_SHADER;
 
-        return true;
+    return true;
+}
+
+void RayTracedShadowRenderer::destroy_rt_pipeline() {
+    // Destroy pipeline state objects
+}
+
+void RayTracedShadowRenderer::create_blue_noise_texture() {
+    // Generate or load blue noise texture for sampling
+    glGenTextures(1, &m_blue_noise_texture);
+    glBindTexture(GL_TEXTURE_2D, m_blue_noise_texture);
+
+    // Simple noise for demonstration (real impl would use proper blue noise)
+    std::vector<float> noise(64 * 64 * 2);
+    for (std::size_t i = 0; i < noise.size(); ++i) {
+        noise[i] = static_cast<float>(rand()) / RAND_MAX;
     }
 
-    void destroy_rt_pipeline() {
-        // Destroy pipeline state objects
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, 64, 64, 0, GL_RG, GL_FLOAT, noise.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+void RayTracedShadowRenderer::create_temporal_resources() {
+    glGenTextures(1, &m_history_texture);
+    glBindTexture(GL_TEXTURE_2D, m_history_texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, m_width, m_height, 0, GL_RED, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+void RayTracedShadowRenderer::destroy_temporal_resources() {
+    if (m_history_texture) {
+        glDeleteTextures(1, &m_history_texture);
+        m_history_texture = 0;
     }
-
-    void create_blue_noise_texture() {
-        // Generate or load blue noise texture for sampling
-        glGenTextures(1, &m_blue_noise_texture);
-        glBindTexture(GL_TEXTURE_2D, m_blue_noise_texture);
-
-        // Simple noise for demonstration (real impl would use proper blue noise)
-        std::vector<float> noise(64 * 64 * 2);
-        for (std::size_t i = 0; i < noise.size(); ++i) {
-            noise[i] = static_cast<float>(rand()) / RAND_MAX;
-        }
-
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, 64, 64, 0, GL_RG, GL_FLOAT, noise.data());
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
-        glBindTexture(GL_TEXTURE_2D, 0);
+    if (m_blue_noise_texture) {
+        glDeleteTextures(1, &m_blue_noise_texture);
+        m_blue_noise_texture = 0;
     }
+}
 
-    void create_temporal_resources() {
-        glGenTextures(1, &m_history_texture);
-        glBindTexture(GL_TEXTURE_2D, m_history_texture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, m_width, m_height, 0, GL_RED, GL_FLOAT, nullptr);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
+void RayTracedShadowRenderer::destroy_acceleration_structures() {
+    // Destroy TLAS and all BLAS
+    m_blas_map.clear();
+    m_instances.clear();
+}
 
-    void destroy_temporal_resources() {
-        if (m_history_texture) {
-            glDeleteTextures(1, &m_history_texture);
-            m_history_texture = 0;
-        }
-        if (m_blue_noise_texture) {
-            glDeleteTextures(1, &m_blue_noise_texture);
-            m_blue_noise_texture = 0;
-        }
-    }
+void RayTracedShadowRenderer::bind_rt_pipeline() {
+    // Bind ray tracing pipeline
+}
 
-    void destroy_acceleration_structures() {
-        // Destroy TLAS and all BLAS
-        m_blas_map.clear();
-        m_instances.clear();
-    }
+void RayTracedShadowRenderer::set_light_direction(const glm::vec3& dir) {
+    // Set uniform
+    (void)dir;
+}
 
-    void bind_rt_pipeline() {
-        // Bind ray tracing pipeline
-    }
+void RayTracedShadowRenderer::set_light_position(const glm::vec3& pos, float radius) {
+    (void)pos;
+    (void)radius;
+}
 
-    void set_light_direction(const glm::vec3& dir) {
-        // Set uniform
-        (void)dir;
-    }
+void RayTracedShadowRenderer::set_view_projection(const glm::mat4& vp) {
+    (void)vp;
+}
 
-    void set_light_position(const glm::vec3& pos, float radius) {
-        (void)pos;
-        (void)radius;
-    }
+void RayTracedShadowRenderer::bind_depth_texture(std::uint32_t tex) {
+    (void)tex;
+}
 
-    void set_view_projection(const glm::mat4& vp) {
-        (void)vp;
-    }
+void RayTracedShadowRenderer::dispatch_rays(std::uint32_t width, std::uint32_t height, std::uint32_t depth) {
+    // In Vulkan: vkCmdTraceRaysKHR
+    // In D3D12: DispatchRays
+    m_frame_count++;
+    (void)width;
+    (void)height;
+    (void)depth;
+}
 
-    void bind_depth_texture(GLuint tex) {
-        (void)tex;
-    }
+void RayTracedShadowRenderer::apply_temporal_filter() {
+    // Blend current frame with history using motion vectors
+    // shadow = lerp(history, current, 0.1)
+}
 
-    void dispatch_rays(std::uint32_t width, std::uint32_t height, std::uint32_t depth) {
-        // In Vulkan: vkCmdTraceRaysKHR
-        // In D3D12: DispatchRays
-        m_frame_count++;
-        (void)width;
-        (void)height;
-        (void)depth;
+void RayTracedShadowRenderer::apply_denoiser() {
+    // Apply shadow-specific denoiser (SVGF, ASVGF, etc.)
+    // Multiple iterations for quality
+    for (std::uint32_t i = 0; i < m_config.denoiser_iterations; ++i) {
+        denoise_pass(i);
     }
+}
 
-    void apply_temporal_filter() {
-        // Blend current frame with history using motion vectors
-        // shadow = lerp(history, current, 0.1)
-    }
-
-    void apply_denoiser() {
-        // Apply shadow-specific denoiser (SVGF, ASVGF, etc.)
-        // Multiple iterations for quality
-        for (std::uint32_t i = 0; i < m_config.denoiser_iterations; ++i) {
-            denoise_pass(i);
-        }
-    }
-
-    void denoise_pass(std::uint32_t iteration) {
-        // Edge-aware blur pass
-        (void)iteration;
-    }
-};
+void RayTracedShadowRenderer::denoise_pass(std::uint32_t iteration) {
+    // Edge-aware blur pass
+    (void)iteration;
+}
 
 /// Ray-traced shadow system statistics
 struct RayTracedShadowStats {

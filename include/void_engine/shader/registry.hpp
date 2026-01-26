@@ -82,10 +82,13 @@ public:
     struct Config {
         std::size_t max_cached_shaders = 256;
         std::size_t max_history_depth = 3;
+
+        Config() = default;
     };
 
     /// Constructor
-    explicit ShaderRegistry(Config config = {}) : m_config(config) {}
+    ShaderRegistry() : m_config(Config{}) {}
+    explicit ShaderRegistry(const Config& config) : m_config(config) {}
 
     /// Register shader from source
     void_core::Result<ShaderId> register_shader(ShaderSource source) {

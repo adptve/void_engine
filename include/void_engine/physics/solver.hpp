@@ -164,17 +164,17 @@ public:
         m_r_b = void_math::rotate(pos_b.q, m_local_anchor_b);
 
         // Compute effective mass for linear constraint
-        void_math::Mat3 k = void_math::Mat3::identity();
+        void_math::Mat3 k = void_math::mat3_identity();
         float total_inv_mass = inv_mass_a + inv_mass_b;
-        k.m[0][0] = total_inv_mass;
-        k.m[1][1] = total_inv_mass;
-        k.m[2][2] = total_inv_mass;
+        k[0][0] = total_inv_mass;
+        k[1][1] = total_inv_mass;
+        k[2][2] = total_inv_mass;
 
         // Add angular terms
         auto skew_a = skew_symmetric(m_r_a);
         auto skew_b = skew_symmetric(m_r_b);
-        auto inertia_a = void_math::Mat3::diagonal(inv_inertia_a);
-        auto inertia_b = void_math::Mat3::diagonal(inv_inertia_b);
+        auto inertia_a = void_math::mat3_diagonal(inv_inertia_a);
+        auto inertia_b = void_math::mat3_diagonal(inv_inertia_b);
 
         k = k + skew_a * inertia_a * transpose(skew_a);
         k = k + skew_b * inertia_b * transpose(skew_b);
@@ -256,31 +256,11 @@ private:
     }
 
     static void_math::Mat3 transpose(const void_math::Mat3& m) {
-        return void_math::Mat3{
-            m.m[0][0], m.m[1][0], m.m[2][0],
-            m.m[0][1], m.m[1][1], m.m[2][1],
-            m.m[0][2], m.m[1][2], m.m[2][2]
-        };
+        return glm::transpose(m);
     }
 
     static void_math::Mat3 inverse(const void_math::Mat3& m) {
-        float det = m.m[0][0] * (m.m[1][1] * m.m[2][2] - m.m[1][2] * m.m[2][1])
-                  - m.m[0][1] * (m.m[1][0] * m.m[2][2] - m.m[1][2] * m.m[2][0])
-                  + m.m[0][2] * (m.m[1][0] * m.m[2][1] - m.m[1][1] * m.m[2][0]);
-        if (std::abs(det) < 0.0001f) return void_math::Mat3::identity();
-        float inv_det = 1.0f / det;
-
-        return void_math::Mat3{
-            (m.m[1][1] * m.m[2][2] - m.m[1][2] * m.m[2][1]) * inv_det,
-            (m.m[0][2] * m.m[2][1] - m.m[0][1] * m.m[2][2]) * inv_det,
-            (m.m[0][1] * m.m[1][2] - m.m[0][2] * m.m[1][1]) * inv_det,
-            (m.m[1][2] * m.m[2][0] - m.m[1][0] * m.m[2][2]) * inv_det,
-            (m.m[0][0] * m.m[2][2] - m.m[0][2] * m.m[2][0]) * inv_det,
-            (m.m[0][2] * m.m[1][0] - m.m[0][0] * m.m[1][2]) * inv_det,
-            (m.m[1][0] * m.m[2][1] - m.m[1][1] * m.m[2][0]) * inv_det,
-            (m.m[0][1] * m.m[2][0] - m.m[0][0] * m.m[2][1]) * inv_det,
-            (m.m[0][0] * m.m[1][1] - m.m[0][1] * m.m[1][0]) * inv_det
-        };
+        return glm::inverse(m);
     }
 
     JointId m_id;
@@ -622,10 +602,10 @@ public:
 
         // Compute 3x3 effective mass matrix
         float total_inv_mass = inv_mass_a + inv_mass_b;
-        m_k.m[0][0] = total_inv_mass;
-        m_k.m[1][1] = total_inv_mass;
-        m_k.m[2][2] = total_inv_mass;
-        m_k.m[0][1] = m_k.m[0][2] = m_k.m[1][0] = m_k.m[1][2] = m_k.m[2][0] = m_k.m[2][1] = 0;
+        m_k[0][0] = total_inv_mass;
+        m_k[1][1] = total_inv_mass;
+        m_k[2][2] = total_inv_mass;
+        m_k[0][1] = m_k[0][2] = m_k[1][0] = m_k[1][2] = m_k[2][0] = m_k[2][1] = 0;
 
         // Add angular contributions
         add_skew_inertia(m_k, m_r_a, inv_inertia_a);
@@ -679,9 +659,9 @@ public:
         // Recompute mass matrix
         void_math::Mat3 k;
         float total_inv_mass = inv_mass_a + inv_mass_b;
-        k.m[0][0] = total_inv_mass; k.m[0][1] = 0; k.m[0][2] = 0;
-        k.m[1][0] = 0; k.m[1][1] = total_inv_mass; k.m[1][2] = 0;
-        k.m[2][0] = 0; k.m[2][1] = 0; k.m[2][2] = total_inv_mass;
+        k[0][0] = total_inv_mass; k[0][1] = 0; k[0][2] = 0;
+        k[1][0] = 0; k[1][1] = total_inv_mass; k[1][2] = 0;
+        k[2][0] = 0; k[2][1] = 0; k[2][2] = total_inv_mass;
 
         add_skew_inertia(k, r_a, inv_inertia_a);
         add_skew_inertia(k, r_b, inv_inertia_b);
@@ -705,43 +685,43 @@ private:
     static void add_skew_inertia(void_math::Mat3& k, const void_math::Vec3& r, const void_math::Vec3& inv_i) {
         // K += skew(r) * diag(inv_i) * skew(r)^T
         float rx2 = r.x * r.x, ry2 = r.y * r.y, rz2 = r.z * r.z;
-        k.m[0][0] += inv_i.y * rz2 + inv_i.z * ry2;
-        k.m[1][1] += inv_i.x * rz2 + inv_i.z * rx2;
-        k.m[2][2] += inv_i.x * ry2 + inv_i.y * rx2;
+        k[0][0] += inv_i.y * rz2 + inv_i.z * ry2;
+        k[1][1] += inv_i.x * rz2 + inv_i.z * rx2;
+        k[2][2] += inv_i.x * ry2 + inv_i.y * rx2;
 
         float t = -inv_i.z * r.x * r.y;
-        k.m[0][1] += t; k.m[1][0] += t;
+        k[0][1] += t; k[1][0] += t;
         t = -inv_i.y * r.x * r.z;
-        k.m[0][2] += t; k.m[2][0] += t;
+        k[0][2] += t; k[2][0] += t;
         t = -inv_i.x * r.y * r.z;
-        k.m[1][2] += t; k.m[2][1] += t;
+        k[1][2] += t; k[2][1] += t;
     }
 
     static void_math::Mat3 inverse_3x3(const void_math::Mat3& m) {
-        float det = m.m[0][0] * (m.m[1][1] * m.m[2][2] - m.m[1][2] * m.m[2][1])
-                  - m.m[0][1] * (m.m[1][0] * m.m[2][2] - m.m[1][2] * m.m[2][0])
-                  + m.m[0][2] * (m.m[1][0] * m.m[2][1] - m.m[1][1] * m.m[2][0]);
-        if (std::abs(det) < 0.0001f) return void_math::Mat3::identity();
+        float det = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+                  - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+                  + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+        if (std::abs(det) < 0.0001f) return void_math::mat3_identity();
         float inv_det = 1.0f / det;
 
         void_math::Mat3 result;
-        result.m[0][0] = (m.m[1][1] * m.m[2][2] - m.m[1][2] * m.m[2][1]) * inv_det;
-        result.m[0][1] = (m.m[0][2] * m.m[2][1] - m.m[0][1] * m.m[2][2]) * inv_det;
-        result.m[0][2] = (m.m[0][1] * m.m[1][2] - m.m[0][2] * m.m[1][1]) * inv_det;
-        result.m[1][0] = (m.m[1][2] * m.m[2][0] - m.m[1][0] * m.m[2][2]) * inv_det;
-        result.m[1][1] = (m.m[0][0] * m.m[2][2] - m.m[0][2] * m.m[2][0]) * inv_det;
-        result.m[1][2] = (m.m[0][2] * m.m[1][0] - m.m[0][0] * m.m[1][2]) * inv_det;
-        result.m[2][0] = (m.m[1][0] * m.m[2][1] - m.m[1][1] * m.m[2][0]) * inv_det;
-        result.m[2][1] = (m.m[0][1] * m.m[2][0] - m.m[0][0] * m.m[2][1]) * inv_det;
-        result.m[2][2] = (m.m[0][0] * m.m[1][1] - m.m[0][1] * m.m[1][0]) * inv_det;
+        result[0][0] = (m[1][1] * m[2][2] - m[1][2] * m[2][1]) * inv_det;
+        result[0][1] = (m[0][2] * m[2][1] - m[0][1] * m[2][2]) * inv_det;
+        result[0][2] = (m[0][1] * m[1][2] - m[0][2] * m[1][1]) * inv_det;
+        result[1][0] = (m[1][2] * m[2][0] - m[1][0] * m[2][2]) * inv_det;
+        result[1][1] = (m[0][0] * m[2][2] - m[0][2] * m[2][0]) * inv_det;
+        result[1][2] = (m[0][2] * m[1][0] - m[0][0] * m[1][2]) * inv_det;
+        result[2][0] = (m[1][0] * m[2][1] - m[1][1] * m[2][0]) * inv_det;
+        result[2][1] = (m[0][1] * m[2][0] - m[0][0] * m[2][1]) * inv_det;
+        result[2][2] = (m[0][0] * m[1][1] - m[0][1] * m[1][0]) * inv_det;
         return result;
     }
 
     static void_math::Vec3 mul_3x3(const void_math::Mat3& m, const void_math::Vec3& v) {
         return void_math::Vec3{
-            m.m[0][0] * v.x + m.m[0][1] * v.y + m.m[0][2] * v.z,
-            m.m[1][0] * v.x + m.m[1][1] * v.y + m.m[1][2] * v.z,
-            m.m[2][0] * v.x + m.m[2][1] * v.y + m.m[2][2] * v.z
+            m[0][0] * v.x + m[0][1] * v.y + m[0][2] * v.z,
+            m[1][0] * v.x + m[1][1] * v.y + m[1][2] * v.z,
+            m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.z
         };
     }
 
@@ -820,9 +800,9 @@ public:
 
         // Linear constraint mass (same as ball joint)
         float total_inv_mass = inv_mass_a + inv_mass_b;
-        m_linear_k.m[0][0] = total_inv_mass; m_linear_k.m[0][1] = 0; m_linear_k.m[0][2] = 0;
-        m_linear_k.m[1][0] = 0; m_linear_k.m[1][1] = total_inv_mass; m_linear_k.m[1][2] = 0;
-        m_linear_k.m[2][0] = 0; m_linear_k.m[2][1] = 0; m_linear_k.m[2][2] = total_inv_mass;
+        m_linear_k[0][0] = total_inv_mass; m_linear_k[0][1] = 0; m_linear_k[0][2] = 0;
+        m_linear_k[1][0] = 0; m_linear_k[1][1] = total_inv_mass; m_linear_k[1][2] = 0;
+        m_linear_k[2][0] = 0; m_linear_k[2][1] = 0; m_linear_k[2][2] = total_inv_mass;
 
         add_skew_inertia(m_linear_k, m_r_a, inv_inertia_a);
         add_skew_inertia(m_linear_k, m_r_b, inv_inertia_b);
@@ -921,9 +901,9 @@ public:
         if (linear_error > 0.005f) {
             void_math::Mat3 k;
             float total_inv_mass = inv_mass_a + inv_mass_b;
-            k.m[0][0] = total_inv_mass; k.m[0][1] = 0; k.m[0][2] = 0;
-            k.m[1][0] = 0; k.m[1][1] = total_inv_mass; k.m[1][2] = 0;
-            k.m[2][0] = 0; k.m[2][1] = 0; k.m[2][2] = total_inv_mass;
+            k[0][0] = total_inv_mass; k[0][1] = 0; k[0][2] = 0;
+            k[1][0] = 0; k[1][1] = total_inv_mass; k[1][2] = 0;
+            k[2][0] = 0; k[2][1] = 0; k[2][2] = total_inv_mass;
             add_skew_inertia(k, r_a, inv_inertia_a);
             add_skew_inertia(k, r_b, inv_inertia_b);
 
@@ -949,41 +929,41 @@ private:
 
     static void add_skew_inertia(void_math::Mat3& k, const void_math::Vec3& r, const void_math::Vec3& inv_i) {
         float rx2 = r.x * r.x, ry2 = r.y * r.y, rz2 = r.z * r.z;
-        k.m[0][0] += inv_i.y * rz2 + inv_i.z * ry2;
-        k.m[1][1] += inv_i.x * rz2 + inv_i.z * rx2;
-        k.m[2][2] += inv_i.x * ry2 + inv_i.y * rx2;
+        k[0][0] += inv_i.y * rz2 + inv_i.z * ry2;
+        k[1][1] += inv_i.x * rz2 + inv_i.z * rx2;
+        k[2][2] += inv_i.x * ry2 + inv_i.y * rx2;
         float t = -inv_i.z * r.x * r.y;
-        k.m[0][1] += t; k.m[1][0] += t;
+        k[0][1] += t; k[1][0] += t;
         t = -inv_i.y * r.x * r.z;
-        k.m[0][2] += t; k.m[2][0] += t;
+        k[0][2] += t; k[2][0] += t;
         t = -inv_i.x * r.y * r.z;
-        k.m[1][2] += t; k.m[2][1] += t;
+        k[1][2] += t; k[2][1] += t;
     }
 
     static void_math::Mat3 inverse_3x3(const void_math::Mat3& m) {
-        float det = m.m[0][0] * (m.m[1][1] * m.m[2][2] - m.m[1][2] * m.m[2][1])
-                  - m.m[0][1] * (m.m[1][0] * m.m[2][2] - m.m[1][2] * m.m[2][0])
-                  + m.m[0][2] * (m.m[1][0] * m.m[2][1] - m.m[1][1] * m.m[2][0]);
-        if (std::abs(det) < 0.0001f) return void_math::Mat3::identity();
+        float det = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+                  - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+                  + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+        if (std::abs(det) < 0.0001f) return void_math::mat3_identity();
         float inv_det = 1.0f / det;
         void_math::Mat3 result;
-        result.m[0][0] = (m.m[1][1] * m.m[2][2] - m.m[1][2] * m.m[2][1]) * inv_det;
-        result.m[0][1] = (m.m[0][2] * m.m[2][1] - m.m[0][1] * m.m[2][2]) * inv_det;
-        result.m[0][2] = (m.m[0][1] * m.m[1][2] - m.m[0][2] * m.m[1][1]) * inv_det;
-        result.m[1][0] = (m.m[1][2] * m.m[2][0] - m.m[1][0] * m.m[2][2]) * inv_det;
-        result.m[1][1] = (m.m[0][0] * m.m[2][2] - m.m[0][2] * m.m[2][0]) * inv_det;
-        result.m[1][2] = (m.m[0][2] * m.m[1][0] - m.m[0][0] * m.m[1][2]) * inv_det;
-        result.m[2][0] = (m.m[1][0] * m.m[2][1] - m.m[1][1] * m.m[2][0]) * inv_det;
-        result.m[2][1] = (m.m[0][1] * m.m[2][0] - m.m[0][0] * m.m[2][1]) * inv_det;
-        result.m[2][2] = (m.m[0][0] * m.m[1][1] - m.m[0][1] * m.m[1][0]) * inv_det;
+        result[0][0] = (m[1][1] * m[2][2] - m[1][2] * m[2][1]) * inv_det;
+        result[0][1] = (m[0][2] * m[2][1] - m[0][1] * m[2][2]) * inv_det;
+        result[0][2] = (m[0][1] * m[1][2] - m[0][2] * m[1][1]) * inv_det;
+        result[1][0] = (m[1][2] * m[2][0] - m[1][0] * m[2][2]) * inv_det;
+        result[1][1] = (m[0][0] * m[2][2] - m[0][2] * m[2][0]) * inv_det;
+        result[1][2] = (m[0][2] * m[1][0] - m[0][0] * m[1][2]) * inv_det;
+        result[2][0] = (m[1][0] * m[2][1] - m[1][1] * m[2][0]) * inv_det;
+        result[2][1] = (m[0][1] * m[2][0] - m[0][0] * m[2][1]) * inv_det;
+        result[2][2] = (m[0][0] * m[1][1] - m[0][1] * m[1][0]) * inv_det;
         return result;
     }
 
     static void_math::Vec3 mul_3x3(const void_math::Mat3& m, const void_math::Vec3& v) {
         return void_math::Vec3{
-            m.m[0][0] * v.x + m.m[0][1] * v.y + m.m[0][2] * v.z,
-            m.m[1][0] * v.x + m.m[1][1] * v.y + m.m[1][2] * v.z,
-            m.m[2][0] * v.x + m.m[2][1] * v.y + m.m[2][2] * v.z
+            m[0][0] * v.x + m[0][1] * v.y + m[0][2] * v.z,
+            m[1][0] * v.x + m[1][1] * v.y + m[1][2] * v.z,
+            m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.z
         };
     }
 

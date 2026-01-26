@@ -253,8 +253,8 @@ public:
             if (!target_shape) continue;
 
             // Binary search for time of impact
-            TransformedShape cast_shape{shape, start.position, start.rotation};
-            TransformedShape target{*target_shape, body->position(), body->rotation()};
+            CollisionDetector::TransformedShape cast_shape{&shape, start.position, start.rotation};
+            CollisionDetector::TransformedShape target{target_shape, body->position(), body->rotation()};
 
             float t = shape_cast_binary_search(cast_shape, dir, max_distance, target);
 
@@ -273,7 +273,7 @@ public:
                 result.position = start.position + dir * t;
 
                 if (manifold && !manifold->contacts.empty()) {
-                    result.normal = manifold->normal;
+                    result.normal = manifold->average_normal();
                     result.contact_point = manifold->contacts[0].point_a;
                 }
 
@@ -348,7 +348,7 @@ public:
         std::vector<std::pair<BodyId, ShapeId>> candidates;
         m_broadphase->query_aabb(aabb, candidates);
 
-        TransformedShape query_shape{shape, transform.position, transform.rotation};
+        CollisionDetector::TransformedShape query_shape{&shape, transform.position, transform.rotation};
 
         for (const auto& [body_id, shape_id] : candidates) {
             auto* body = m_get_body(body_id);
@@ -360,7 +360,7 @@ public:
             if (!target_shape) target_shape = body->get_shape(0);
             if (!target_shape) continue;
 
-            TransformedShape target{*target_shape, body->position(), body->rotation()};
+            CollisionDetector::TransformedShape target{target_shape, body->position(), body->rotation()};
 
             auto gjk = CollisionDetector::gjk(query_shape, target);
             if (gjk.intersecting) {
@@ -389,7 +389,7 @@ public:
         std::vector<std::pair<BodyId, ShapeId>> candidates;
         m_broadphase->query_aabb(aabb, candidates);
 
-        TransformedShape query_shape{shape, transform.position, transform.rotation};
+        CollisionDetector::TransformedShape query_shape{&shape, transform.position, transform.rotation};
 
         for (const auto& [body_id, shape_id] : candidates) {
             auto* body = m_get_body(body_id);
@@ -401,7 +401,7 @@ public:
             if (!target_shape) target_shape = body->get_shape(0);
             if (!target_shape) continue;
 
-            TransformedShape target{*target_shape, body->position(), body->rotation()};
+            CollisionDetector::TransformedShape target{target_shape, body->position(), body->rotation()};
 
             auto gjk = CollisionDetector::gjk(query_shape, target);
             if (gjk.intersecting) {
@@ -767,7 +767,7 @@ private:
         const float epsilon = 0.001f;
         float t = 0.0f;
 
-        TransformedShape target{shape, void_math::Vec3{0, 0, 0}, void_math::Quat{}};
+        CollisionDetector::TransformedShape target{&shape, void_math::Vec3{0, 0, 0}, void_math::Quat{}};
 
         while (t < max_distance) {
             auto point = origin + direction * t;
@@ -793,10 +793,10 @@ private:
 
     /// Shape cast binary search
     [[nodiscard]] float shape_cast_binary_search(
-        const TransformedShape& shape,
+        const CollisionDetector::TransformedShape& shape,
         const void_math::Vec3& direction,
         float max_distance,
-        const TransformedShape& target) const
+        const CollisionDetector::TransformedShape& target) const
     {
         float t_min = 0.0f;
         float t_max = max_distance;
@@ -808,7 +808,7 @@ private:
         }
 
         // Check if will hit at all
-        TransformedShape end_shape = shape;
+        CollisionDetector::TransformedShape end_shape = shape;
         end_shape.position = shape.position + direction * max_distance;
         gjk = CollisionDetector::gjk(end_shape, target);
         if (!gjk.intersecting) {
@@ -820,7 +820,7 @@ private:
         for (int i = 0; i < max_iterations; ++i) {
             float t = (t_min + t_max) * 0.5f;
 
-            TransformedShape moved = shape;
+            CollisionDetector::TransformedShape moved = shape;
             moved.position = shape.position + direction * t;
 
             gjk = CollisionDetector::gjk(moved, target);

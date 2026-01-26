@@ -17,6 +17,7 @@
 
 typedef char GLchar;
 typedef ptrdiff_t GLsizeiptr;
+typedef ptrdiff_t GLintptr;
 
 #define GL_ARRAY_BUFFER 0x8892
 #define GL_DYNAMIC_DRAW 0x88E8
@@ -89,15 +90,6 @@ static bool load_debug_gl_functions() { return true; }
 #endif
 
 namespace void_render {
-
-// =============================================================================
-// DebugVertex
-// =============================================================================
-
-struct DebugVertex {
-    glm::vec3 position;
-    glm::vec4 color;
-};
 
 // =============================================================================
 // DebugRenderer Implementation

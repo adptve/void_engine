@@ -35,7 +35,7 @@ struct CommandContext {
     CommandRegistry* registry = nullptr;       // Command registry reference
     std::filesystem::path cwd;                 // Current working directory
     Environment* env = nullptr;                // Environment variables
-    SessionId session_id = 0;                  // Session ID for convenience
+    SessionId session_id = {};                  // Session ID for convenience
 
     void print(const std::string& text) const {
         if (output) output(text);

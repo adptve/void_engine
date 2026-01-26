@@ -115,6 +115,24 @@ namespace pass_flags {
 // PassType
 // =============================================================================
 
+// =============================================================================
+// ResourceState
+// =============================================================================
+
+/// Resource state for synchronization
+enum class ResourceState : std::uint8_t {
+    Undefined = 0,
+    Common,
+    RenderTarget,
+    DepthWrite,
+    DepthRead,
+    ShaderResource,
+    UnorderedAccess,
+    CopySource,
+    CopyDest,
+    Present,
+};
+
 /// Built-in pass types
 enum class PassType : std::uint8_t {
     Custom = 0,          // User-defined pass
@@ -265,6 +283,14 @@ struct PassDescriptor {
     std::vector<PassAttachment> color_attachments;
     std::optional<PassAttachment> depth_attachment;
 
+    // Texture formats (for render graph)
+    std::vector<TextureFormat> color_formats;
+    TextureFormat depth_format = TextureFormat::Depth24PlusStencil8;
+
+    // Dimensions (for render graph)
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+
     // Resource dependencies
     std::vector<PassInput> inputs;
     std::vector<PassOutput> outputs;
@@ -291,6 +317,13 @@ struct PassDescriptor {
     PassDescriptor& with_blend(BlendMode mode) { blend_mode = mode; return *this; }
     PassDescriptor& with_layer_mask(std::uint32_t mask) { layer_mask = mask; return *this; }
     PassDescriptor& with_scale(float scale) { viewport_scale = scale; return *this; }
+
+    /// Static factory methods
+    [[nodiscard]] static PassDescriptor color_pass(std::string name, TextureFormat format,
+                                                    std::uint32_t width, std::uint32_t height);
+    [[nodiscard]] static PassDescriptor depth_pass(std::string name, TextureFormat format,
+                                                    std::uint32_t width, std::uint32_t height);
+    [[nodiscard]] static PassDescriptor shadow_pass(std::string name, std::uint32_t resolution);
 };
 
 // =============================================================================
@@ -314,16 +347,32 @@ struct PassContext {
     void* user_data = nullptr;
 };
 
+/// Alias for PassContext (legacy name)
+using RenderContext = PassContext;
+
+/// Render callback type
+using RenderCallback = std::function<void(const RenderContext&)>;
+
 // =============================================================================
 // RenderPass (abstract base)
 // =============================================================================
 
+/// Resource dependency for render passes
+struct ResourceDependency {
+    ResourceId resource;
+    ResourceState state;
+};
+
 /// Base class for render passes
 class RenderPass {
 public:
+    /// Render callback type (nested for compatibility)
+    using RenderCallback = std::function<void(const RenderContext&)>;
+
     /// Constructor
     explicit RenderPass(const PassDescriptor& desc)
         : m_descriptor(desc)
+        , m_id(ResourceId::from_name(desc.name))
         , m_enabled(has_flag(desc.flags, PassFlags::Enabled)) {}
 
     /// Virtual destructor
@@ -331,6 +380,9 @@ public:
 
     /// Get descriptor
     [[nodiscard]] const PassDescriptor& descriptor() const noexcept { return m_descriptor; }
+
+    /// Get ID
+    [[nodiscard]] ResourceId id() const noexcept { return m_id; }
 
     /// Get name
     [[nodiscard]] const std::string& name() const noexcept { return m_descriptor.name; }
@@ -346,6 +398,24 @@ public:
 
     /// Set enabled state
     void set_enabled(bool enabled) { m_enabled = enabled; }
+
+    /// Add pass dependency
+    void add_dependency(ResourceId pass_id);
+
+    /// Declare input resource
+    void declare_input(ResourceId resource, ResourceState required_state);
+
+    /// Declare output resource
+    void declare_output(ResourceId resource, ResourceState output_state);
+
+    /// Get dependencies
+    [[nodiscard]] const std::vector<ResourceId>& dependencies() const noexcept { return m_dependencies; }
+
+    /// Get inputs
+    [[nodiscard]] const std::vector<ResourceDependency>& inputs() const noexcept { return m_inputs; }
+
+    /// Get outputs
+    [[nodiscard]] const std::vector<ResourceDependency>& outputs() const noexcept { return m_outputs; }
 
     /// Prepare pass (called once before first execute)
     virtual void prepare(const PassContext& ctx) { (void)ctx; }
@@ -364,7 +434,11 @@ public:
 
 protected:
     PassDescriptor m_descriptor;
+    ResourceId m_id;
     bool m_enabled;
+    std::vector<ResourceId> m_dependencies;
+    std::vector<ResourceDependency> m_inputs;
+    std::vector<ResourceDependency> m_outputs;
 };
 
 // =============================================================================
@@ -399,6 +473,13 @@ private:
     ExecuteCallback m_execute_cb;
     ResizeCallback m_resize_cb;
 };
+
+// =============================================================================
+// PassFactory
+// =============================================================================
+
+/// Factory function for creating render passes
+using PassFactory = std::function<std::unique_ptr<RenderPass>(const PassDescriptor&)>;
 
 // =============================================================================
 // PassStats
@@ -586,9 +667,25 @@ public:
         }
     }
 
+    /// Get singleton instance
+    [[nodiscard]] static PassRegistry& instance();
+
+    /// Register pass factory
+    void register_pass(const std::string& name, PassFactory factory);
+
+    /// Create pass from factory
+    [[nodiscard]] std::unique_ptr<RenderPass> create(const std::string& name, const PassDescriptor& desc);
+
+    /// Check if pass type is registered
+    [[nodiscard]] bool has(const std::string& name) const;
+
+    /// Get all registered pass names
+    [[nodiscard]] std::vector<std::string> registered_passes() const;
+
 private:
     std::vector<std::unique_ptr<RenderPass>> m_passes;
     std::unordered_map<std::string, PassId> m_name_to_id;
+    std::unordered_map<std::string, PassFactory> m_factories;
     std::vector<std::uint32_t> m_execution_order;
     std::vector<PassStats> m_stats;
     bool m_sorted = false;

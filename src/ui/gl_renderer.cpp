@@ -125,7 +125,7 @@ namespace void_ui {
 // =============================================================================
 
 /// OpenGL 3.3 shader source for UI rendering
-static constexpr const char* GL_VERTEX_SHADER = R"(
+static constexpr const char* UI_VERTEX_SHADER_SRC = R"(
 #version 330 core
 
 uniform vec2 u_screen_size;
@@ -147,7 +147,7 @@ void main() {
 }
 )";
 
-static constexpr const char* GL_FRAGMENT_SHADER = R"(
+static constexpr const char* UI_FRAGMENT_SHADER_SRC = R"(
 #version 330 core
 
 in vec2 v_uv;
@@ -287,7 +287,8 @@ private:
     void create_resources() {
         // Create and compile vertex shader
         GLuint vertex_shader = GL_CALL(glCreateShader, GL_VERTEX_SHADER);
-        GL_CALL(glShaderSource, vertex_shader, 1, &GL_VERTEX_SHADER, nullptr);
+        const char* vertex_src = UI_VERTEX_SHADER_SRC;
+        GL_CALL(glShaderSource, vertex_shader, 1, &vertex_src, nullptr);
         GL_CALL(glCompileShader, vertex_shader);
 
         GLint success;
@@ -302,7 +303,8 @@ private:
 
         // Create and compile fragment shader
         GLuint fragment_shader = GL_CALL(glCreateShader, GL_FRAGMENT_SHADER);
-        GL_CALL(glShaderSource, fragment_shader, 1, &GL_FRAGMENT_SHADER, nullptr);
+        const char* fragment_src = UI_FRAGMENT_SHADER_SRC;
+        GL_CALL(glShaderSource, fragment_shader, 1, &fragment_src, nullptr);
         GL_CALL(glCompileShader, fragment_shader);
 
         GL_CALL(glGetShaderiv, fragment_shader, GL_COMPILE_STATUS, &success);

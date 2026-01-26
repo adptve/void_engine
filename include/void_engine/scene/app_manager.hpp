@@ -8,7 +8,7 @@
 #include <void_engine/scene/scene_instantiator.hpp>
 #include <void_engine/scene/asset_loader.hpp>
 #include <void_engine/scene/scene_serializer.hpp>
-#include <void_engine/core/result.hpp>
+#include <void_engine/core/error.hpp>
 
 #include <filesystem>
 #include <functional>

@@ -194,12 +194,24 @@ public:
         bool flip_uvs = false;          // Flip V coordinate
         bool merge_primitives = false;  // Merge all primitives with same material
         float scale = 1.0f;             // Global scale factor
+
+        LoadOptions() = default;
     };
 
+    /// Default load options
+    [[nodiscard]] static LoadOptions default_options() {
+        return LoadOptions{};
+    }
+
     /// Load glTF file (gltf or glb)
+    [[nodiscard]] std::optional<GltfScene> load(const std::string& path) {
+        return load(path, default_options());
+    }
+
+    /// Load glTF file (gltf or glb) with options
     [[nodiscard]] std::optional<GltfScene> load(
         const std::string& path,
-        const LoadOptions& options = {}) {
+        const LoadOptions& options) {
 
         m_options = options;
         m_base_path = std::filesystem::path(path).parent_path().string();

@@ -44,9 +44,7 @@ Ray Ray::from_screen(const glm::vec2& screen_pos, const glm::mat4& inv_view_proj
     return Ray{origin, direction};
 }
 
-glm::vec3 Ray::point_at(float t) const {
-    return origin + direction * t;
-}
+// Note: Ray::point_at is defined inline in spatial.hpp
 
 // =============================================================================
 // AABB Implementation

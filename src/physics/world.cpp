@@ -567,36 +567,84 @@ bool PhysicsWorld::passes_filter(const IRigidbody& body, QueryFilter filter, Col
 CharacterController::CharacterController(IPhysicsWorld& world, const CharacterControllerConfig& config)
     : m_world(world)
     , m_config(config)
-    , m_impl(std::make_unique<CharacterControllerImpl>(world, config))
 {
 }
 
 CharacterController::~CharacterController() = default;
 
 void CharacterController::move(const void_math::Vec3& displacement, float dt) {
-    m_impl->move(displacement, dt);
-    m_position = m_impl->position();
-    m_velocity = m_impl->velocity();
-    m_grounded = m_impl->is_grounded();
-    m_ground_normal = m_impl->ground_normal();
-    m_collides_above = m_impl->collides_above();
-    m_collides_sides = m_impl->collides_sides();
+    // Apply sliding movement with collision response
+    auto result = slide_move(displacement);
+    m_position = m_position + result;
+    m_velocity = result / dt;
+
+    // Update ground state
+    update_grounded();
 }
 
 void CharacterController::resize(float height, float radius) {
     m_config.height = height;
     m_config.radius = radius;
-    m_impl->resize(height, radius);
 }
 
 void_math::Vec3 CharacterController::slide_move(const void_math::Vec3& displacement) {
-    // Delegated to impl
+    // Simple implementation: just return displacement for now
+    // TODO: Implement proper collision response with slide
+    m_collides_sides = false;
+    m_collides_above = false;
+
+    // Cast capsule shape along displacement
+    CapsuleShape capsule(m_config.radius, m_config.height);
+    void_math::Transform start;
+    start.position = m_position;
+
+    auto hit = m_world.shape_cast(
+        capsule, start, void_math::normalize(displacement),
+        void_math::length(displacement),
+        QueryFilter::Dynamic, m_config.collision_mask.layer);
+
+    if (hit.hit) {
+        // Hit something - slide along surface
+        float safe_distance = hit.distance - m_config.skin_width;
+        if (safe_distance < 0.0f) safe_distance = 0.0f;
+
+        void_math::Vec3 safe_move = void_math::normalize(displacement) * safe_distance;
+
+        // Check if we hit above (ceiling) or sides
+        if (hit.normal.y < -0.7f) {
+            m_collides_above = true;
+        } else if (std::abs(hit.normal.y) < 0.7f) {
+            m_collides_sides = true;
+        }
+
+        // Slide along the surface
+        void_math::Vec3 remaining = displacement - safe_move;
+        void_math::Vec3 slide = remaining - hit.normal * void_math::dot(remaining, hit.normal);
+
+        return safe_move + slide * (1.0f - m_config.skin_width);
+    }
+
     return displacement;
 }
 
 void CharacterController::update_grounded() {
-    m_grounded = m_impl->is_grounded();
-    m_ground_normal = m_impl->ground_normal();
+    // Cast downward to check if grounded
+    SphereShape foot(m_config.radius * 0.9f);
+    void_math::Transform start;
+    start.position = m_position - void_math::Vec3{0, m_config.height * 0.5f - m_config.radius, 0};
+
+    auto hit = m_world.shape_cast(
+        foot, start, void_math::Vec3{0, -1, 0},
+        m_config.step_height + m_config.skin_width,
+        QueryFilter::Static | QueryFilter::Dynamic, m_config.collision_mask.layer);
+
+    if (hit.hit) {
+        m_grounded = true;
+        m_ground_normal = hit.normal;
+    } else {
+        m_grounded = false;
+        m_ground_normal = void_math::Vec3{0, 1, 0};
+    }
 }
 
 // =============================================================================

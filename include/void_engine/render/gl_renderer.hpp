@@ -114,11 +114,11 @@ private:
 };
 
 // =============================================================================
-// Camera
+// GlCamera (simple camera for GL renderer)
 // =============================================================================
 
-/// @brief Camera for 3D rendering
-struct Camera {
+/// @brief Simple camera for 3D rendering (renamed to avoid conflict with camera.hpp)
+struct GlCamera {
     glm::vec3 position{0.0f, 2.0f, 5.0f};
     glm::vec3 target{0.0f, 0.0f, 0.0f};
     glm::vec3 up{0.0f, 1.0f, 0.0f};
@@ -244,8 +244,8 @@ public:
     void on_resize(int width, int height);
 
     /// @brief Get/Set camera
-    Camera& camera() { return m_camera; }
-    const Camera& camera() const { return m_camera; }
+    GlCamera& camera() { return m_camera; }
+    const GlCamera& camera() const { return m_camera; }
 
     /// @brief Enable/disable shader hot-reload
     void set_shader_hot_reload(bool enabled) { m_shader_hot_reload = enabled; }
@@ -275,7 +275,7 @@ private:
     std::unordered_map<std::string, GpuMesh> m_meshes;
 
     // Scene data
-    Camera m_camera;
+    GlCamera m_camera;
     std::vector<Light> m_lights;
     std::vector<RenderEntity> m_entities;
 

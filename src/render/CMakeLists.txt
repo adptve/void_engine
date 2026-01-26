@@ -4,20 +4,18 @@ find_package(OpenGL REQUIRED)
 
 void_add_module(NAME void_render
     SOURCES
-        stub.cpp
-        backend.cpp
         gl_renderer.cpp
-        texture.cpp
-        shadow_renderer.cpp
-        instancing.cpp
         render_graph.cpp
-        post_process.cpp
         spatial.cpp
-        debug_renderer.cpp
+        animation.cpp
+        texture.cpp
         gltf_loader.cpp
+        shadow_renderer.cpp
+        debug_renderer.cpp
         lod.cpp
         temporal_effects.cpp
-        animation.cpp
+        instancing.cpp
+        post_process.cpp
     DEPENDENCIES
         void_core
         void_ir

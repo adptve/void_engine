@@ -346,11 +346,11 @@ void_core::Version ShaderProgram::current_version() const {
 // Camera
 // =============================================================================
 
-glm::mat4 Camera::view_matrix() const {
+glm::mat4 GlCamera::view_matrix() const {
     return glm::lookAt(position, target, up);
 }
 
-glm::mat4 Camera::projection_matrix() const {
+glm::mat4 GlCamera::projection_matrix() const {
     if (is_perspective) {
         return glm::perspective(glm::radians(fov), aspect, near_plane, far_plane);
     } else {
@@ -359,11 +359,11 @@ glm::mat4 Camera::projection_matrix() const {
     }
 }
 
-glm::mat4 Camera::view_projection() const {
+glm::mat4 GlCamera::view_projection() const {
     return projection_matrix() * view_matrix();
 }
 
-void Camera::orbit(float delta_yaw, float delta_pitch) {
+void GlCamera::orbit(float delta_yaw, float delta_pitch) {
     m_yaw += delta_yaw * 0.01f;
     m_pitch = glm::clamp(m_pitch + delta_pitch * 0.01f, -1.5f, 1.5f);
 
@@ -375,12 +375,12 @@ void Camera::orbit(float delta_yaw, float delta_pitch) {
     position = target + glm::vec3(x, y, z);
 }
 
-void Camera::zoom(float delta) {
+void GlCamera::zoom(float delta) {
     m_distance = glm::clamp(m_distance - delta * 0.5f, 1.0f, 100.0f);
     orbit(0, 0);  // Update position
 }
 
-void Camera::pan(float delta_x, float delta_y) {
+void GlCamera::pan(float delta_x, float delta_y) {
     glm::vec3 forward = glm::normalize(target - position);
     glm::vec3 right = glm::normalize(glm::cross(forward, up));
     glm::vec3 cam_up = glm::cross(right, forward);

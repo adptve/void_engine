@@ -17,6 +17,20 @@ namespace void_math {
 // Mat3 Utilities
 // =============================================================================
 
+/// Mat3 identity matrix
+[[nodiscard]] inline Mat3 mat3_identity() noexcept {
+    return Mat3(1.0f);
+}
+
+/// Mat3 from diagonal vector (creates a diagonal matrix)
+[[nodiscard]] inline Mat3 mat3_diagonal(const Vec3& diag) noexcept {
+    return Mat3(
+        Vec3(diag.x, 0.0f, 0.0f),
+        Vec3(0.0f, diag.y, 0.0f),
+        Vec3(0.0f, 0.0f, diag.z)
+    );
+}
+
 /// Create Mat3 from column vectors
 [[nodiscard]] inline Mat3 mat3_from_cols(const Vec3& c0, const Vec3& c1, const Vec3& c2) noexcept {
     return Mat3(c0, c1, c2);
@@ -122,31 +136,31 @@ namespace void_math {
 /// Create perspective projection matrix (right-handed, depth [0,1])
 /// @param fov_y Field of view in radians (vertical)
 /// @param aspect Aspect ratio (width / height)
-/// @param near Near clip plane distance
-/// @param far Far clip plane distance
-[[nodiscard]] inline Mat4 perspective(float fov_y, float aspect, float near, float far) noexcept {
-    return glm::perspectiveRH_ZO(fov_y, aspect, near, far);
+/// @param z_near Near clip plane distance
+/// @param z_far Far clip plane distance
+[[nodiscard]] inline Mat4 perspective(float fov_y, float aspect, float z_near, float z_far) noexcept {
+    return glm::perspectiveRH_ZO(fov_y, aspect, z_near, z_far);
 }
 
 /// Create perspective projection matrix with infinite far plane
 /// @param fov_y Field of view in radians (vertical)
 /// @param aspect Aspect ratio (width / height)
-/// @param near Near clip plane distance
-[[nodiscard]] inline Mat4 perspective_infinite(float fov_y, float aspect, float near) noexcept {
-    return glm::infinitePerspectiveRH(fov_y, aspect, near);
+/// @param z_near Near clip plane distance
+[[nodiscard]] inline Mat4 perspective_infinite(float fov_y, float aspect, float z_near) noexcept {
+    return glm::infinitePerspectiveRH(fov_y, aspect, z_near);
 }
 
 /// Create orthographic projection matrix (right-handed, depth [0,1])
 /// @note This is the Vulkan/wgpu-compatible version with depth range [0,1]
 [[nodiscard]] inline Mat4 orthographic(float left, float right, float bottom,
-                                        float top, float near, float far) noexcept {
-    return glm::orthoRH_ZO(left, right, bottom, top, near, far);
+                                        float top, float z_near, float z_far) noexcept {
+    return glm::orthoRH_ZO(left, right, bottom, top, z_near, z_far);
 }
 
 /// Create orthographic projection matrix (OpenGL-style, depth [-1,1])
 [[nodiscard]] inline Mat4 orthographic_gl(float left, float right, float bottom,
-                                           float top, float near, float far) noexcept {
-    return glm::orthoRH_NO(left, right, bottom, top, near, far);
+                                           float top, float z_near, float z_far) noexcept {
+    return glm::orthoRH_NO(left, right, bottom, top, z_near, z_far);
 }
 
 // =============================================================================

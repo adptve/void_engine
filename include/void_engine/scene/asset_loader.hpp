@@ -5,7 +5,7 @@
 
 #include <void_engine/scene/scene_data.hpp>
 #include <void_engine/scene/manifest_parser.hpp>
-#include <void_engine/core/result.hpp>
+#include <void_engine/core/error.hpp>
 
 #include <cstdint>
 #include <filesystem>

@@ -175,6 +175,9 @@ enum class SurfaceState {
     NeedsReconfigure,   ///< Needs reconfiguration (resize, format change)
     Lost,               ///< Surface was lost and needs recreation
     Minimized,          ///< Surface is minimized (zero size)
+    Occluded,           ///< Surface is occluded (covered by another window)
+    Resizing,           ///< Surface is being resized
+    OutOfDate,          ///< Surface is out of date and needs recreation
 };
 
 /// Get state name
@@ -184,6 +187,9 @@ enum class SurfaceState {
         case SurfaceState::NeedsReconfigure: return "NeedsReconfigure";
         case SurfaceState::Lost: return "Lost";
         case SurfaceState::Minimized: return "Minimized";
+        case SurfaceState::Occluded: return "Occluded";
+        case SurfaceState::Resizing: return "Resizing";
+        case SurfaceState::OutOfDate: return "OutOfDate";
     }
     return "Unknown";
 }
@@ -194,6 +200,10 @@ enum class SurfaceState {
 
 /// Frame lifecycle state
 enum class FrameState {
+    Idle,       ///< Frame is idle
+    Acquired,   ///< Frame has been acquired from swapchain
+    Recording,  ///< Frame is recording commands
+    Submitted,  ///< Frame has been submitted to GPU
     Preparing,  ///< Frame is being prepared
     Rendering,  ///< Frame is being rendered
     Ready,      ///< Frame is ready for presentation
@@ -204,6 +214,10 @@ enum class FrameState {
 /// Get frame state name
 [[nodiscard]] constexpr const char* to_string(FrameState state) {
     switch (state) {
+        case FrameState::Idle: return "Idle";
+        case FrameState::Acquired: return "Acquired";
+        case FrameState::Recording: return "Recording";
+        case FrameState::Submitted: return "Submitted";
         case FrameState::Preparing: return "Preparing";
         case FrameState::Rendering: return "Rendering";
         case FrameState::Ready: return "Ready";

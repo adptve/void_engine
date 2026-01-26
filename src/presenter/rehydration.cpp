@@ -3,6 +3,7 @@
 
 #include <void_engine/presenter/rehydration.hpp>
 #include <void_engine/presenter/backend.hpp>
+#include <void_engine/presenter/presenter.hpp>
 
 #include <algorithm>
 #include <chrono>

@@ -105,7 +105,23 @@
       "Bash(C:/msys64/msys2_shell.cmd -mingw64 -defterm -no-start -c \"cd /c/code/github/time3cap/void_engine && cmake --build build 2>&1\")",
       "Bash(test:*)",
       "Bash(xargs:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(while read f s)",
+      "Bash(C:msys64mingw64binc++.exe:*)",
+      "Bash(git -C C:codegithubtime3capvoid_engine checkout -- src/render/shadow_renderer.cpp src/render/spatial.cpp src/render/render_graph.cpp src/render/debug_renderer.cpp src/render/instancing.cpp src/render/texture.cpp src/render/backend.cpp)",
+      "Bash(git -C C:codegithubtime3capvoid_engine checkout -- src/presenter/surface.cpp src/presenter/frame.cpp src/presenter/timing.cpp src/presenter/backends/null_backend.cpp src/presenter/opengl_backend.cpp src/presenter/rehydration.cpp)",
+      "Bash(git -C C:codegithubtime3capvoid_engine checkout -- src/physics/broadphase.cpp src/physics/collision.cpp src/physics/solver.cpp src/physics/query.cpp src/physics/snapshot.cpp src/physics/simulation.cpp src/physics/character.cpp src/physics/world.cpp)",
+      "Bash(git -C C:codegithubtime3capvoid_engine checkout -- src/compositor/rehydration.cpp src/compositor/input.cpp src/compositor/compositor_module.cpp)",
+      "Bash(tee:*)",
+      "Bash(C:/msys64/mingw64/bin/g++:*)",
+      "Bash(/c/msys64/mingw64/bin/ninja.exe:*)",
+      "Bash(NINJA_STATUS=\"\" /c/msys64/mingw64/bin/ninja.exe:*)",
+      "Bash(C:/msys64/msys2_shell.cmd -mingw64 -defterm -no-start -where \"C:/code/github/time3cap/void_engine\" -c \"cmake -B build -G Ninja && cmake --build build 2>&1\")",
+      "Bash(C:/msys64/msys2_shell.cmd -mingw64 -defterm -no-start -where \"C:/code/github/time3cap/void_engine\" -c \"cmake --build build 2>&1\")",
+      "Bash(export PATH=\"$PATH:/c/msys64/mingw64/bin\")",
+      "Bash(g++.exe:*)",
+      "Bash(PATH=\"$PATH:/c/msys64/mingw64/bin\" /c/msys64/mingw64/bin/g++.exe:*)",
+      "Bash(PATH=\"$PATH:/c/msys64/mingw64/bin\" cmake --build:*)"
     ]
   }
 }

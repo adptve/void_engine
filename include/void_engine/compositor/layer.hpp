@@ -816,14 +816,14 @@ public:
         std::shared_lock lock(m_mutex);
         RehydrationState state;
 
-        state.set_uint("layer_count", m_layers.size());
-        state.set_uint("next_id", m_next_id);
+        state.set_int("layer_count", m_layers.size());
+        state.set_int("next_id", m_next_id);
 
         // Serialize each layer
         std::size_t idx = 0;
         for (const auto& [id, layer] : m_layers) {
             RehydrationState layer_state;
-            layer_state.set_uint("id", id.id);
+            layer_state.set_int("id", id.id);
             layer_state.set_string("name", layer->config().name);
             layer_state.set_int("priority", layer->config().priority);
             layer_state.set_int("blend_mode", static_cast<std::int64_t>(layer->config().blend_mode));
@@ -838,7 +838,7 @@ public:
 
             // Parent
             if (layer->parent()) {
-                layer_state.set_uint("parent_id", layer->parent()->id);
+                layer_state.set_int("parent_id", layer->parent()->id);
             }
 
             state.set_nested("layer_" + std::to_string(idx++), std::move(layer_state));
@@ -851,8 +851,8 @@ public:
     bool rehydrate(const RehydrationState& state) override {
         std::unique_lock lock(m_mutex);
 
-        auto layer_count = state.get_uint("layer_count");
-        auto next_id = state.get_uint("next_id");
+        auto layer_count = state.get_int("layer_count");
+        auto next_id = state.get_int("next_id");
 
         if (!layer_count || !next_id) {
             return false;
@@ -866,7 +866,7 @@ public:
             auto layer_state = state.get_nested("layer_" + std::to_string(i));
             if (!layer_state) continue;
 
-            auto id = layer_state->get_uint("id");
+            auto id = layer_state->get_int("id");
             auto name = layer_state->get_string("name");
             auto priority = layer_state->get_int("priority");
             auto blend_mode = layer_state->get_int("blend_mode");
@@ -905,8 +905,8 @@ public:
             auto layer_state = state.get_nested("layer_" + std::to_string(i));
             if (!layer_state) continue;
 
-            auto id = layer_state->get_uint("id");
-            auto parent_id = layer_state->get_uint("parent_id");
+            auto id = layer_state->get_int("id");
+            auto parent_id = layer_state->get_int("parent_id");
 
             if (id && parent_id) {
                 LayerId layer_id{*id};

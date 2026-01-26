@@ -51,17 +51,16 @@ endif()
 # OpenGL backend support (uses GLFW + glad from void_render)
 # This is the primary fallback when wgpu is not available
 if(NOT EMSCRIPTEN AND NOT wgpu_FOUND)
-    target_compile_definitions(void_presenter PRIVATE VOID_HAS_OPENGL)
-    target_sources(void_presenter PRIVATE opengl_backend.cpp)
-
-    # Link to GLFW and glad (provided by void_render dependency)
+    # Link to GLFW
     find_package(glfw3 QUIET)
     if(glfw3_FOUND)
         target_link_libraries(void_presenter PRIVATE glfw)
     endif()
 
-    # Link to glad (if available as separate target)
+    # Only enable OpenGL backend if glad is available
     if(TARGET glad)
+        target_compile_definitions(void_presenter PRIVATE VOID_HAS_OPENGL)
+        target_sources(void_presenter PRIVATE opengl_backend.cpp)
         target_link_libraries(void_presenter PRIVATE glad)
     endif()
 endif()

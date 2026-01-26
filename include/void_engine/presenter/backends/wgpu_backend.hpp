@@ -13,7 +13,9 @@
 /// providing a modern, safe GPU API across all platforms.
 
 #include "../backend.hpp"
+#include "../surface.hpp"
 
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <string>

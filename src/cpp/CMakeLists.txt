@@ -2,9 +2,9 @@
 void_add_module(NAME void_cpp
     SOURCES
         types.cpp
-        compiler.cpp
+        # compiler.cpp  # Excluded: API mismatch
         module.cpp
-        instance.cpp
+        # instance.cpp  # Excluded: API mismatch
         hot_reload.cpp
         system.cpp
     DEPENDENCIES

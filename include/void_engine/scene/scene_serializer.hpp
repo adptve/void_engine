@@ -4,7 +4,7 @@
 /// @brief Scene serialization to TOML format
 
 #include <void_engine/scene/scene_data.hpp>
-#include <void_engine/core/result.hpp>
+#include <void_engine/core/error.hpp>
 
 #include <filesystem>
 #include <string>

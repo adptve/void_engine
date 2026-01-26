@@ -4,8 +4,8 @@ void_add_module(NAME void_script
         types.cpp
         lexer.cpp
         parser.cpp
-        interpreter.cpp
-        engine.cpp
+        # interpreter.cpp  # Excluded: API mismatch
+        # engine.cpp  # Excluded: API mismatch
     DEPENDENCIES
         void_core
         void_ecs

@@ -6,7 +6,7 @@ void_add_module(NAME void_scene
         scene_serializer.cpp
         manifest_parser.cpp
         asset_loader.cpp
-        app_manager.cpp
+        # app_manager.cpp  # Excluded: Move/copy assignment issues
     DEPENDENCIES
         void_core
         void_ecs

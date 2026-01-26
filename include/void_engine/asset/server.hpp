@@ -418,13 +418,8 @@ void reset_server_statistics();
 // Hot-Reload Support (Implemented in server.cpp)
 // =============================================================================
 
-// Forward declaration
-namespace void_core {
-    class HotReloadable;
-}
-
 /// Create a hot-reloadable adapter for an asset server
-std::unique_ptr<void_core::HotReloadable> make_hot_reloadable(AssetServer& server);
+std::unique_ptr<::void_core::HotReloadable> make_hot_reloadable(AssetServer& server);
 
 // =============================================================================
 // Global Asset Server (Implemented in server.cpp)

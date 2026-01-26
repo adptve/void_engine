@@ -136,19 +136,19 @@ std::string format_asset_server(const AssetServer& server) {
 // =============================================================================
 
 /// Adapter to make AssetServer hot-reloadable
-class AssetServerHotReloadAdapter : public void_core::HotReloadable {
+class AssetServerHotReloadAdapter : public ::void_core::HotReloadable {
 public:
     explicit AssetServerHotReloadAdapter(AssetServer& server)
         : m_server(server)
-        , m_version(void_core::Version{0, 1, 0})
+        , m_version(::void_core::Version{0, 1, 0})
     {}
 
     /// Capture current state as snapshot
-    [[nodiscard]] void_core::Result<void_core::HotReloadSnapshot> snapshot() override {
+    [[nodiscard]] ::void_core::Result<::void_core::HotReloadSnapshot> snapshot() override {
         // Serialize asset manifest (paths, types, ref counts), NOT asset data
         std::vector<std::uint8_t> data = serialization::serialize_storage_manifest(m_server.storage());
 
-        void_core::HotReloadSnapshot snap(
+        ::void_core::HotReloadSnapshot snap(
             std::move(data),
             std::type_index(typeid(AssetServer)),
             "AssetServer",
@@ -160,15 +160,15 @@ public:
         snap.with_metadata("loaded_count", std::to_string(m_server.loaded_count()));
         snap.with_metadata("pending_count", std::to_string(m_server.pending_count()));
 
-        return void_core::Ok(std::move(snap));
+        return ::void_core::Ok(std::move(snap));
     }
 
     /// Restore state from snapshot
-    [[nodiscard]] void_core::Result<void> restore(void_core::HotReloadSnapshot snapshot) override {
+    [[nodiscard]] ::void_core::Result<void> restore(::void_core::HotReloadSnapshot snapshot) override {
         // Deserialize manifest
         auto result = serialization::deserialize_storage_manifest(snapshot.data);
         if (!result) {
-            return void_core::Err(result.error());
+            return ::void_core::Err(result.error());
         }
 
         // Re-register assets (they will need to be reloaded)
@@ -178,30 +178,30 @@ public:
             // This preserves handles - they point to the same ID
         }
 
-        return void_core::Ok();
+        return ::void_core::Ok();
     }
 
     /// Check if compatible with new version
-    [[nodiscard]] bool is_compatible(const void_core::Version& new_version) const override {
+    [[nodiscard]] bool is_compatible(const ::void_core::Version& new_version) const override {
         // Compatible if same major version
         return m_version.major == new_version.major;
     }
 
     /// Called before reload begins
-    [[nodiscard]] void_core::Result<void> prepare_reload() override {
+    [[nodiscard]] ::void_core::Result<void> prepare_reload() override {
         // Drain any pending events
         m_server.drain_events();
-        return void_core::Ok();
+        return ::void_core::Ok();
     }
 
     /// Called after reload completes
-    [[nodiscard]] void_core::Result<void> finish_reload() override {
+    [[nodiscard]] ::void_core::Result<void> finish_reload() override {
         record_reload_completed();
-        return void_core::Ok();
+        return ::void_core::Ok();
     }
 
     /// Get current version
-    [[nodiscard]] void_core::Version current_version() const override {
+    [[nodiscard]] ::void_core::Version current_version() const override {
         return m_version;
     }
 
@@ -212,10 +212,10 @@ public:
 
 private:
     AssetServer& m_server;
-    void_core::Version m_version;
+    ::void_core::Version m_version;
 };
 
-std::unique_ptr<void_core::HotReloadable> make_hot_reloadable(AssetServer& server) {
+std::unique_ptr<::void_core::HotReloadable> make_hot_reloadable(AssetServer& server) {
     return std::make_unique<AssetServerHotReloadAdapter>(server);
 }
 

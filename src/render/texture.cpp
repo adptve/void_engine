@@ -9,10 +9,7 @@
 #include <cstring>
 #include <fstream>
 
-// STB Image - single-file public domain image loading
-#define STB_IMAGE_IMPLEMENTATION
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#define STBI_WINDOWS_UTF8
+// STB Image headers (implementation in asset/stb_impl.cpp)
 #include <stb_image.h>
 #include <stb_image_write.h>
 
@@ -74,21 +71,22 @@
 #define GL_TEXTURE_BASE_LEVEL 0x813C
 #define GL_TEXTURE_MAX_LEVEL 0x813D
 
+// Additional OpenGL constants
+#define GL_DEPTH_STENCIL 0x84F9
+#define GL_RG 0x8227
+#define GL_RED 0x1903
+#define GL_UNSIGNED_INT_24_8 0x84FA
+#define GL_TEXTURE0 0x84C0
+
 typedef char GLchar;
 typedef ptrdiff_t GLsizeiptr;
 
-// OpenGL function pointers
+// OpenGL function pointers - use pfn_ prefix to avoid conflicts with GL 1.1 functions
 #define DECLARE_GL_FUNC(ret, name, ...) \
     typedef ret (APIENTRY *PFN##name##PROC)(__VA_ARGS__); \
-    static PFN##name##PROC gl##name = nullptr;
+    static PFN##name##PROC pfn_gl##name = nullptr;
 
-DECLARE_GL_FUNC(void, GenTextures, GLsizei n, GLuint* textures)
-DECLARE_GL_FUNC(void, DeleteTextures, GLsizei n, const GLuint* textures)
-DECLARE_GL_FUNC(void, BindTexture, GLenum target, GLuint texture)
-DECLARE_GL_FUNC(void, TexImage2D, GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void* pixels)
-DECLARE_GL_FUNC(void, TexSubImage2D, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void* pixels)
-DECLARE_GL_FUNC(void, TexParameteri, GLenum target, GLenum pname, GLint param)
-DECLARE_GL_FUNC(void, TexParameterf, GLenum target, GLenum pname, GLfloat param)
+// Extension functions (loaded at runtime)
 DECLARE_GL_FUNC(void, GenerateMipmap, GLenum target)
 DECLARE_GL_FUNC(void, ActiveTexture, GLenum texture)
 DECLARE_GL_FUNC(void, GenSamplers, GLsizei count, GLuint* samplers)
@@ -115,16 +113,8 @@ static bool load_texture_gl_functions() {
     if (s_texture_gl_loaded) return true;
 
 #define LOAD_GL(name) \
-    gl##name = (PFN##name##PROC)wglGetProcAddress("gl" #name); \
-    if (!gl##name) { spdlog::warn("Failed to load gl" #name); }
+    pfn_gl##name = reinterpret_cast<PFN##name##PROC>(wglGetProcAddress("gl" #name));
 
-    LOAD_GL(GenTextures);
-    LOAD_GL(DeleteTextures);
-    LOAD_GL(BindTexture);
-    LOAD_GL(TexImage2D);
-    LOAD_GL(TexSubImage2D);
-    LOAD_GL(TexParameteri);
-    LOAD_GL(TexParameterf);
     LOAD_GL(GenerateMipmap);
     LOAD_GL(ActiveTexture);
     LOAD_GL(GenSamplers);
@@ -151,15 +141,16 @@ static bool load_texture_gl_functions() {
     return true;
 }
 
-// Fallback to standard GL functions if extensions not loaded
-#define GL_CALL(name, ...) \
-    (gl##name ? gl##name(__VA_ARGS__) : (void)0)
+// Extension function calls - only extension functions need pfn_ prefix
+// Core OpenGL 1.1 functions (glGenTextures, glBindTexture, etc.) are directly available
+#define GL_EXT_CALL(name, ...) \
+    (pfn_gl##name ? pfn_gl##name(__VA_ARGS__) : (void)0)
 
 #else
 // Linux/macOS - use standard GL
 #include <GL/gl.h>
 #include <GL/glext.h>
-#define GL_CALL(name, ...) gl##name(__VA_ARGS__)
+#define GL_EXT_CALL(name, ...) gl##name(__VA_ARGS__)
 static bool load_texture_gl_functions() { return true; }
 #endif
 
@@ -557,8 +548,8 @@ bool Texture::create(const TextureData& data, const TextureLoadOptions& options)
 
     // Generate mipmaps
     if (options.generate_mipmaps) {
-        if (glGenerateMipmap) {
-            glGenerateMipmap(GL_TEXTURE_2D);
+        if (pfn_glGenerateMipmap) {
+            pfn_glGenerateMipmap(GL_TEXTURE_2D);
         }
         m_mip_levels = calculate_mip_levels(m_width, m_height);
     } else {
@@ -652,8 +643,8 @@ bool Texture::create_render_target(std::uint32_t width, std::uint32_t height,
 
     GLenum internal_format = format_to_gl_internal(format, false);
 
-    if (samples > 1 && glTexImage2DMultisample) {
-        glTexImage2DMultisample(target, samples, internal_format, width, height, GL_TRUE);
+    if (samples > 1 && pfn_glTexImage2DMultisample) {
+        pfn_glTexImage2DMultisample(target, samples, internal_format, width, height, GL_TRUE);
     } else {
         glTexImage2D(GL_TEXTURE_2D, 0, internal_format, width, height, 0,
                      format_to_gl_format(format), format_to_gl_type(format), nullptr);
@@ -687,15 +678,15 @@ void Texture::destroy() {
 }
 
 void Texture::bind(std::uint32_t unit) const {
-    if (glActiveTexture) {
-        glActiveTexture(GL_TEXTURE0 + unit);
+    if (pfn_glActiveTexture) {
+        pfn_glActiveTexture(GL_TEXTURE0 + unit);
     }
     glBindTexture(GL_TEXTURE_2D, m_id);
 }
 
 void Texture::unbind(std::uint32_t unit) {
-    if (glActiveTexture) {
-        glActiveTexture(GL_TEXTURE0 + unit);
+    if (pfn_glActiveTexture) {
+        pfn_glActiveTexture(GL_TEXTURE0 + unit);
     }
     glBindTexture(GL_TEXTURE_2D, 0);
 }
@@ -715,8 +706,8 @@ void Texture::generate_mipmaps() {
     if (!m_id) return;
 
     glBindTexture(GL_TEXTURE_2D, m_id);
-    if (glGenerateMipmap) {
-        glGenerateMipmap(GL_TEXTURE_2D);
+    if (pfn_glGenerateMipmap) {
+        pfn_glGenerateMipmap(GL_TEXTURE_2D);
         m_mip_levels = calculate_mip_levels(m_width, m_height);
     }
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -794,8 +785,8 @@ bool Cubemap::create(const CubemapData& data, bool generate_mipmaps) {
                      data.faces[i].pixels.data());
     }
 
-    if (generate_mipmaps && glGenerateMipmap) {
-        glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+    if (generate_mipmaps && pfn_glGenerateMipmap) {
+        pfn_glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     } else {
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -826,8 +817,8 @@ void Cubemap::destroy() {
 }
 
 void Cubemap::bind(std::uint32_t unit) const {
-    if (glActiveTexture) {
-        glActiveTexture(GL_TEXTURE0 + unit);
+    if (pfn_glActiveTexture) {
+        pfn_glActiveTexture(GL_TEXTURE0 + unit);
     }
     glBindTexture(GL_TEXTURE_CUBE_MAP, m_id);
 }
@@ -857,45 +848,45 @@ bool Sampler::create(const SamplerDesc& desc) {
     load_texture_gl_functions();
     destroy();
 
-    if (!glGenSamplers) {
+    if (!pfn_glGenSamplers) {
         spdlog::warn("Sampler objects not supported");
         return false;
     }
 
-    glGenSamplers(1, &m_id);
+    pfn_glGenSamplers(1, &m_id);
     if (!m_id) return false;
 
-    glSamplerParameteri(m_id, GL_TEXTURE_MIN_FILTER,
+    pfn_glSamplerParameteri(m_id, GL_TEXTURE_MIN_FILTER,
                         filter_to_gl(desc.min_filter, desc.mipmap_filter == FilterMode::Linear));
-    glSamplerParameteri(m_id, GL_TEXTURE_MAG_FILTER,
+    pfn_glSamplerParameteri(m_id, GL_TEXTURE_MAG_FILTER,
                         filter_to_gl(desc.mag_filter, false));
-    glSamplerParameteri(m_id, GL_TEXTURE_WRAP_S, address_to_gl(desc.address_mode_u));
-    glSamplerParameteri(m_id, GL_TEXTURE_WRAP_T, address_to_gl(desc.address_mode_v));
-    glSamplerParameteri(m_id, GL_TEXTURE_WRAP_R, address_to_gl(desc.address_mode_w));
+    pfn_glSamplerParameteri(m_id, GL_TEXTURE_WRAP_S, address_to_gl(desc.address_mode_u));
+    pfn_glSamplerParameteri(m_id, GL_TEXTURE_WRAP_T, address_to_gl(desc.address_mode_v));
+    pfn_glSamplerParameteri(m_id, GL_TEXTURE_WRAP_R, address_to_gl(desc.address_mode_w));
 
     if (desc.anisotropy_clamp > 1) {
-        glSamplerParameterf(m_id, GL_TEXTURE_MAX_ANISOTROPY_EXT,
+        pfn_glSamplerParameterf(m_id, GL_TEXTURE_MAX_ANISOTROPY_EXT,
                             static_cast<float>(desc.anisotropy_clamp));
     }
 
     if (desc.compare) {
-        glSamplerParameteri(m_id, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
-        glSamplerParameteri(m_id, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+        pfn_glSamplerParameteri(m_id, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+        pfn_glSamplerParameteri(m_id, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
     }
 
     return true;
 }
 
 void Sampler::destroy() {
-    if (m_id && glDeleteSamplers) {
-        glDeleteSamplers(1, &m_id);
+    if (m_id && pfn_glDeleteSamplers) {
+        pfn_glDeleteSamplers(1, &m_id);
         m_id = 0;
     }
 }
 
 void Sampler::bind(std::uint32_t unit) const {
-    if (glBindSampler) {
-        glBindSampler(unit, m_id);
+    if (pfn_glBindSampler) {
+        pfn_glBindSampler(unit, m_id);
     }
 }
 

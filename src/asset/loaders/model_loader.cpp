@@ -55,7 +55,7 @@ LoadResult<ModelAsset> ModelLoader::load_gltf(LoadContext& ctx, bool is_binary) 
             data.data(), static_cast<unsigned int>(data.size()));
     } else {
         std::string content(data.begin(), data.end());
-        std::string base_dir = ctx.path().parent().str();
+        std::string base_dir = ctx.path().directory();
         success = loader.LoadASCIIFromString(
             &gltf_model, &err, &warn,
             content.c_str(), static_cast<unsigned int>(content.size()),

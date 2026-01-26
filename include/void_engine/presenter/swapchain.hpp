@@ -13,6 +13,7 @@
 #include "fwd.hpp"
 #include "types.hpp"
 #include "backend.hpp"
+#include "surface.hpp"
 
 #include <array>
 #include <chrono>

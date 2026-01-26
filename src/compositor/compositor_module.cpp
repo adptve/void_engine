@@ -42,7 +42,7 @@ public:
         const auto& scheduler = m_compositor.frame_scheduler();
         writer.write_u32(scheduler.target_fps());
         writer.write_u64(scheduler.frame_number());
-        writer.write_float(static_cast<float>(scheduler.content_velocity()));
+        writer.write_f32(static_cast<float>(scheduler.content_velocity()));
 
         // Config
         const auto& config = m_compositor.config();
@@ -89,7 +89,7 @@ public:
         // Restore frame scheduler state
         std::uint32_t target_fps = reader.read_u32();
         /* std::uint64_t frame_number = */ reader.read_u64();
-        float content_velocity = reader.read_float();
+        float content_velocity = reader.read_f32();
 
         auto& scheduler = m_compositor.frame_scheduler();
         scheduler.set_target_fps(target_fps);

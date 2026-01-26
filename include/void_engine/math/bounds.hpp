@@ -454,4 +454,38 @@ struct Frustum {
     return all_inside ? FrustumTestResult::Inside : FrustumTestResult::Intersecting;
 }
 
+// =============================================================================
+// Free-Standing Helper Functions
+// =============================================================================
+
+/// Test if two AABBs intersect (free function for physics compatibility)
+[[nodiscard]] inline bool intersects(const AABB& a, const AABB& b) noexcept {
+    return a.intersects(b);
+}
+
+/// Test if AABB contains a point (free function for physics compatibility)
+[[nodiscard]] inline bool contains(const AABB& aabb, const Vec3& point) noexcept {
+    return aabb.contains_point(point);
+}
+
+/// Combine two AABBs (union, free function for physics compatibility)
+[[nodiscard]] inline AABB combine(const AABB& a, const AABB& b) noexcept {
+    return a.union_with(b);
+}
+
+/// Test if two spheres intersect (free function)
+[[nodiscard]] inline bool intersects(const Sphere& a, const Sphere& b) noexcept {
+    return a.intersects_sphere(b);
+}
+
+/// Test if sphere and AABB intersect (free function)
+[[nodiscard]] inline bool intersects(const Sphere& sphere, const AABB& aabb) noexcept {
+    return sphere.intersects_aabb(aabb);
+}
+
+/// Test if AABB and sphere intersect (free function)
+[[nodiscard]] inline bool intersects(const AABB& aabb, const Sphere& sphere) noexcept {
+    return sphere.intersects_aabb(aabb);
+}
+
 } // namespace void_math

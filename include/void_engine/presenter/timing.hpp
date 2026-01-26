@@ -28,10 +28,30 @@ public:
     using Duration = Clock::duration;
     using TimePoint = Clock::time_point;
 
+    // Per-frame timing data (public for compatibility with legacy code)
+    std::uint64_t frame_number = 0;
+    TimePoint frame_begin;
+    TimePoint cpu_begin;
+    TimePoint cpu_end;
+    TimePoint gpu_begin;
+    TimePoint gpu_end;
+    TimePoint present_begin;
+    TimePoint present_end;
+    bool gpu_timestamp_valid = false;
+    std::int64_t gpu_time_ns = 0;
+
     /// Create new frame timing with target FPS
-    explicit FrameTiming(std::uint32_t target_fps = 60)
+    explicit FrameTiming(std::uint32_t target_fps)
         : m_history_size(120) {
         set_target_fps(target_fps);
+        m_frame_times.reserve(m_history_size);
+    }
+
+    /// Default constructor (for per-frame timing data)
+    FrameTiming()
+        : m_history_size(120)
+        , m_target_frame_time(std::chrono::duration_cast<Duration>(
+              std::chrono::duration<double>(1.0 / 60.0))) {
         m_frame_times.reserve(m_history_size);
     }
 
@@ -39,6 +59,16 @@ public:
     [[nodiscard]] static FrameTiming unlimited() {
         FrameTiming timing(0);
         return timing;
+    }
+
+    /// Get FPS from current frame timing
+    [[nodiscard]] double fps() const {
+        if (frame_begin == TimePoint{} || present_end == TimePoint{}) {
+            return 0.0;
+        }
+        auto frame_duration = present_end - frame_begin;
+        if (frame_duration.count() <= 0) return 0.0;
+        return 1.0 / std::chrono::duration<double>(frame_duration).count();
     }
 
     // =========================================================================
@@ -281,10 +311,9 @@ public:
         // Track oversleep for compensation
         auto actual_elapsed = Clock::now() - m_last_frame;
         if (actual_elapsed > m_target_frame_time) {
-            m_oversleep_compensation = std::min(
-                actual_elapsed - m_target_frame_time,
-                std::chrono::milliseconds(5)
-            );
+            auto diff = std::chrono::duration_cast<Duration>(actual_elapsed - m_target_frame_time);
+            auto max_comp = std::chrono::duration_cast<Duration>(std::chrono::milliseconds(5));
+            m_oversleep_compensation = (diff < max_comp) ? diff : max_comp;
         } else {
             m_oversleep_compensation = Duration::zero();
         }
@@ -302,10 +331,21 @@ public:
         return Clock::now() - m_last_frame;
     }
 
+    /// Check if frame limiting is enabled
+    [[nodiscard]] bool enabled() const {
+        return m_target_frame_time != Duration::zero();
+    }
+
+    /// Get frame count
+    [[nodiscard]] std::uint64_t frame_count() const {
+        return m_frame_count;
+    }
+
 private:
     Duration m_target_frame_time = Duration::zero();
     TimePoint m_last_frame;
     Duration m_oversleep_compensation = Duration::zero();
+    std::uint64_t m_frame_count = 0;
 };
 
 } // namespace void_presenter

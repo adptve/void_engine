@@ -182,16 +182,13 @@ public:
         std::uint32_t vulkan_version = 12;  // 10, 11, 12, 13
         std::uint32_t glsl_version = 450;
         bool invert_y = false;  // For Vulkan coordinate system
+
+        Config() = default;
     };
 
     /// Constructor
-    explicit ShadercCompiler(Config config = {})
-        : m_config(std::move(config))
-    {
-#ifdef VOID_HAS_SHADERC
-        // Compiler is created per-compile for thread safety
-#endif
-    }
+    ShadercCompiler() : m_config(Config{}) {}
+    explicit ShadercCompiler(const Config& config) : m_config(config) {}
 
     /// Compile shader source to multiple targets
     [[nodiscard]] void_core::Result<CompileResult> compile(

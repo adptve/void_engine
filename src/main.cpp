@@ -159,24 +159,29 @@ private:
 
         // Check for texture references in materials
         for (const auto& entity : scene.entities) {
+            // Skip entities without materials
+            if (!entity.material) continue;
+
+            const auto& mat = *entity.material;
+
             // Albedo texture
-            if (entity.material.albedo.has_texture()) {
-                m_assets->load<void_asset::TextureAsset>(*entity.material.albedo.texture_path);
+            if (mat.albedo.has_texture()) {
+                m_assets->load<void_asset::TextureAsset>(*mat.albedo.texture_path);
                 queued++;
             }
             // Normal map
-            if (entity.material.normal_map.has_value()) {
-                m_assets->load<void_asset::TextureAsset>(*entity.material.normal_map);
+            if (mat.normal_map.has_value()) {
+                m_assets->load<void_asset::TextureAsset>(*mat.normal_map);
                 queued++;
             }
             // Metallic texture
-            if (entity.material.metallic.has_texture()) {
-                m_assets->load<void_asset::TextureAsset>(*entity.material.metallic.texture_path);
+            if (mat.metallic.has_texture()) {
+                m_assets->load<void_asset::TextureAsset>(*mat.metallic.texture_path);
                 queued++;
             }
             // Roughness texture
-            if (entity.material.roughness.has_texture()) {
-                m_assets->load<void_asset::TextureAsset>(*entity.material.roughness.texture_path);
+            if (mat.roughness.has_texture()) {
+                m_assets->load<void_asset::TextureAsset>(*mat.roughness.texture_path);
                 queued++;
             }
         }
@@ -403,7 +408,7 @@ int main(int argc, char** argv) {
     void_services::ServiceRegistry service_registry;
 
     // Subscribe to service lifecycle events for logging
-    service_registry.on_event([](const void_services::ServiceEvent& event) {
+    service_registry.set_event_callback([](const void_services::ServiceEvent& event) {
         switch (event.type) {
             case void_services::ServiceEventType::Started:
                 spdlog::info("Service started: {}", event.service_id.name);
@@ -535,7 +540,7 @@ int main(int argc, char** argv) {
 
         auto load_result = live_scene_mgr.load_scene(scene_path);
         if (!load_result) {
-            spdlog::error("Failed to load scene: {}", load_result.error().message);
+            spdlog::error("Failed to load scene: {}", load_result.error().message());
             glfwDestroyWindow(window);
             glfwTerminate();
             return 1;
@@ -631,7 +636,7 @@ int main(int argc, char** argv) {
         event_bus.publish(FrameStartEvent{delta_time});
 
         // Process any queued events
-        event_bus.process();
+        event_bus.process_queue();
 
         // =======================================================================
         // Asset Server Update Phase

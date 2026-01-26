@@ -184,7 +184,7 @@ public:
         std::unique_lock lock(m_mutex);
 
         SubscriptionId id{m_next_subscription_id++};
-        auto type_idx = typeid(T);
+        std::type_index type_idx = typeid(T);
 
         m_handlers[type_idx].push_back({id, typed_handler});
 

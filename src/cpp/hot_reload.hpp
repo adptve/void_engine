@@ -10,6 +10,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstring>
 #include <filesystem>
 #include <functional>
 #include <memory>

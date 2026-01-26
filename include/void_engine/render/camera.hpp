@@ -10,8 +10,13 @@
 #include <cmath>
 #include <algorithm>
 #include <numbers>
+#include <glm/glm.hpp>
 
 namespace void_render {
+
+// Forward declarations for Frustum methods
+struct AABB;
+struct BoundingSphere;
 
 // =============================================================================
 // Constants
@@ -1038,6 +1043,22 @@ public:
     [[nodiscard]] const FrustumPlane& plane(PlaneIndex index) const noexcept {
         return m_planes[index];
     }
+
+    /// Check if AABB intersects frustum (for glm-based code)
+    [[nodiscard]] bool intersects_aabb(const AABB& aabb) const;
+
+    /// Check if sphere intersects frustum
+    [[nodiscard]] bool intersects_sphere(const BoundingSphere& sphere) const;
+
+    /// Check if point is inside frustum
+    [[nodiscard]] bool contains_point(const glm::vec3& point) const;
+
+    /// Create from glm view-projection matrix
+    [[nodiscard]] static Frustum from_view_projection(const glm::mat4& vp);
+
+    /// Public planes array (for direct access in spatial.cpp)
+    /// Note: Using glm::vec4 for compatibility with spatial.cpp
+    std::array<glm::vec4, 6> planes;
 
 private:
     std::array<FrustumPlane, 6> m_planes;

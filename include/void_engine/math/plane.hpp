@@ -128,8 +128,8 @@ struct FrustumPlanes {
     static constexpr size_t RIGHT  = 1;
     static constexpr size_t BOTTOM = 2;
     static constexpr size_t TOP    = 3;
-    static constexpr size_t NEAR   = 4;
-    static constexpr size_t FAR    = 5;
+    static constexpr size_t Z_NEAR = 4;  // Renamed from NEAR to avoid Windows macro conflict
+    static constexpr size_t Z_FAR  = 5;  // Renamed from FAR to avoid Windows macro conflict
 
     std::array<Plane, 6> planes;
 
@@ -168,13 +168,13 @@ struct FrustumPlanes {
         );
 
         // Near plane: row3 + row2 (for depth [0,1])
-        frustum.planes[NEAR] = Plane(
+        frustum.planes[Z_NEAR] = Plane(
             Vec3(vp[0][3] + vp[0][2], vp[1][3] + vp[1][2], vp[2][3] + vp[2][2]),
             vp[3][3] + vp[3][2]
         );
 
         // Far plane: row3 - row2
-        frustum.planes[FAR] = Plane(
+        frustum.planes[Z_FAR] = Plane(
             Vec3(vp[0][3] - vp[0][2], vp[1][3] - vp[1][2], vp[2][3] - vp[2][2]),
             vp[3][3] - vp[3][2]
         );

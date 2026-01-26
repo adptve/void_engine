@@ -12,6 +12,7 @@
 #include <chrono>
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 namespace void_presenter {
 
@@ -222,11 +223,26 @@ private:
 };
 
 // =============================================================================
-// Frame Output
+// Frame Output (render target output info)
 // =============================================================================
 
-/// Frame output descriptor
+/// Frame output descriptor (render target information)
 struct FrameOutput {
+    std::uint64_t target_id = 0;            ///< Target identifier
+    std::uint32_t width = 0;                ///< Output width
+    std::uint32_t height = 0;               ///< Output height
+    SurfaceFormat format = SurfaceFormat::Bgra8UnormSrgb;  ///< Output format
+    std::uint32_t image_index = 0;          ///< Swapchain image index
+    bool suboptimal = false;                ///< Whether surface is suboptimal
+    bool cleared = false;                   ///< Whether output was cleared
+};
+
+// =============================================================================
+// Frame Timing Output (presentation result)
+// =============================================================================
+
+/// Frame timing output descriptor (presentation timing result)
+struct FrameTimingOutput {
     std::uint64_t frame_number = 0;     ///< Frame number
     std::uint32_t width = 0;            ///< Frame width
     std::uint32_t height = 0;           ///< Frame height
@@ -236,8 +252,8 @@ struct FrameOutput {
     bool dropped = false;               ///< Whether frame was dropped
 
     /// Create from frame
-    [[nodiscard]] static FrameOutput from_frame(const Frame& frame) {
-        FrameOutput output;
+    [[nodiscard]] static FrameTimingOutput from_frame(const Frame& frame) {
+        FrameTimingOutput output;
         output.frame_number = frame.number();
         output.width = frame.width();
         output.height = frame.height();
@@ -262,11 +278,25 @@ struct FrameOutput {
 };
 
 // =============================================================================
-// Frame Statistics
+// Per-Frame Statistics (timing data for individual frames)
 // =============================================================================
 
-/// Frame statistics tracker
+/// Per-frame timing statistics
 struct FrameStats {
+    std::uint64_t frame_number = 0;         ///< Frame number
+    FrameState state = FrameState::Idle;    ///< Current frame state
+    std::int64_t cpu_time_us = 0;           ///< CPU time in microseconds
+    std::int64_t gpu_time_us = 0;           ///< GPU time in microseconds
+    std::int64_t present_latency_us = 0;    ///< Presentation latency in microseconds
+    std::int64_t total_frame_time_us = 0;   ///< Total frame time in microseconds
+};
+
+// =============================================================================
+// Aggregate Frame Statistics
+// =============================================================================
+
+/// Aggregate frame statistics tracker (over many frames)
+struct AggregateFrameStats {
     std::uint64_t total_frames = 0;         ///< Total frames
     std::uint64_t presented_frames = 0;     ///< Presented frames
     std::uint64_t dropped_frames = 0;       ///< Dropped frames
@@ -277,7 +307,7 @@ struct FrameStats {
     std::uint64_t deadline_misses = 0;      ///< Deadline miss count
 
     /// Update stats with new frame output
-    void update(const FrameOutput& output) {
+    void update(const FrameTimingOutput& output) {
         ++total_frames;
 
         if (output.dropped) {
@@ -327,8 +357,21 @@ struct FrameStats {
 
     /// Reset statistics
     void reset() {
-        *this = FrameStats{};
+        *this = AggregateFrameStats{};
     }
+};
+
+// =============================================================================
+// GPU Frame (for low-level frame tracking)
+// =============================================================================
+
+/// Low-level GPU frame for command recording (used by debug utilities)
+struct GpuFrame {
+    std::uint64_t number = 0;                               ///< Frame number
+    FrameState state = FrameState::Idle;                    ///< Frame state
+    std::chrono::steady_clock::time_point cpu_begin;        ///< CPU work begin time
+    std::chrono::steady_clock::time_point cpu_end;          ///< CPU work end time
+    std::vector<FrameOutput> outputs;                       ///< Frame outputs
 };
 
 } // namespace void_presenter

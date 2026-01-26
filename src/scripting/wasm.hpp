@@ -5,6 +5,7 @@
 
 #include "types.hpp"
 
+#include <cstring>
 #include <filesystem>
 #include <memory>
 #include <span>

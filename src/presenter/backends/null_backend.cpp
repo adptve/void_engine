@@ -7,6 +7,7 @@
 
 #include <void_engine/presenter/backends/null_backend.hpp>
 #include <void_engine/presenter/backend.hpp>
+#include <void_engine/presenter/rehydration.hpp>
 
 #include <algorithm>
 #include <chrono>

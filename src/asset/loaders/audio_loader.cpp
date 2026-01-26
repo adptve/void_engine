@@ -165,7 +165,7 @@ LoadResult<AudioAsset> AudioLoader::load(LoadContext& ctx) {
         return load_aiff(ctx);
     }
 
-    return LoadError{LoadErrorCode::UnsupportedFormat, "Unknown audio format: " + ext};
+    return void_core::Err<std::unique_ptr<AudioAsset>>("Unknown audio format: " + ext);
 }
 
 LoadResult<AudioAsset> AudioLoader::load_wav(LoadContext& ctx) {
@@ -175,11 +175,11 @@ LoadResult<AudioAsset> AudioLoader::load_wav(LoadContext& ctx) {
     // Use dr_wav for robust WAV loading
     drwav wav;
     if (!drwav_init_memory(&wav, data.data(), data.size(), nullptr)) {
-        return LoadError{LoadErrorCode::InvalidFormat, "Failed to parse WAV file"};
+        return void_core::Err<std::unique_ptr<AudioAsset>>("Failed to parse WAV file");
     }
 
     AudioAsset audio;
-    audio.name = ctx.name();
+    audio.name = ctx.path().stem();
     audio.sample_rate = wav.sampleRate;
     audio.channels = wav.channels;
     audio.frame_count = wav.totalPCMFrameCount;
@@ -204,13 +204,13 @@ LoadResult<AudioAsset> AudioLoader::load_wav(LoadContext& ctx) {
     // Fallback to manual WAV parsing
     auto header_opt = WavParser::parse_header(data);
     if (!header_opt) {
-        return LoadError{LoadErrorCode::InvalidFormat, "Invalid WAV file"};
+        return void_core::Err<std::unique_ptr<AudioAsset>>("Invalid WAV file");
     }
 
     const auto& header = *header_opt;
 
     AudioAsset audio;
-    audio.name = ctx.name();
+    audio.name = ctx.path().stem();
     audio.sample_rate = header.sample_rate;
     audio.channels = header.channels;
     audio.format = WavParser::get_format(header);
@@ -218,13 +218,13 @@ LoadResult<AudioAsset> AudioLoader::load_wav(LoadContext& ctx) {
     // Calculate frame count
     std::uint32_t bytes_per_frame = header.channels * (header.bits_per_sample / 8);
     if (bytes_per_frame == 0) {
-        return LoadError{LoadErrorCode::InvalidFormat, "Invalid WAV format"};
+        return void_core::Err<std::unique_ptr<AudioAsset>>("Invalid WAV format");
     }
     audio.frame_count = header.data_size / bytes_per_frame;
 
     // Copy audio data
     if (header.data_offset + header.data_size > data.size()) {
-        return LoadError{LoadErrorCode::InvalidFormat, "WAV data exceeds file size"};
+        return void_core::Err<std::unique_ptr<AudioAsset>>("WAV data exceeds file size");
     }
 
     audio.data.resize(header.data_size);
@@ -234,7 +234,7 @@ LoadResult<AudioAsset> AudioLoader::load_wav(LoadContext& ctx) {
     // Apply config conversions
     apply_config(audio);
 
-    return audio;
+    return void_core::Ok(std::make_unique<AudioAsset>(std::move(audio)));
 }
 
 LoadResult<AudioAsset> AudioLoader::load_ogg(LoadContext& ctx) {
@@ -252,11 +252,11 @@ LoadResult<AudioAsset> AudioLoader::load_ogg(LoadContext& ctx) {
     );
 
     if (samples < 0 || output == nullptr) {
-        return LoadError{LoadErrorCode::DecodeError, "Failed to decode OGG Vorbis file"};
+        return void_core::Err<std::unique_ptr<AudioAsset>>("Failed to decode OGG Vorbis file");
     }
 
     AudioAsset audio;
-    audio.name = ctx.name();
+    audio.name = ctx.path().stem();
     audio.sample_rate = static_cast<std::uint32_t>(sample_rate);
     audio.channels = static_cast<std::uint32_t>(channels);
     audio.format = AudioFormat::PCM_S16;
@@ -269,15 +269,15 @@ LoadResult<AudioAsset> AudioLoader::load_ogg(LoadContext& ctx) {
     free(output);
 
     apply_config(audio);
-    return audio;
+    return void_core::Ok(std::make_unique<AudioAsset>(std::move(audio)));
 
 #else
     // Check OGG magic for validation
     if (data.size() < 4 || std::memcmp(data.data(), "OggS", 4) != 0) {
-        return LoadError{LoadErrorCode::InvalidFormat, "Invalid OGG file"};
+        return void_core::Err<std::unique_ptr<AudioAsset>>("Invalid OGG file");
     }
-    return LoadError{LoadErrorCode::UnsupportedFormat,
-        "OGG decoding requires stb_vorbis (enable VOID_HAS_STB)"};
+    return void_core::Err<std::unique_ptr<AudioAsset>>(
+        "OGG decoding requires stb_vorbis (enable VOID_HAS_STB)");
 #endif
 }
 
@@ -294,11 +294,11 @@ LoadResult<AudioAsset> AudioLoader::load_mp3(LoadContext& ctx) {
 
     int result = mp3dec_load_buf(&mp3d, data.data(), data.size(), &info, nullptr, nullptr);
     if (result != 0 || info.buffer == nullptr) {
-        return LoadError{LoadErrorCode::DecodeError, "Failed to decode MP3 file"};
+        return void_core::Err<std::unique_ptr<AudioAsset>>("Failed to decode MP3 file");
     }
 
     AudioAsset audio;
-    audio.name = ctx.name();
+    audio.name = ctx.path().stem();
     audio.sample_rate = static_cast<std::uint32_t>(info.hz);
     audio.channels = static_cast<std::uint32_t>(info.channels);
     audio.format = AudioFormat::PCM_S16;
@@ -311,7 +311,7 @@ LoadResult<AudioAsset> AudioLoader::load_mp3(LoadContext& ctx) {
     free(info.buffer);
 
     apply_config(audio);
-    return audio;
+    return void_core::Ok(std::make_unique<AudioAsset>(std::move(audio)));
 
 #elif defined(VOID_HAS_DR_LIBS)
     // Fallback to dr_mp3
@@ -321,11 +321,11 @@ LoadResult<AudioAsset> AudioLoader::load_mp3(LoadContext& ctx) {
         data.data(), data.size(), &config, &frame_count, nullptr);
 
     if (samples == nullptr) {
-        return LoadError{LoadErrorCode::DecodeError, "Failed to decode MP3 file"};
+        return void_core::Err<std::unique_ptr<AudioAsset>>("Failed to decode MP3 file");
     }
 
     AudioAsset audio;
-    audio.name = ctx.name();
+    audio.name = ctx.path().stem();
     audio.sample_rate = config.sampleRate;
     audio.channels = config.channels;
     audio.format = AudioFormat::PCM_S16;
@@ -338,20 +338,20 @@ LoadResult<AudioAsset> AudioLoader::load_mp3(LoadContext& ctx) {
     drmp3_free(samples, nullptr);
 
     apply_config(audio);
-    return audio;
+    return void_core::Ok(std::make_unique<AudioAsset>(std::move(audio)));
 
 #else
     // Check for MP3 sync or ID3 tag for validation
     if (data.size() < 4) {
-        return LoadError{LoadErrorCode::InvalidFormat, "File too small for MP3"};
+        return void_core::Err<std::unique_ptr<AudioAsset>>("File too small for MP3");
     }
     bool has_id3 = (data[0] == 'I' && data[1] == 'D' && data[2] == '3');
     bool has_sync = ((data[0] == 0xFF) && ((data[1] & 0xE0) == 0xE0));
     if (!has_id3 && !has_sync) {
-        return LoadError{LoadErrorCode::InvalidFormat, "Invalid MP3 file"};
+        return void_core::Err<std::unique_ptr<AudioAsset>>("Invalid MP3 file");
     }
-    return LoadError{LoadErrorCode::UnsupportedFormat,
-        "MP3 decoding requires minimp3 or dr_mp3 (enable VOID_HAS_MINIMP3 or VOID_HAS_DR_LIBS)"};
+    return void_core::Err<std::unique_ptr<AudioAsset>>(
+        "MP3 decoding requires minimp3 or dr_mp3 (enable VOID_HAS_MINIMP3 or VOID_HAS_DR_LIBS)");
 #endif
 }
 
@@ -372,11 +372,11 @@ LoadResult<AudioAsset> AudioLoader::load_flac(LoadContext& ctx) {
     );
 
     if (samples == nullptr) {
-        return LoadError{LoadErrorCode::DecodeError, "Failed to decode FLAC file"};
+        return void_core::Err<std::unique_ptr<AudioAsset>>("Failed to decode FLAC file");
     }
 
     AudioAsset audio;
-    audio.name = ctx.name();
+    audio.name = ctx.path().stem();
     audio.sample_rate = sample_rate;
     audio.channels = channels;
     audio.format = AudioFormat::PCM_S16;
@@ -389,15 +389,15 @@ LoadResult<AudioAsset> AudioLoader::load_flac(LoadContext& ctx) {
     drflac_free(samples, nullptr);
 
     apply_config(audio);
-    return audio;
+    return void_core::Ok(std::make_unique<AudioAsset>(std::move(audio)));
 
 #else
     // Check FLAC magic for validation
     if (data.size() < 4 || std::memcmp(data.data(), "fLaC", 4) != 0) {
-        return LoadError{LoadErrorCode::InvalidFormat, "Invalid FLAC file"};
+        return void_core::Err<std::unique_ptr<AudioAsset>>("Invalid FLAC file");
     }
-    return LoadError{LoadErrorCode::UnsupportedFormat,
-        "FLAC decoding requires dr_flac (enable VOID_HAS_DR_LIBS)"};
+    return void_core::Err<std::unique_ptr<AudioAsset>>(
+        "FLAC decoding requires dr_flac (enable VOID_HAS_DR_LIBS)");
 #endif
 }
 
@@ -406,11 +406,11 @@ LoadResult<AudioAsset> AudioLoader::load_aiff(LoadContext& ctx) {
 
     // Check AIFF magic: "FORM" + size + "AIFF" or "AIFC"
     if (data.size() < 12) {
-        return LoadError{LoadErrorCode::InvalidFormat, "File too small for AIFF"};
+        return void_core::Err<std::unique_ptr<AudioAsset>>("File too small for AIFF");
     }
 
     if (std::memcmp(data.data(), "FORM", 4) != 0) {
-        return LoadError{LoadErrorCode::InvalidFormat, "Invalid AIFF file (missing FORM)"};
+        return void_core::Err<std::unique_ptr<AudioAsset>>("Invalid AIFF file (missing FORM)");
     }
 
     const char* form_type = reinterpret_cast<const char*>(data.data() + 8);
@@ -418,7 +418,7 @@ LoadResult<AudioAsset> AudioLoader::load_aiff(LoadContext& ctx) {
     bool is_aifc = (std::memcmp(form_type, "AIFC", 4) == 0);
 
     if (!is_aiff && !is_aifc) {
-        return LoadError{LoadErrorCode::InvalidFormat, "Invalid AIFF file (not AIFF/AIFC)"};
+        return void_core::Err<std::unique_ptr<AudioAsset>>("Invalid AIFF file (not AIFF/AIFC)");
     }
 
     // Parse AIFF chunks
@@ -515,11 +515,11 @@ LoadResult<AudioAsset> AudioLoader::load_aiff(LoadContext& ctx) {
     }
 
     if (channels == 0 || num_frames == 0 || sound_data == nullptr) {
-        return LoadError{LoadErrorCode::InvalidFormat, "Invalid or incomplete AIFF file"};
+        return void_core::Err<std::unique_ptr<AudioAsset>>("Invalid or incomplete AIFF file");
     }
 
     AudioAsset audio;
-    audio.name = ctx.name();
+    audio.name = ctx.path().stem();
     audio.sample_rate = static_cast<std::uint32_t>(sample_rate);
     audio.channels = channels;
     audio.frame_count = num_frames;
@@ -568,12 +568,12 @@ LoadResult<AudioAsset> AudioLoader::load_aiff(LoadContext& ctx) {
                 sound_data[i * 4 + 3]);
         }
     } else {
-        return LoadError{LoadErrorCode::UnsupportedFormat,
-            "Unsupported AIFF bit depth: " + std::to_string(bits_per_sample)};
+        return void_core::Err<std::unique_ptr<AudioAsset>>(
+            "Unsupported AIFF bit depth: " + std::to_string(bits_per_sample));
     }
 
     apply_config(audio);
-    return audio;
+    return void_core::Ok(std::make_unique<AudioAsset>(std::move(audio)));
 }
 
 void AudioLoader::apply_config(AudioAsset& audio) {
@@ -903,14 +903,14 @@ LoadResult<StreamingAudioAsset> StreamingAudioLoader::load(LoadContext& ctx) {
     const auto& data = ctx.data();
 
     StreamingAudioAsset asset;
-    asset.name = ctx.name();
-    asset.source_path = ctx.path().string();
+    asset.name = ctx.path().stem();
+    asset.source_path = ctx.path().str();
 
     if (ext == "wav" || ext == "wave") {
 #ifdef VOID_HAS_DR_LIBS
         drwav wav;
         if (!drwav_init_memory(&wav, data.data(), data.size(), nullptr)) {
-            return LoadError{LoadErrorCode::InvalidFormat, "Invalid WAV file"};
+            return void_core::Err<std::unique_ptr<StreamingAudioAsset>>("Invalid WAV file");
         }
         asset.sample_rate = wav.sampleRate;
         asset.channels = wav.channels;
@@ -921,7 +921,7 @@ LoadResult<StreamingAudioAsset> StreamingAudioLoader::load(LoadContext& ctx) {
 #else
         auto header_opt = WavParser::parse_header(data);
         if (!header_opt) {
-            return LoadError{LoadErrorCode::InvalidFormat, "Invalid WAV file"};
+            return void_core::Err<std::unique_ptr<StreamingAudioAsset>>("Invalid WAV file");
         }
         const auto& header = *header_opt;
         asset.sample_rate = header.sample_rate;
@@ -936,7 +936,7 @@ LoadResult<StreamingAudioAsset> StreamingAudioLoader::load(LoadContext& ctx) {
         stb_vorbis* v = stb_vorbis_open_memory(data.data(), static_cast<int>(data.size()),
             &error, nullptr);
         if (v == nullptr) {
-            return LoadError{LoadErrorCode::InvalidFormat, "Invalid OGG file"};
+            return void_core::Err<std::unique_ptr<StreamingAudioAsset>>("Invalid OGG file");
         }
         stb_vorbis_info info = stb_vorbis_get_info(v);
         asset.sample_rate = info.sample_rate;
@@ -946,7 +946,7 @@ LoadResult<StreamingAudioAsset> StreamingAudioLoader::load(LoadContext& ctx) {
         stb_vorbis_close(v);
 #else
         if (data.size() < 4 || std::memcmp(data.data(), "OggS", 4) != 0) {
-            return LoadError{LoadErrorCode::InvalidFormat, "Invalid OGG file"};
+            return void_core::Err<std::unique_ptr<StreamingAudioAsset>>("Invalid OGG file");
         }
         asset.sample_rate = 44100;
         asset.channels = 2;
@@ -956,7 +956,7 @@ LoadResult<StreamingAudioAsset> StreamingAudioLoader::load(LoadContext& ctx) {
 #ifdef VOID_HAS_DR_LIBS
         drmp3 mp3;
         if (!drmp3_init_memory(&mp3, data.data(), data.size(), nullptr)) {
-            return LoadError{LoadErrorCode::InvalidFormat, "Invalid MP3 file"};
+            return void_core::Err<std::unique_ptr<StreamingAudioAsset>>("Invalid MP3 file");
         }
         asset.sample_rate = mp3.sampleRate;
         asset.channels = mp3.channels;
@@ -965,7 +965,7 @@ LoadResult<StreamingAudioAsset> StreamingAudioLoader::load(LoadContext& ctx) {
         drmp3_uninit(&mp3);
 #else
         if (data.size() < 4) {
-            return LoadError{LoadErrorCode::InvalidFormat, "File too small"};
+            return void_core::Err<std::unique_ptr<StreamingAudioAsset>>("File too small");
         }
         asset.sample_rate = 44100;
         asset.channels = 2;
@@ -975,7 +975,7 @@ LoadResult<StreamingAudioAsset> StreamingAudioLoader::load(LoadContext& ctx) {
 #ifdef VOID_HAS_DR_LIBS
         drflac* flac = drflac_open_memory(data.data(), data.size(), nullptr);
         if (flac == nullptr) {
-            return LoadError{LoadErrorCode::InvalidFormat, "Invalid FLAC file"};
+            return void_core::Err<std::unique_ptr<StreamingAudioAsset>>("Invalid FLAC file");
         }
         asset.sample_rate = flac->sampleRate;
         asset.channels = flac->channels;
@@ -984,17 +984,17 @@ LoadResult<StreamingAudioAsset> StreamingAudioLoader::load(LoadContext& ctx) {
         drflac_close(flac);
 #else
         if (data.size() < 4 || std::memcmp(data.data(), "fLaC", 4) != 0) {
-            return LoadError{LoadErrorCode::InvalidFormat, "Invalid FLAC file"};
+            return void_core::Err<std::unique_ptr<StreamingAudioAsset>>("Invalid FLAC file");
         }
         asset.sample_rate = 44100;
         asset.channels = 2;
         asset.format = AudioFormat::PCM_S16;
 #endif
     } else {
-        return LoadError{LoadErrorCode::UnsupportedFormat, "Unknown format: " + ext};
+        return void_core::Err<std::unique_ptr<StreamingAudioAsset>>("Unknown format: " + ext);
     }
 
-    return asset;
+    return void_core::Ok(std::make_unique<StreamingAudioAsset>(std::move(asset)));
 }
 
 } // namespace void_asset

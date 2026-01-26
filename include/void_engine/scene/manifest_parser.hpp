@@ -3,10 +3,11 @@
 /// @file manifest_parser.hpp
 /// @brief Package manifest (manifest.toml) parsing
 
-#include <void_engine/core/result.hpp>
+#include <void_engine/core/error.hpp>
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <optional>
 #include <string>

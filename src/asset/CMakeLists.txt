@@ -17,6 +17,8 @@ void_add_module(NAME void_asset
         loaders/model_loader.cpp
         loaders/shader_loader.cpp
         loaders/audio_loader.cpp
+        # Third-party implementations (header-only libraries)
+        stb_impl.cpp
     DEPENDENCIES
         void_core
         void_structures

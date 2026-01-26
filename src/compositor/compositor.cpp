@@ -7,6 +7,7 @@
 #include <void_engine/compositor/rehydration.hpp>
 
 #include <memory>
+#include <utility>
 
 namespace void_compositor {
 

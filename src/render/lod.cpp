@@ -555,14 +555,23 @@ public:
         std::vector<float> screen_size_thresholds;      // Custom screen sizes per level
         bool preserve_boundaries = true;
         bool generate_imposters = false;                // Generate billboard imposters for furthest LOD
+
+        Settings() = default;
     };
 
     /// Generate LOD group from base mesh
     [[nodiscard]] LodGroup generate(
         const MeshData& base_mesh,
         MeshCache& cache,
+        const std::string& base_name) {
+        return generate(base_mesh, cache, base_name, Settings{});
+    }
+
+    [[nodiscard]] LodGroup generate(
+        const MeshData& base_mesh,
+        MeshCache& cache,
         const std::string& base_name,
-        const Settings& settings = {}) {
+        const Settings& settings) {
 
         LodGroup group;
 

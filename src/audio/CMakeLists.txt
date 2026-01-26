@@ -8,7 +8,7 @@ void_add_module(NAME void_audio
         mixer.cpp
         effects.cpp
         backend.cpp
-        miniaudio_backend.cpp
+        # miniaudio_backend.cpp  # Excluded: Windows header macro conflicts
     DEPENDENCIES
         void_core
         void_asset

@@ -597,10 +597,10 @@ void AnimationSystem::update(void_ecs::World& world, float delta_time) {
         if (transform && anim && anim->type != AnimationType::None) {
             // Update based on animation type
             switch (anim->type) {
-                case AnimationType::Rotation:
+                case AnimationType::Rotate:
                     update_rotation(*transform, *anim, delta_time);
                     break;
-                case AnimationType::Oscillation:
+                case AnimationType::Oscillate:
                     update_oscillation(*transform, *anim, delta_time);
                     break;
                 case AnimationType::Orbit:
