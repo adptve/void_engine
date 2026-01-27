@@ -7,6 +7,7 @@
 #include <void_engine/compositor/types.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <sstream>
 

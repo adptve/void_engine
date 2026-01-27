@@ -10,6 +10,12 @@
 /// - Direct3D 12 (Windows native)
 /// - WebGPU (cross-platform, WASM)
 ///
+/// Architecture:
+/// - void_render:: contains top-level enums (GpuBackend, DisplayBackend) and BackendManager
+/// - void_render::gpu:: contains low-level RHI types (handles, descriptors, interfaces)
+///
+/// This separation allows coexistence with higher-level types in resource.hpp/texture.hpp
+///
 /// Based on legacy Rust void_presenter/void_compositor architecture
 
 #include <cstdint>
@@ -26,7 +32,7 @@
 namespace void_render {
 
 // =============================================================================
-// Backend Types
+// Top-Level Backend Enums (void_render namespace)
 // =============================================================================
 
 /// Graphics API backend type
@@ -86,6 +92,14 @@ enum class BackendSelector : std::uint8_t {
         default: return "Unknown";
     }
 }
+
+// =============================================================================
+// Low-Level GPU Abstraction Types (void_render::gpu namespace)
+// =============================================================================
+
+/// Low-level GPU abstraction types (RHI-equivalent)
+/// Use void_render::gpu:: types for direct GPU resource management
+namespace gpu {
 
 // =============================================================================
 // Backend Capabilities
@@ -665,7 +679,7 @@ public:
     // Resize
     virtual void resize(std::uint32_t width, std::uint32_t height) = 0;
 
-    // Hot-reload support
+    // Hot-reload support (SACRED patterns)
     [[nodiscard]] virtual RehydrationState get_rehydration_state() const = 0;
     virtual BackendError rehydrate(const RehydrationState& state) = 0;
 
@@ -708,13 +722,13 @@ public:
     [[nodiscard]] virtual TextureHandle acquire_next_texture() = 0;
     virtual void present(TextureHandle texture) = 0;
 
-    // Hot-reload
+    // Hot-reload support (SACRED patterns)
     [[nodiscard]] virtual RehydrationState get_rehydration_state() const = 0;
     virtual BackendError rehydrate(const RehydrationState& state) = 0;
 };
 
 // =============================================================================
-// Backend Factory & Manager
+// Backend Factory Functions
 // =============================================================================
 
 /// Backend detection result
@@ -739,10 +753,19 @@ struct BackendAvailability {
                                                             IGpuBackend* gpu_backend,
                                                             const BackendConfig& config);
 
+} // namespace gpu
+
 // =============================================================================
-// Backend Manager (coordinates GPU backend + presenters)
+// Backend Manager (void_render namespace - coordinates GPU backend + presenters)
 // =============================================================================
 
+/// BackendManager coordinates GPU backends and presenters with hot-swap support
+///
+/// Features:
+/// - Runtime backend switching (Vulkan <-> OpenGL <-> D3D12)
+/// - Multi-display presenter management
+/// - State preservation during hot-swap via RehydrationState
+/// - SACRED hot-reload pattern support
 class BackendManager {
 public:
     BackendManager() = default;
@@ -753,7 +776,7 @@ public:
     BackendManager& operator=(const BackendManager&) = delete;
 
     /// Initialize with configuration
-    BackendError init(const BackendConfig& config);
+    gpu::BackendError init(const gpu::BackendConfig& config);
 
     /// Shutdown and release all resources
     void shutdown();
@@ -762,50 +785,55 @@ public:
     [[nodiscard]] bool is_initialized() const noexcept { return m_gpu_backend != nullptr; }
 
     /// Get GPU backend
-    [[nodiscard]] IGpuBackend* gpu() const noexcept { return m_gpu_backend.get(); }
+    [[nodiscard]] gpu::IGpuBackend* gpu() const noexcept { return m_gpu_backend.get(); }
 
     /// Get primary presenter
-    [[nodiscard]] IPresenter* presenter() const noexcept {
+    [[nodiscard]] gpu::IPresenter* presenter() const noexcept {
         return m_presenters.empty() ? nullptr : m_presenters[0].get();
     }
 
     /// Get presenter by ID
-    [[nodiscard]] IPresenter* get_presenter(PresenterId id) const;
+    [[nodiscard]] gpu::IPresenter* get_presenter(gpu::PresenterId id) const;
 
     /// Add additional presenter (multi-display)
-    [[nodiscard]] PresenterId add_presenter(DisplayBackend backend);
+    [[nodiscard]] gpu::PresenterId add_presenter(DisplayBackend backend);
 
     /// Remove presenter
-    void remove_presenter(PresenterId id);
+    void remove_presenter(gpu::PresenterId id);
 
     /// Get capabilities
-    [[nodiscard]] const BackendCapabilities& capabilities() const;
+    [[nodiscard]] const gpu::BackendCapabilities& capabilities() const;
 
     /// Begin frame (all presenters)
-    BackendError begin_frame();
+    gpu::BackendError begin_frame();
 
     /// End frame (all presenters)
-    BackendError end_frame();
+    gpu::BackendError end_frame();
 
-    /// Hot-swap backend (runtime backend switching)
-    BackendError hot_swap_backend(GpuBackend new_backend);
+    /// Hot-swap GPU backend at runtime (preserves state)
+    /// This is a SACRED operation - state is captured before swap and restored after
+    gpu::BackendError hot_swap_backend(GpuBackend new_backend);
 
-    /// Hot-swap presenter
-    BackendError hot_swap_presenter(PresenterId id, DisplayBackend new_backend);
+    /// Hot-swap presenter (e.g., switch display outputs)
+    gpu::BackendError hot_swap_presenter(gpu::PresenterId id, DisplayBackend new_backend);
+
+    // SACRED hot-reload patterns
+    [[nodiscard]] gpu::RehydrationState snapshot() const;
+    gpu::BackendError restore(const gpu::RehydrationState& state);
 
 private:
-    std::unique_ptr<IGpuBackend> m_gpu_backend;
-    std::vector<std::unique_ptr<IPresenter>> m_presenters;
-    BackendConfig m_config;
-    PresenterId m_next_presenter_id = 1;
+    std::unique_ptr<gpu::IGpuBackend> m_gpu_backend;
+    std::vector<std::unique_ptr<gpu::IPresenter>> m_presenters;
+    gpu::BackendConfig m_config;
+    gpu::PresenterId m_next_presenter_id = 1;
 };
 
 } // namespace void_render
 
 // Hash specializations
 template<typename Tag>
-struct std::hash<void_render::GpuHandle<Tag>> {
-    std::size_t operator()(const void_render::GpuHandle<Tag>& h) const noexcept {
+struct std::hash<void_render::gpu::GpuHandle<Tag>> {
+    std::size_t operator()(const void_render::gpu::GpuHandle<Tag>& h) const noexcept {
         return std::hash<std::uint64_t>{}(h.id);
     }
 };

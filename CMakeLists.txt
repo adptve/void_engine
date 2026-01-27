@@ -117,26 +117,26 @@ add_subdirectory(src/asset)
 add_subdirectory(src/shader)
 
 # ============================================================================
-# PHASE 4: PLATFORM
+# PHASE 4: PLATFORM (ACTIVE)
 # Modules: presenter, render, compositor
 # Dependencies: glfw, glad, OpenGL
 # ============================================================================
-# FetchContent_Declare(glfw
-#     GIT_REPOSITORY https://github.com/glfw/glfw.git
-#     GIT_TAG        3.4
-#     GIT_SHALLOW    TRUE
-# )
-# set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-# set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-# set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-# set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
-# FetchContent_MakeAvailable(glfw)
-#
-# find_package(OpenGL REQUIRED)
-#
-# add_subdirectory(src/presenter)
-# add_subdirectory(src/render)
-# add_subdirectory(src/compositor)
+FetchContent_Declare(glfw
+    GIT_REPOSITORY https://github.com/glfw/glfw.git
+    GIT_TAG        3.4
+    GIT_SHALLOW    TRUE
+)
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(glfw)
+
+find_package(OpenGL REQUIRED)
+
+add_subdirectory(src/render)
+add_subdirectory(src/presenter)
+add_subdirectory(src/compositor)
 
 # ============================================================================
 # PHASE 5: I/O
@@ -244,11 +244,13 @@ target_link_libraries(void_engine PRIVATE void_kernel)
 # Phase 3 dependencies
 target_link_libraries(void_engine PRIVATE void_asset)
 target_link_libraries(void_engine PRIVATE void_shader)
-# target_link_libraries(void_engine PRIVATE glfw)               # Phase 4
-# target_link_libraries(void_engine PRIVATE OpenGL::GL)         # Phase 4
-# target_link_libraries(void_engine PRIVATE void_presenter)     # Phase 4
-# target_link_libraries(void_engine PRIVATE void_render)        # Phase 4
-# target_link_libraries(void_engine PRIVATE void_compositor)    # Phase 4
+
+# Phase 4 dependencies
+target_link_libraries(void_engine PRIVATE glfw)
+target_link_libraries(void_engine PRIVATE OpenGL::GL)
+target_link_libraries(void_engine PRIVATE void_render)
+target_link_libraries(void_engine PRIVATE void_presenter)
+target_link_libraries(void_engine PRIVATE void_compositor)
 # target_link_libraries(void_engine PRIVATE void_audio)         # Phase 5
 # target_link_libraries(void_engine PRIVATE void_ecs)           # Phase 6
 # target_link_libraries(void_engine PRIVATE void_physics)       # Phase 6
@@ -292,7 +294,7 @@ endif()
 message(STATUS "")
 message(STATUS "void_engine ${PROJECT_VERSION}")
 message(STATUS "========================================")
-message(STATUS "Active Phase:    3 (Resources)")
+message(STATUS "Active Phase:    4 (Platform)")
 message(STATUS "C++ Standard:    ${CMAKE_CXX_STANDARD}")
 message(STATUS "Build Type:      ${CMAKE_BUILD_TYPE}")
 message(STATUS "")

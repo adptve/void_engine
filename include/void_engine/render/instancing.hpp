@@ -24,6 +24,106 @@ namespace void_render {
 class ShaderProgram;
 
 // =============================================================================
+// DrawCommand
+// =============================================================================
+
+/// Draw command for instanced rendering
+struct DrawCommand {
+    std::uint32_t count = 0;           ///< Number of vertices/indices
+    std::uint32_t instance_count = 1;  ///< Number of instances
+    std::uint32_t first = 0;           ///< First vertex/index
+    std::int32_t base_vertex = 0;      ///< Base vertex offset
+    std::uint32_t base_instance = 0;   ///< Base instance offset
+    bool is_indexed = true;            ///< Whether using indexed drawing
+
+    /// Create indexed draw command
+    [[nodiscard]] static DrawCommand indexed(
+        std::uint32_t index_count,
+        std::uint32_t instance_count,
+        std::uint32_t first_index = 0,
+        std::int32_t base_vertex = 0,
+        std::uint32_t base_instance = 0);
+
+    /// Create array (non-indexed) draw command
+    [[nodiscard]] static DrawCommand arrays(
+        std::uint32_t vertex_count,
+        std::uint32_t instance_count,
+        std::uint32_t first_vertex = 0,
+        std::uint32_t base_instance = 0);
+};
+
+// =============================================================================
+// DrawElementsIndirectCommand (OpenGL structure)
+// =============================================================================
+
+/// OpenGL indirect draw command structure
+struct DrawElementsIndirectCommand {
+    std::uint32_t count;          ///< Number of indices
+    std::uint32_t instanceCount;  ///< Number of instances
+    std::uint32_t firstIndex;     ///< First index offset
+    std::int32_t baseVertex;      ///< Base vertex offset
+    std::uint32_t baseInstance;   ///< Base instance offset
+};
+
+// =============================================================================
+// IndirectBuffer
+// =============================================================================
+
+/// GPU buffer for indirect draw commands
+class IndirectBuffer {
+public:
+    IndirectBuffer();
+    ~IndirectBuffer();
+
+    // Move-only
+    IndirectBuffer(const IndirectBuffer&) = delete;
+    IndirectBuffer& operator=(const IndirectBuffer&) = delete;
+    IndirectBuffer(IndirectBuffer&& other) noexcept;
+    IndirectBuffer& operator=(IndirectBuffer&& other) noexcept;
+
+    /// Initialize buffer with capacity
+    [[nodiscard]] bool initialize(std::size_t initial_capacity);
+
+    /// Destroy buffer
+    void destroy();
+
+    /// Add a draw command
+    void add(const DrawCommand& cmd);
+
+    /// Clear all commands
+    void clear();
+
+    /// Upload commands to GPU
+    void upload();
+
+    /// Bind buffer
+    void bind() const;
+
+    /// Unbind buffer
+    static void unbind();
+
+    /// Execute all draw commands (using multi-draw indirect)
+    /// @param mode GL draw mode (e.g., GL_TRIANGLES = 0x0004)
+    /// @param index_type GL index type (e.g., GL_UNSIGNED_INT = 0x1405)
+    void execute(unsigned int mode, unsigned int index_type) const;
+
+    /// Get command count
+    [[nodiscard]] std::size_t count() const noexcept { return m_count; }
+
+    /// Get capacity
+    [[nodiscard]] std::size_t capacity() const noexcept { return m_capacity; }
+
+    /// Check if valid
+    [[nodiscard]] bool is_valid() const noexcept { return m_buffer != 0; }
+
+private:
+    unsigned int m_buffer = 0;
+    std::size_t m_capacity = 0;
+    std::size_t m_count = 0;
+    std::vector<DrawElementsIndirectCommand> m_commands;
+};
+
+// =============================================================================
 // InstanceData (GPU-ready)
 // =============================================================================
 
@@ -239,6 +339,14 @@ public:
         bool auto_upload = true;
     };
 
+    /// Statistics for batching
+    struct Stats {
+        std::size_t batch_count = 0;
+        std::uint32_t draw_calls = 0;
+        std::uint64_t instances_rendered = 0;
+        std::uint64_t total_instances = 0;
+    };
+
     InstanceBatcher();
     ~InstanceBatcher();
 
@@ -273,12 +381,25 @@ public:
     /// Get instances rendered
     [[nodiscard]] std::uint64_t instances_rendered() const noexcept { return m_instances_rendered; }
 
+    /// Get statistics
+    [[nodiscard]] Stats stats() const;
+
 private:
     Config m_config;
     std::map<BatchKey, InstanceBatch> m_batches;
     std::map<BatchKey, std::size_t> m_batch_lookup;
     std::uint32_t m_draw_calls = 0;
     std::uint64_t m_instances_rendered = 0;
+};
+
+// =============================================================================
+// MaterialHandle
+// =============================================================================
+
+/// Handle to a material resource
+struct MaterialHandle {
+    std::uint64_t id = 0;
+    [[nodiscard]] bool is_valid() const noexcept { return id != 0; }
 };
 
 // =============================================================================
@@ -339,16 +460,6 @@ private:
     InstanceBatcher m_batcher;
     std::vector<InstanceData> m_staging_instances;
     Stats m_draw_stats;
-};
-
-// =============================================================================
-// MaterialHandle (if not defined elsewhere)
-// =============================================================================
-
-/// Handle to a material resource
-struct MaterialHandle {
-    std::uint64_t id = 0;
-    [[nodiscard]] bool is_valid() const noexcept { return id != 0; }
 };
 
 } // namespace void_render

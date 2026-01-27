@@ -598,13 +598,13 @@ void InstanceRenderer::begin_frame() {
 
 void InstanceRenderer::submit(MeshHandle mesh, MaterialHandle material,
                                const InstanceData& instance) {
-    BatchKey key{mesh.id, material.id, 0};
+    BatchKey key{mesh.asset_id, material.id, 0};
     m_batcher.submit(key, instance);
 }
 
 void InstanceRenderer::submit_batch(MeshHandle mesh, MaterialHandle material,
                                      std::span<const InstanceData> instances) {
-    BatchKey key{mesh.id, material.id, 0};
+    BatchKey key{mesh.asset_id, material.id, 0};
     m_batcher.submit_bulk(key, instances);
 }
 

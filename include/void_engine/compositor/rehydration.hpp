@@ -510,7 +510,7 @@ inline bool deserialize_hdr_config(const RehydrationState& state, struct HdrConf
 // =============================================================================
 
 /// Serialize frame scheduler state to rehydration state
-inline RehydrationState serialize_frame_scheduler(const struct FrameScheduler& scheduler) {
+inline RehydrationState serialize_frame_scheduler(const FrameScheduler& scheduler) {
     RehydrationState state;
     state.set_int("target_fps", scheduler.target_fps());
     state.set_int("frame_number", scheduler.frame_number());

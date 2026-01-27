@@ -164,7 +164,7 @@ class InstanceBatcher;
 enum class MeshTypeId : std::uint8_t;
 
 /// Draw command
-class DrawCommand;
+struct DrawCommand;
 
 /// Draw list
 class DrawList;
