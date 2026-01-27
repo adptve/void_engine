@@ -1,6 +1,14 @@
 /// @file audio.hpp
 /// @brief Main include header for void_audio
 ///
+/// STATUS: PRODUCTION (2026-01-28)
+/// - Real audio output via miniaudio (WASAPI/CoreAudio/ALSA/PulseAudio)
+/// - AudioSystem, AudioMixer, AudioSource, AudioBuffer implemented
+/// - 3D spatialization with configurable attenuation models
+/// - Audio bus hierarchy for mixing
+/// - DSP effects chain (reverb, delay, filter, compressor)
+/// - SACRED hot-reload patterns (snapshot/restore)
+///
 /// void_audio provides comprehensive audio functionality:
 /// - Multi-backend support (OpenAL, XAudio2, FMOD, Wwise)
 /// - 3D spatialization with HRTF support

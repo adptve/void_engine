@@ -313,8 +313,11 @@ public:
     [[nodiscard]] AudioStats stats() const override;
     void reset_stats() override;
 
-private:
+public:
+    // Impl is public so miniaudio callback can access it
     struct Impl;
+
+private:
     std::unique_ptr<Impl> m_impl;
 };
 

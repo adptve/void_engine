@@ -139,29 +139,30 @@ add_subdirectory(src/presenter)
 add_subdirectory(src/compositor)
 
 # ============================================================================
-# PHASE 5: I/O
-# Modules: audio
+# PHASE 5: I/O (ACTIVE)
+# Modules: audio, input
 # Dependencies: miniaudio, dr_libs
 # ============================================================================
-# FetchContent_Declare(miniaudio
-#     GIT_REPOSITORY https://github.com/mackron/miniaudio.git
-#     GIT_TAG        0.11.21
-#     GIT_SHALLOW    TRUE
-# )
-# FetchContent_MakeAvailable(miniaudio)
-# add_library(miniaudio INTERFACE)
-# target_include_directories(miniaudio INTERFACE ${miniaudio_SOURCE_DIR})
-#
-# FetchContent_Declare(dr_libs
-#     GIT_REPOSITORY https://github.com/mackron/dr_libs.git
-#     GIT_TAG        master
-#     GIT_SHALLOW    TRUE
-# )
-# FetchContent_MakeAvailable(dr_libs)
-# add_library(dr_libs INTERFACE)
-# target_include_directories(dr_libs INTERFACE ${dr_libs_SOURCE_DIR})
-#
-# add_subdirectory(src/audio)
+FetchContent_Declare(miniaudio
+    GIT_REPOSITORY https://github.com/mackron/miniaudio.git
+    GIT_TAG        0.11.21
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(miniaudio)
+add_library(miniaudio INTERFACE)
+target_include_directories(miniaudio INTERFACE ${miniaudio_SOURCE_DIR})
+
+FetchContent_Declare(dr_libs
+    GIT_REPOSITORY https://github.com/mackron/dr_libs.git
+    GIT_TAG        master
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(dr_libs)
+add_library(dr_libs INTERFACE)
+target_include_directories(dr_libs INTERFACE ${dr_libs_SOURCE_DIR})
+
+add_subdirectory(src/audio)
+add_subdirectory(src/input)
 
 # ============================================================================
 # PHASE 6: SIMULATION
@@ -251,7 +252,8 @@ target_link_libraries(void_engine PRIVATE OpenGL::GL)
 target_link_libraries(void_engine PRIVATE void_render)
 target_link_libraries(void_engine PRIVATE void_presenter)
 target_link_libraries(void_engine PRIVATE void_compositor)
-# target_link_libraries(void_engine PRIVATE void_audio)         # Phase 5
+target_link_libraries(void_engine PRIVATE void_audio)          # Phase 5
+target_link_libraries(void_engine PRIVATE void_input)          # Phase 5
 # target_link_libraries(void_engine PRIVATE void_ecs)           # Phase 6
 # target_link_libraries(void_engine PRIVATE void_physics)       # Phase 6
 # target_link_libraries(void_engine PRIVATE void_triggers)      # Phase 6
@@ -294,7 +296,7 @@ endif()
 message(STATUS "")
 message(STATUS "void_engine ${PROJECT_VERSION}")
 message(STATUS "========================================")
-message(STATUS "Active Phase:    4 (Platform)")
+message(STATUS "Active Phase:    5 (I/O)")
 message(STATUS "C++ Standard:    ${CMAKE_CXX_STANDARD}")
 message(STATUS "Build Type:      ${CMAKE_BUILD_TYPE}")
 message(STATUS "")

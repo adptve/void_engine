@@ -1,14 +1,38 @@
 /// @file miniaudio_backend.cpp
 /// @brief Miniaudio-based audio backend implementation for void_audio
 ///
-/// This is a cross-platform audio backend using miniaudio (single-header library).
-/// Features:
-/// - Real audio output via the OS audio subsystem
+/// STATUS: PRODUCTION (2026-01-28)
+/// - Real audio output via the OS audio subsystem (WASAPI/CoreAudio/ALSA/PulseAudio)
 /// - Software mixing with effects processing
 /// - 3D spatialization with distance attenuation and Doppler
 /// - Hot-reload safe with state preservation
+/// - Cross-platform: Windows, macOS, Linux
+///
+/// Features:
+/// - Multi-source mixing with priority
+/// - Per-source volume/pan/pitch
+/// - 3D positional audio with configurable attenuation models
+/// - Constant-power panning
+/// - Master effect chain
+/// - Thread-safe operation
 
+// Fix Windows header macro conflicts BEFORE including miniaudio
+#ifdef _WIN32
+    #ifndef NOMINMAX
+        #define NOMINMAX
+    #endif
+    #ifndef WIN32_LEAN_AND_MEAN
+        #define WIN32_LEAN_AND_MEAN
+    #endif
+#endif
+
+// Enable miniaudio implementation in this translation unit
 #define MINIAUDIO_IMPLEMENTATION
+
+// Disable features we don't need to reduce compile time
+#define MA_NO_ENCODING
+#define MA_NO_GENERATION
+
 #include <miniaudio.h>
 
 #include <void_engine/audio/backend.hpp>
@@ -364,12 +388,12 @@ void_core::Result<void> MiniaudioBackend::initialize(const AudioConfig& config) 
     m_impl->device_config.periodSizeInFrames = config.buffer_size;
 
     if (ma_device_init(nullptr, &m_impl->device_config, &m_impl->device) != MA_SUCCESS) {
-        return void_core::Error{void_core::ErrorCode::InitializationFailed, "Failed to initialize audio device"};
+        return void_core::Error{void_core::ErrorCode::InvalidState, "Failed to initialize audio device"};
     }
 
     if (ma_device_start(&m_impl->device) != MA_SUCCESS) {
         ma_device_uninit(&m_impl->device);
-        return void_core::Error{void_core::ErrorCode::InitializationFailed, "Failed to start audio device"};
+        return void_core::Error{void_core::ErrorCode::InvalidState, "Failed to start audio device"};
     }
 
     // Pre-allocate mix buffer

@@ -1,4 +1,11 @@
 # void_audio - Audio system
+# STATUS: PRODUCTION (2026-01-28)
+# - Real audio output via miniaudio (WASAPI/CoreAudio/ALSA/PulseAudio)
+# - 3D spatialization with distance attenuation
+# - Audio bus hierarchy for mixing
+# - DSP effects chain
+# - SACRED hot-reload patterns (snapshot/restore)
+#
 void_add_module(NAME void_audio
     SOURCES
         types.cpp
@@ -8,11 +15,10 @@ void_add_module(NAME void_audio
         mixer.cpp
         effects.cpp
         backend.cpp
-        # miniaudio_backend.cpp  # Excluded: Windows header macro conflicts
+        miniaudio_backend.cpp
     DEPENDENCIES
         void_core
         void_asset
-        void_ecs
 )
 
 # Link miniaudio (header-only)
