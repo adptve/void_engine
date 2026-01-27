@@ -18,10 +18,30 @@ This directory contains comprehensive header-to-implementation analysis for all 
 | C | 1 | compositor |
 | D | 2 | render, xr |
 
+## Duplicate Implementation Analysis
+
+A thorough analysis was performed to identify cases where code is duplicated between:
+1. Header files (.hpp) and implementation files (.cpp)
+2. Multiple .cpp files implementing the same functions
+
+### Findings
+
+| Module | Duplicate Type | Details |
+|--------|---------------|---------|
+| **render** | cpp-to-cpp | **45+ functions** duplicated between `stub.cpp` and `gl_renderer.cpp`. ALL real implementations are in `gl_renderer.cpp`; stub.cpp should be deleted. |
+| All others | None | No header-to-cpp or cpp-to-cpp duplicates found. Codebase correctly uses inline/template in headers only. |
+
+### Header-Only Modules (Intentional Design)
+
+These modules are header-only by design (templates, inline, constexpr):
+- ecs, math, memory, structures, event, shader, ai (state_machine.hpp)
+
 ## Critical Issues Requiring Immediate Attention
 
 ### 1. render (Grade: D)
-- **ODR Violation**: Duplicate implementations in stub.cpp and gl_renderer.cpp
+- **ODR Violation**: **45+ functions** duplicated between stub.cpp and gl_renderer.cpp
+- `stub.cpp` contains only empty stubs; `gl_renderer.cpp` has ALL real implementations
+- **Recommendation**: Delete `stub.cpp` entirely
 - **Missing**: 10 InstanceData methods not implemented
 - [View Details](render.md)
 
@@ -130,3 +150,13 @@ This directory contains comprehensive header-to-implementation analysis for all 
 2. **High**: Fix `compositor` compile error
 3. **Medium**: Implement missing methods in `core`, `ui`
 4. **Low**: Clean up orphaned declarations in `audio`, verify `hud` easing functions
+
+---
+
+## Related Documentation
+
+- **[STUB_REMOVAL_PLAN.md](../STUB_REMOVAL_PLAN.md)** - Comprehensive plan for removing stubs and completing implementations
+  - 13 stub files analyzed
+  - 1 file to delete (render/stub.cpp)
+  - 50+ unimplemented functions catalogued
+  - Phased action plan included
