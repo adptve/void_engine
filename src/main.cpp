@@ -1,209 +1,123 @@
 /// @file main.cpp
-/// @brief void_runtime entry point - loads and runs void_engine projects
+/// @brief void_engine entry point - phased initialization
 ///
-/// This is the main runtime that loads manifest.toml, parses scene.toml,
-/// and renders using the SceneRenderer with full ECS, asset, physics, services, presenter, and hot-reload support.
-///
-/// Architecture:
-/// - ServiceRegistry: Manages engine service lifecycles with health monitoring
-/// - EventBus: Inter-system communication via publish/subscribe
-/// - FrameTiming: Frame pacing, delta time tracking, and performance statistics
-/// - ECS World: Authoritative source of scene entities
-/// - AssetServer: Loads textures, models, shaders with 3-tier cache
-/// - PhysicsWorld: Simulates rigidbody dynamics, collision detection, raycasting
-/// - LiveSceneManager: Loads scenes into ECS with hot-reload
-/// - SceneRenderer: Renders entities (synced from ECS via callbacks)
-/// - AnimationSystem: Updates ECS entity transforms each frame
+/// Phases:
+///   0. Skeleton     - CLI, manifest (ACTIVE)
+///   1. Foundation   - memory, core, math, structures
+///   2. Infrastructure - event, services, ir, kernel
+///   3. Resources    - asset, shader
+///   4. Platform     - presenter, render, compositor
+///   5. I/O          - audio
+///   6. Simulation   - ecs, physics, triggers
+///   7. Scene        - scene, graph
+///   8. Scripting    - script, scripting, cpp, shell
+///   9. Gameplay     - ai, combat, inventory, gamestate
+///  10. UI           - ui, hud
+///  11. Extensions   - xr, editor
+///  12. Application  - runtime, engine
 
-#include <void_engine/render/gl_renderer.hpp>
-#include <void_engine/scene/scene_parser.hpp>
-#include <void_engine/scene/scene_data.hpp>
-#include <void_engine/scene/scene_instantiator.hpp>
-#include <void_engine/ecs/world.hpp>
-#include <void_engine/asset/server.hpp>
-#include <void_engine/asset/loaders/texture_loader.hpp>
-#include <void_engine/asset/loaders/model_loader.hpp>
-#include <void_engine/physics/physics.hpp>
-#include <void_engine/services/services.hpp>
-#include <void_engine/presenter/timing.hpp>
-#include <void_engine/presenter/frame.hpp>
-#include <void_engine/core/hot_reload.hpp>
-#include <void_engine/compositor/compositor_module.hpp>
-
-#include <GLFW/glfw3.h>
+// =============================================================================
+// PHASE 0: SKELETON (ACTIVE)
+// =============================================================================
 #include <spdlog/spdlog.h>
-#include <toml++/toml.hpp>
-
-#include <chrono>
+#include <nlohmann/json.hpp>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <memory>
 #include <string>
 
+// =============================================================================
+// PHASE 1: FOUNDATION (ACTIVE)
+// =============================================================================
+#include <void_engine/memory/memory.hpp>
+#include <void_engine/math/math.hpp>
+#include <void_engine/structures/structures.hpp>
+#include <void_engine/core/core.hpp>
+
+// =============================================================================
+// PHASE 2: INFRASTRUCTURE (ACTIVE)
+// =============================================================================
+#include <void_engine/event/event_bus.hpp>
+#include <void_engine/services/services.hpp>
+#include <void_engine/ir/ir.hpp>
+#include <void_engine/kernel/kernel.hpp>
+
+// =============================================================================
+// PHASE 3: RESOURCES (ACTIVE)
+// =============================================================================
+#include <void_engine/asset/asset.hpp>
+#include <void_engine/shader/shader.hpp>
+
+// =============================================================================
+// PHASE 4: PLATFORM
+// =============================================================================
+// #include <void_engine/presenter/timing.hpp>
+// #include <void_engine/presenter/frame.hpp>
+// #include <void_engine/render/gl_renderer.hpp>
+// #include <void_engine/compositor/compositor_module.hpp>
+// #include <GLFW/glfw3.h>
+
+// =============================================================================
+// PHASE 5: I/O
+// =============================================================================
+// #include <void_engine/audio/device.hpp>
+// #include <void_engine/audio/sound.hpp>
+// #include <void_engine/audio/listener.hpp>
+
+// =============================================================================
+// PHASE 6: SIMULATION
+// =============================================================================
+// #include <void_engine/ecs/world.hpp>
+// #include <void_engine/physics/physics.hpp>
+// #include <void_engine/triggers/triggers.hpp>
+
+// =============================================================================
+// PHASE 7: SCENE
+// =============================================================================
+// #include <void_engine/scene/scene_parser.hpp>
+// #include <void_engine/scene/scene_data.hpp>
+// #include <void_engine/scene/scene_instantiator.hpp>
+// #include <void_engine/graph/node.hpp>
+
+// =============================================================================
+// PHASE 8: SCRIPTING
+// =============================================================================
+// #include <void_engine/script/parser.hpp>
+// #include <void_engine/scripting/vm.hpp>
+// #include <void_engine/cpp/compiler.hpp>
+// #include <void_engine/shell/shell.hpp>
+
+// =============================================================================
+// PHASE 9: GAMEPLAY
+// =============================================================================
+// #include <void_engine/ai/fsm.hpp>
+// #include <void_engine/ai/behavior_tree.hpp>
+// #include <void_engine/combat/damage.hpp>
+// #include <void_engine/inventory/inventory.hpp>
+// #include <void_engine/gamestate/state_machine.hpp>
+
+// =============================================================================
+// PHASE 10: UI
+// =============================================================================
+// #include <void_engine/ui/context.hpp>
+// #include <void_engine/ui/widgets.hpp>
+// #include <void_engine/hud/hud.hpp>
+// #include <void_engine/hud/health_bar.hpp>
+
+// =============================================================================
+// PHASE 11: EXTENSIONS
+// =============================================================================
+// #include <void_engine/xr/session.hpp>
+// #include <void_engine/xr/input.hpp>
+// #include <void_engine/editor/editor.hpp>
+
+// =============================================================================
+// PHASE 12: APPLICATION
+// =============================================================================
+// #include <void_engine/runtime/runtime.hpp>
+// #include <void_engine/engine/engine.hpp>
+
 namespace fs = std::filesystem;
-
-// =============================================================================
-// Input State
-// =============================================================================
-
-struct InputState {
-    bool left_mouse_down = false;
-    bool right_mouse_down = false;
-    bool middle_mouse_down = false;
-    double last_mouse_x = 0.0;
-    double last_mouse_y = 0.0;
-};
-
-static InputState g_input;
-static void_render::SceneRenderer* g_renderer = nullptr;
-
-// =============================================================================
-// GLFW Callbacks
-// =============================================================================
-
-static void framebuffer_size_callback(GLFWwindow*, int width, int height) {
-    if (g_renderer) {
-        g_renderer->on_resize(width, height);
-    }
-}
-
-static void mouse_button_callback(GLFWwindow*, int button, int action, int) {
-    if (button == GLFW_MOUSE_BUTTON_LEFT) {
-        g_input.left_mouse_down = (action == GLFW_PRESS);
-    }
-    if (button == GLFW_MOUSE_BUTTON_RIGHT) {
-        g_input.right_mouse_down = (action == GLFW_PRESS);
-    }
-    if (button == GLFW_MOUSE_BUTTON_MIDDLE) {
-        g_input.middle_mouse_down = (action == GLFW_PRESS);
-    }
-}
-
-static void cursor_position_callback(GLFWwindow*, double xpos, double ypos) {
-    double dx = xpos - g_input.last_mouse_x;
-    double dy = ypos - g_input.last_mouse_y;
-
-    if (g_renderer) {
-        if (g_input.left_mouse_down) {
-            g_renderer->camera().orbit(static_cast<float>(dx), static_cast<float>(dy));
-        }
-        if (g_input.middle_mouse_down) {
-            g_renderer->camera().pan(static_cast<float>(-dx), static_cast<float>(dy));
-        }
-    }
-
-    g_input.last_mouse_x = xpos;
-    g_input.last_mouse_y = ypos;
-}
-
-static void scroll_callback(GLFWwindow*, double, double yoffset) {
-    if (g_renderer) {
-        g_renderer->camera().zoom(static_cast<float>(yoffset));
-    }
-}
-
-static void key_callback(GLFWwindow* window, int key, int, int action, int) {
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
-        glfwSetWindowShouldClose(window, GLFW_TRUE);
-    }
-    if (key == GLFW_KEY_R && action == GLFW_PRESS) {
-        spdlog::info("Manual shader reload requested");
-        if (g_renderer) {
-            g_renderer->reload_shaders();
-        }
-    }
-}
-
-// =============================================================================
-// ECS-Integrated Scene Manager
-// =============================================================================
-
-/// Bridge between ECS, Assets, and Renderer
-/// When LiveSceneManager loads/reloads a scene, this:
-/// 1. Queues external assets for loading (textures, models)
-/// 2. Syncs scene data to renderer for GPU resources
-class EcsSceneBridge {
-public:
-    EcsSceneBridge(void_ecs::World* world, void_render::SceneRenderer* renderer,
-                   void_asset::AssetServer* assets = nullptr)
-        : m_world(world), m_renderer(renderer), m_assets(assets) {}
-
-    /// Called when a scene is loaded or hot-reloaded
-    void on_scene_changed(const fs::path& path, const void_scene::SceneData& scene) {
-        spdlog::info("ECS scene synced: {}", path.filename().string());
-        spdlog::info("  - ECS Entities: {}", m_world->entity_count());
-        spdlog::info("  - Cameras: {}", scene.cameras.size());
-        spdlog::info("  - Lights: {}", scene.lights.size());
-        spdlog::info("  - Mesh Entities: {}", scene.entities.size());
-
-        // Queue external assets for loading if asset server is available
-        if (m_assets) {
-            queue_scene_assets(scene);
-        }
-
-        // Feed scene data to renderer for GPU resources
-        m_renderer->load_scene(scene);
-    }
-
-    /// Get the ECS world
-    void_ecs::World* world() { return m_world; }
-
-    /// Get the asset server
-    void_asset::AssetServer* assets() { return m_assets; }
-
-private:
-    /// Queue any external assets referenced by the scene
-    void queue_scene_assets(const void_scene::SceneData& scene) {
-        std::size_t queued = 0;
-
-        // Check for texture references in materials
-        for (const auto& entity : scene.entities) {
-            // Skip entities without materials
-            if (!entity.material) continue;
-
-            const auto& mat = *entity.material;
-
-            // Albedo texture
-            if (mat.albedo.has_texture()) {
-                m_assets->load<void_asset::TextureAsset>(*mat.albedo.texture_path);
-                queued++;
-            }
-            // Normal map
-            if (mat.normal_map.has_value()) {
-                m_assets->load<void_asset::TextureAsset>(*mat.normal_map);
-                queued++;
-            }
-            // Metallic texture
-            if (mat.metallic.has_texture()) {
-                m_assets->load<void_asset::TextureAsset>(*mat.metallic.texture_path);
-                queued++;
-            }
-            // Roughness texture
-            if (mat.roughness.has_texture()) {
-                m_assets->load<void_asset::TextureAsset>(*mat.roughness.texture_path);
-                queued++;
-            }
-        }
-
-        // Check for model references (external meshes vs built-in shapes)
-        for (const auto& entity : scene.entities) {
-            // If mesh is a file path (contains '.' for extension), queue it
-            if (entity.mesh.find('.') != std::string::npos) {
-                m_assets->load<void_asset::ModelAsset>(entity.mesh);
-                queued++;
-            }
-        }
-
-        if (queued > 0) {
-            spdlog::info("  - Queued {} assets for loading", queued);
-        }
-    }
-
-    void_ecs::World* m_world;
-    void_render::SceneRenderer* m_renderer;
-    void_asset::AssetServer* m_assets;
-};
 
 // =============================================================================
 // Project Configuration
@@ -232,36 +146,47 @@ ProjectConfig load_manifest(const fs::path& manifest_path) {
     config.project_dir = manifest_path.parent_path();
 
     try {
-        auto tbl = toml::parse_file(manifest_path.string());
-
-        // Parse [package] section
-        if (auto pkg = tbl["package"].as_table()) {
-            config.name = (*pkg)["name"].value_or<std::string>("unnamed");
-            config.display_name = (*pkg)["display_name"].value_or(config.name);
-            config.version = (*pkg)["version"].value_or<std::string>("0.0.0");
-        } else {
-            config.error = "Missing [package] section in manifest";
+        std::ifstream file(manifest_path);
+        if (!file.is_open()) {
+            config.error = "Could not open manifest file";
             return config;
         }
 
-        // Parse [app] section
-        if (auto app = tbl["app"].as_table()) {
-            config.scene_file = (*app)["scene"].value_or<std::string>("");
+        nlohmann::json json = nlohmann::json::parse(file);
+
+        // Parse package section
+        if (json.contains("package")) {
+            auto& pkg = json["package"];
+            config.name = pkg.value("name", "unnamed");
+            config.display_name = pkg.value("display_name", config.name);
+            config.version = pkg.value("version", "0.0.0");
         } else {
-            config.error = "Missing [app] section in manifest";
+            config.error = "Missing 'package' section in manifest";
             return config;
         }
 
-        // Parse [window] section (optional)
-        if (auto win = tbl["window"].as_table()) {
-            config.window_width = (*win)["width"].value_or(1280);
-            config.window_height = (*win)["height"].value_or(720);
+        // Parse app section
+        if (json.contains("app")) {
+            auto& app = json["app"];
+            config.scene_file = app.value("scene", "");
+        } else {
+            config.error = "Missing 'app' section in manifest";
+            return config;
+        }
+
+        // Parse window section (optional)
+        if (json.contains("window")) {
+            auto& win = json["window"];
+            config.window_width = win.value("width", 1280);
+            config.window_height = win.value("height", 720);
         }
 
         config.valid = true;
 
-    } catch (const toml::parse_error& err) {
+    } catch (const nlohmann::json::parse_error& err) {
         config.error = "Failed to parse manifest: " + std::string(err.what());
+    } catch (const std::exception& err) {
+        config.error = "Error reading manifest: " + std::string(err.what());
     }
 
     return config;
@@ -275,23 +200,11 @@ void print_usage(const char* program_name) {
               << "\n"
               << "Options:\n"
               << "  --help, -h      Show this help message\n"
-              << "  --version, -v   Show version information\n"
-              << "\n"
-              << "Controls:\n"
-              << "  Left Mouse + Drag   Orbit camera\n"
-              << "  Middle Mouse + Drag Pan camera\n"
-              << "  Scroll              Zoom\n"
-              << "  R                   Reload shaders\n"
-              << "  ESC                 Quit\n"
-              << "\n"
-              << "Examples:\n"
-              << "  " << program_name << " examples/model-viewer\n"
-              << "  " << program_name << " examples/model-viewer/manifest.toml\n";
+              << "  --version, -v   Show version information\n";
 }
 
 void print_version() {
-    std::cout << "void_runtime 0.1.0\n"
-              << "void_engine C++ Runtime\n";
+    std::cout << "void_engine 0.1.0\n";
 }
 
 // =============================================================================
@@ -301,7 +214,9 @@ void print_version() {
 int main(int argc, char** argv) {
     fs::path project_path;
 
-    // Parse command line arguments
+    // =========================================================================
+    // PHASE 0: CLI PARSING
+    // =========================================================================
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
 
@@ -329,7 +244,7 @@ int main(int argc, char** argv) {
     // Resolve manifest path
     fs::path manifest_path;
     if (fs::is_directory(project_path)) {
-        manifest_path = project_path / "manifest.toml";
+        manifest_path = project_path / "manifest.json";
     } else if (fs::is_regular_file(project_path)) {
         manifest_path = project_path;
     } else {
@@ -347,498 +262,515 @@ int main(int argc, char** argv) {
     }
 
     spdlog::info("Project: {} v{}", config.display_name, config.version);
+    spdlog::info("Scene: {}", config.scene_file);
+    spdlog::info("Window: {}x{}", config.window_width, config.window_height);
 
-    // Initialize GLFW
-    if (!glfwInit()) {
-        spdlog::error("Failed to initialize GLFW");
-        return 1;
-    }
+    // =========================================================================
+    // PHASE 1: FOUNDATION (ACTIVE)
+    // =========================================================================
+    spdlog::info("Phase 1: Foundation");
 
-    // Request OpenGL 3.3 Core Profile
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_SAMPLES, 4);
-#ifdef __APPLE__
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-#endif
+    // -------------------------------------------------------------------------
+    // MEMORY MODULE
+    // -------------------------------------------------------------------------
+    spdlog::info("  [memory]");
 
-    // Create window
-    std::string window_title = config.display_name + " - void_engine";
-    GLFWwindow* window = glfwCreateWindow(
-        config.window_width, config.window_height,
-        window_title.c_str(), nullptr, nullptr);
+    // Arena allocator
+    void_memory::Arena arena(1024);
+    void* arena_ptr = arena.allocate(64, 16);
+    spdlog::info("    Arena: allocated 64 bytes at {:p}", arena_ptr);
 
-    if (!window) {
-        spdlog::error("Failed to create GLFW window");
-        glfwTerminate();
-        return 1;
-    }
+    // Pool allocator
+    void_memory::Pool pool = void_memory::Pool::for_type<float>(16);
+    void* pool_ptr = pool.allocate(sizeof(float), alignof(float));
+    spdlog::info("    Pool: allocated float at {:p}", pool_ptr);
 
-    glfwMakeContextCurrent(window);
-    glfwSwapInterval(1);  // VSync
+    // -------------------------------------------------------------------------
+    // MATH MODULE
+    // -------------------------------------------------------------------------
+    spdlog::info("  [math]");
 
-    // Set callbacks
-    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-    glfwSetMouseButtonCallback(window, mouse_button_callback);
-    glfwSetCursorPosCallback(window, cursor_position_callback);
-    glfwSetScrollCallback(window, scroll_callback);
-    glfwSetKeyCallback(window, key_callback);
+    // Vec3 operations
+    void_math::Vec3 v1{1.0f, 2.0f, 3.0f};
+    void_math::Vec3 v2{4.0f, 5.0f, 6.0f};
+    float dot_result = glm::dot(v1, v2);
+    spdlog::info("    Vec3: dot({},{},{}) * ({},{},{}) = {}",
+                 v1.x, v1.y, v1.z, v2.x, v2.y, v2.z, dot_result);
 
-    // Initialize renderer
-    void_render::SceneRenderer renderer;
-    g_renderer = &renderer;
+    // Transform
+    auto transform = void_math::Transform::from_position(void_math::vec3::UP * 5.0f);
+    spdlog::info("    Transform: pos=({},{},{})",
+                 transform.position.x, transform.position.y, transform.position.z);
 
-    if (!renderer.initialize(window)) {
-        spdlog::error("Failed to initialize renderer");
-        glfwDestroyWindow(window);
-        glfwTerminate();
-        return 1;
-    }
+    // Mat4
+    void_math::Mat4 identity = void_math::mat4::IDENTITY;
+    spdlog::info("    Mat4: identity[0][0]={}", identity[0][0]);
 
-    // ==========================================================================
-    // Service Registry & Event Bus - Engine lifecycle management
-    // ==========================================================================
-    spdlog::info("Initializing Service Registry and Event Bus...");
+    // Quat
+    void_math::Quat q = void_math::quat::IDENTITY;
+    spdlog::info("    Quat: identity w={}", q.w);
 
-    // Create the central event bus for inter-system communication
-    void_services::EventBus event_bus;
+    // -------------------------------------------------------------------------
+    // STRUCTURES MODULE
+    // -------------------------------------------------------------------------
+    spdlog::info("  [structures]");
 
-    // Create service registry for lifecycle management
+    // SlotMap
+    void_structures::SlotMap<int> slot_map;
+    auto slot_key = slot_map.insert(42);
+    auto* slot_val = slot_map.get(slot_key);
+    spdlog::info("    SlotMap: key gen={}, value={}", slot_key.generation, slot_val ? *slot_val : -1);
+
+    // SparseSet
+    void_structures::SparseSet<float> sparse_set;
+    sparse_set.insert(10, 3.14f);
+    sparse_set.insert(20, 2.71f);
+    spdlog::info("    SparseSet: size={}, contains(10)={}", sparse_set.size(), sparse_set.contains(10));
+
+    // -------------------------------------------------------------------------
+    // CORE MODULE
+    // -------------------------------------------------------------------------
+    spdlog::info("  [core]");
+
+    // Version
+    spdlog::info("    Version: {}", void_core::VOID_CORE_VERSION.to_string());
+
+    // Handle system
+    void_core::HandleAllocator<int> handle_alloc;
+    auto h1 = handle_alloc.allocate();
+    auto h2 = handle_alloc.allocate();
+    spdlog::info("    Handle: h1 idx={} gen={}, h2 idx={} gen={}",
+                 h1.index(), h1.generation(), h2.index(), h2.generation());
+
+    // HotReload event (SACRED pattern)
+    auto reload_event = void_core::ReloadEvent::modified("test.cpp");
+    spdlog::info("    HotReload: event type={}", void_core::reload_event_type_name(reload_event.type));
+
+    spdlog::info("Phase 1 complete");
+
+    // =========================================================================
+    // PHASE 2: INFRASTRUCTURE (ACTIVE)
+    // =========================================================================
+    spdlog::info("Phase 2: Infrastructure");
+
+    // -------------------------------------------------------------------------
+    // EVENT MODULE - Event bus for engine-wide messaging
+    // -------------------------------------------------------------------------
+    spdlog::info("  [event]");
+
+    // Create engine event bus (will persist for app lifetime)
+    void_event::EventBus event_bus;
+
+    // Test event struct
+    struct TestEvent {
+        std::string message;
+        int value;
+    };
+
+    // Subscribe to test events
+    int received_count = 0;
+    auto sub_id = event_bus.subscribe<TestEvent>([&received_count](const TestEvent& e) {
+        received_count++;
+    });
+    spdlog::info("    EventBus: subscribed id={}", sub_id.id);
+
+    // Publish events
+    event_bus.publish(TestEvent{"hello", 42});
+    event_bus.publish(TestEvent{"world", 100});
+    event_bus.process();
+    spdlog::info("    EventBus: published 2 events, received {}", received_count);
+
+    // Wire hot-reload events to event bus
+    event_bus.subscribe<void_core::ReloadEvent>([](const void_core::ReloadEvent& e) {
+        spdlog::info("    [hot-reload] {} on {}", void_core::reload_event_type_name(e.type), e.path);
+    });
+    spdlog::info("    EventBus: hot-reload subscription wired");
+
+    // -------------------------------------------------------------------------
+    // SERVICES MODULE - Service registry for managed services
+    // -------------------------------------------------------------------------
+    spdlog::info("  [services]");
+
     void_services::ServiceRegistry service_registry;
+    auto reg_stats = service_registry.stats();
+    spdlog::info("    ServiceRegistry: {} services registered", reg_stats.total_services);
 
-    // Subscribe to service lifecycle events for logging
-    service_registry.set_event_callback([](const void_services::ServiceEvent& event) {
-        switch (event.type) {
-            case void_services::ServiceEventType::Started:
-                spdlog::info("Service started: {}", event.service_id.name);
-                break;
-            case void_services::ServiceEventType::Stopped:
-                spdlog::info("Service stopped: {}", event.service_id.name);
-                break;
-            case void_services::ServiceEventType::Failed:
-                spdlog::error("Service failed: {} - {}", event.service_id.name, event.message);
-                break;
-            case void_services::ServiceEventType::HealthChanged:
-                spdlog::debug("Service health changed: {}", event.service_id.name);
-                break;
-            default:
-                break;
-        }
-    });
+    // -------------------------------------------------------------------------
+    // IR MODULE - Intermediate representation for state patches
+    // -------------------------------------------------------------------------
+    spdlog::info("  [ir]");
 
-    // Define engine events for the event bus
-    struct FrameStartEvent { float delta_time; };
-    struct FrameEndEvent { int frame_number; };
-    struct SceneLoadedEvent { std::string scene_path; std::size_t entity_count; };
-    struct AssetLoadedEvent { std::string asset_path; };
+    void_ir::NamespaceRegistry ns_registry;
+    auto game_ns = ns_registry.create("game");
+    spdlog::info("    NamespaceRegistry: created 'game' ns id={}", game_ns.value);
 
-    // Subscribe to engine events for debugging/extension
-    event_bus.subscribe<SceneLoadedEvent>([](const SceneLoadedEvent& e) {
-        spdlog::debug("EventBus: Scene loaded - {} ({} entities)", e.scene_path, e.entity_count);
-    });
+    // Create entity reference
+    void_ir::EntityRef player_ref(game_ns, 1);
+    spdlog::info("    EntityRef: player ns={} entity={}", player_ref.namespace_id.value, player_ref.entity_id);
 
-    event_bus.subscribe<AssetLoadedEvent>([](const AssetLoadedEvent& e) {
-        spdlog::debug("EventBus: Asset loaded - {}", e.asset_path);
-    });
+    // -------------------------------------------------------------------------
+    // KERNEL MODULE - Central orchestrator
+    // -------------------------------------------------------------------------
+    spdlog::info("  [kernel]");
 
-    spdlog::info("Service Registry initialized");
-    spdlog::info("Event Bus initialized with engine event types");
-
-    // ==========================================================================
-    // Asset Server - 3-tier cache with hot-reload
-    // ==========================================================================
-    spdlog::info("Initializing Asset Server...");
-
-    void_asset::AssetServerConfig asset_config;
-    asset_config.asset_dir = (config.project_dir / "assets").string();
-    asset_config.hot_reload = true;
-    asset_config.max_concurrent_loads = 4;
-
-    void_asset::AssetServer asset_server(asset_config);
-
-    // Register asset loaders for textures and models
-    asset_server.register_loader<void_asset::TextureAsset>(
-        std::make_unique<void_asset::TextureLoader>());
-    asset_server.register_loader<void_asset::ModelAsset>(
-        std::make_unique<void_asset::ModelLoader>());
-
-    // Create hot-reload adapter for asset server
-    auto asset_hot_reload = void_asset::make_hot_reloadable(asset_server);
-
-    spdlog::info("Asset Server initialized:");
-    spdlog::info("  - Asset directory: {}", asset_config.asset_dir);
-    spdlog::info("  - Hot-reload: {}", asset_config.hot_reload ? "enabled" : "disabled");
-    spdlog::info("  - Registered loaders: textures, models");
-
-    // ==========================================================================
-    // ECS World - Authoritative source of scene entities
-    // ==========================================================================
-    spdlog::info("Initializing ECS World...");
-    void_ecs::World ecs_world(1024);  // Pre-allocate capacity for 1024 entities
-
-    // ECS-Asset-Renderer bridge
-    EcsSceneBridge ecs_bridge(&ecs_world, &renderer, &asset_server);
-
-    // LiveSceneManager: Loads scenes into ECS with hot-reload support
-    void_scene::LiveSceneManager live_scene_mgr(&ecs_world);
-
-    // Initialize the scene manager (sets up file watching, registers components)
-    auto init_result = live_scene_mgr.initialize();
-    if (!init_result) {
-        spdlog::error("Failed to initialize LiveSceneManager");
-        glfwDestroyWindow(window);
-        glfwTerminate();
-        return 1;
-    }
-
-    // Set up callback: when scene changes, sync to renderer
-    live_scene_mgr.on_scene_changed([&ecs_bridge](const fs::path& path, const void_scene::SceneData& scene) {
-        ecs_bridge.on_scene_changed(path, scene);
-    });
-
-    // ==========================================================================
-    // Physics World - Rigidbody dynamics and collision detection
-    // ==========================================================================
-    spdlog::info("Initializing Physics World...");
-
-    // Build physics world with sensible defaults and hot-reload enabled
-    auto physics_world = void_physics::PhysicsWorldBuilder()
-        .gravity(0.0f, -9.81f, 0.0f)
-        .fixed_timestep(1.0f / 60.0f)
-        .max_substeps(4)
-        .max_bodies(10000)
-        .enable_ccd(true)
+    // Build kernel with configuration
+    auto kernel = void_kernel::KernelBuilder()
+        .name(config.name)
         .hot_reload(true)
-        .debug_rendering(false)
+        .target_fps(60)
         .build();
 
-    // Set up collision callbacks for debugging/game logic
-    physics_world->on_collision_begin([](const void_physics::CollisionEvent& event) {
-        spdlog::debug("Collision begin: body {} <-> body {}",
-                      event.body_a.value, event.body_b.value);
-    });
+    spdlog::info("    Kernel: created '{}', phase={}",
+                 kernel->config().name,
+                 static_cast<int>(kernel->phase()));
 
-    physics_world->on_trigger_enter([](const void_physics::TriggerEvent& event) {
-        spdlog::debug("Trigger enter: {} entered trigger {}",
-                      event.other_body.value, event.trigger_body.value);
-    });
-
-    spdlog::info("Physics World initialized:");
-    spdlog::info("  - Gravity: (0, -9.81, 0)");
-    spdlog::info("  - Fixed timestep: 60 Hz");
-    spdlog::info("  - Max bodies: 10000");
-    spdlog::info("  - CCD: enabled");
-    spdlog::info("  - Hot-reload: enabled");
-
-    // ==========================================================================
-    // Load Initial Scene
-    // ==========================================================================
-    if (!config.scene_file.empty()) {
-        fs::path scene_path = config.project_dir / config.scene_file;
-        spdlog::info("Scene file: {}", scene_path.string());
-
-        auto load_result = live_scene_mgr.load_scene(scene_path);
-        if (!load_result) {
-            spdlog::error("Failed to load scene: {}", load_result.error().message());
-            glfwDestroyWindow(window);
-            glfwTerminate();
-            return 1;
-        }
-
-        spdlog::info("Scene loaded into ECS - {} entities active", ecs_world.entity_count());
-
-        // Publish scene loaded event through event bus
-        event_bus.publish(SceneLoadedEvent{scene_path.string(), ecs_world.entity_count()});
+    // Initialize kernel
+    auto init_result = kernel->initialize();
+    if (init_result) {
+        spdlog::info("    Kernel: initialized successfully");
     } else {
-        spdlog::error("No scene file specified in manifest");
-        glfwDestroyWindow(window);
-        glfwTerminate();
-        return 1;
+        spdlog::warn("    Kernel: init returned error (expected at this phase)");
     }
 
-    // Enable hot-reload
-    renderer.set_shader_hot_reload(true);
-    live_scene_mgr.set_hot_reload_enabled(true);
+    spdlog::info("Phase 2 complete");
 
-    // Start health monitoring for registered services
-    service_registry.start_health_monitor();
+    // =========================================================================
+    // PHASE 3: RESOURCES (ACTIVE) - Full Production Integration
+    // =========================================================================
+    spdlog::info("Phase 3: Resources");
 
-    // ==========================================================================
-    // Frame Timing - Presenter's frame pacing and statistics
-    // ==========================================================================
-    spdlog::info("Initializing Frame Timing...");
+    // -------------------------------------------------------------------------
+    // SERVICE WRAPPERS
+    // -------------------------------------------------------------------------
+    // AssetService: Wraps AssetServer with lifecycle management
+    class AssetService : public void_services::ServiceBase {
+    public:
+        AssetService(void_asset::AssetServerConfig cfg, void_event::EventBus& bus)
+            : ServiceBase("asset_service", void_services::ServiceConfig{
+                .auto_restart = true,
+                .max_restart_attempts = 3,
+                .priority = 100  // High priority - assets needed early
+            })
+            , m_config(std::move(cfg))
+            , m_event_bus(bus)
+        {}
 
-    // Create frame timing with 60 FPS target (VSync handles actual pacing via glfwSwapInterval)
-    void_presenter::FrameTiming frame_timing(60);
+        void_asset::AssetServer& server() { return *m_server; }
+        const void_asset::AssetServer& server() const { return *m_server; }
 
-    spdlog::info("Frame Timing initialized:");
-    spdlog::info("  - Target FPS: {}", 60);
-    spdlog::info("  - History size: 120 frames");
+        // Process pending loads and drain events (call each frame)
+        void tick() {
+            if (m_server) {
+                m_server->process();
+                auto events = m_server->drain_events();
+                for (const auto& e : events) {
+                    m_event_bus.publish(e);
+                }
+            }
+        }
 
-    // ==========================================================================
-    // Compositor - Post-processing and final output
-    // ==========================================================================
-    spdlog::info("Initializing Compositor...");
+        // SACRED: Snapshot for hot-reload
+        std::vector<std::uint8_t> snapshot() const {
+            void_services::BinaryWriter writer;
+            writer.write_u32(1); // version
+            if (m_server) {
+                writer.write_u64(m_server->loaded_count());
+                writer.write_u64(m_server->pending_count());
+            } else {
+                writer.write_u64(0);
+                writer.write_u64(0);
+            }
+            return writer.take();
+        }
 
-    void_compositor::CompositorConfig compositor_config;
-    compositor_config.target_fps = 60;
-    compositor_config.vsync = true;
-    compositor_config.enable_vrr = false;
-    compositor_config.enable_hdr = false;  // Start with SDR
-    compositor_config.preferred_format = void_compositor::RenderFormat::Bgra8UnormSrgb;
+        // SACRED: Restore from snapshot
+        void restore(const std::vector<std::uint8_t>& data) {
+            void_services::BinaryReader reader(data);
+            [[maybe_unused]] auto version = reader.read_u32();
+            [[maybe_unused]] auto loaded = reader.read_u64();
+            [[maybe_unused]] auto pending = reader.read_u64();
+            // State restored - assets will reload on demand
+        }
 
-    auto compositor = void_compositor::CompositorFactory::create(compositor_config);
-    if (!compositor) {
-        spdlog::warn("Compositor creation failed, using null compositor");
-        compositor = void_compositor::CompositorFactory::create_null(compositor_config);
+    protected:
+        bool on_start() override {
+            m_server = std::make_unique<void_asset::AssetServer>(m_config);
+            spdlog::info("    AssetService: started");
+            return true;
+        }
+
+        void on_stop() override {
+            m_server.reset();
+            spdlog::info("    AssetService: stopped");
+        }
+
+        float on_check_health() override {
+            if (!m_server) return 0.0f;
+            // Health based on pending load ratio
+            auto pending = m_server->pending_count();
+            auto loaded = m_server->loaded_count();
+            if (loaded == 0 && pending == 0) return 1.0f;
+            return 1.0f - (static_cast<float>(pending) / static_cast<float>(pending + loaded + 1));
+        }
+
+    private:
+        void_asset::AssetServerConfig m_config;
+        void_event::EventBus& m_event_bus;
+        std::unique_ptr<void_asset::AssetServer> m_server;
+    };
+
+    // ShaderService: Wraps ShaderPipeline with lifecycle management
+    class ShaderService : public void_services::ServiceBase {
+    public:
+        explicit ShaderService(void_shader::ShaderPipelineConfig cfg)
+            : ServiceBase("shader_service", void_services::ServiceConfig{
+                .auto_restart = true,
+                .max_restart_attempts = 3,
+                .priority = 90  // After assets
+            })
+            , m_config(std::move(cfg))
+        {}
+
+        void_shader::ShaderPipeline& pipeline() { return *m_pipeline; }
+        const void_shader::ShaderPipeline& pipeline() const { return *m_pipeline; }
+
+        // Poll for shader changes (call each frame)
+        void tick() {
+            if (m_pipeline) {
+                auto changes = m_pipeline->poll_changes();
+                for (const auto& change : changes) {
+                    if (change.success) {
+                        spdlog::info("    [shader-reload] Recompiled: {}", change.path);
+                    } else {
+                        spdlog::warn("    [shader-reload] Failed: {} - {}", change.path, change.error_message);
+                    }
+                }
+            }
+        }
+
+        // SACRED: Snapshot for hot-reload
+        std::vector<std::uint8_t> snapshot() const {
+            void_services::BinaryWriter writer;
+            writer.write_u32(1); // version
+            if (m_pipeline) {
+                writer.write_u64(m_pipeline->shader_count());
+            } else {
+                writer.write_u64(0);
+            }
+            return writer.take();
+        }
+
+        // SACRED: Restore from snapshot
+        void restore(const std::vector<std::uint8_t>& data) {
+            void_services::BinaryReader reader(data);
+            [[maybe_unused]] auto version = reader.read_u32();
+            [[maybe_unused]] auto count = reader.read_u64();
+            // Shaders will recompile on demand
+        }
+
+    protected:
+        bool on_start() override {
+            m_pipeline = std::make_unique<void_shader::ShaderPipeline>(m_config);
+            spdlog::info("    ShaderService: started");
+            return true;
+        }
+
+        void on_stop() override {
+            if (m_pipeline) {
+                m_pipeline->stop_watching();
+            }
+            m_pipeline.reset();
+            spdlog::info("    ShaderService: stopped");
+        }
+
+        float on_check_health() override {
+            if (!m_pipeline) return 0.0f;
+            return 1.0f; // Shader pipeline is healthy if it exists
+        }
+
+    private:
+        void_shader::ShaderPipelineConfig m_config;
+        std::unique_ptr<void_shader::ShaderPipeline> m_pipeline;
+    };
+
+    // -------------------------------------------------------------------------
+    // ASSET SERVICE - Create and register
+    // -------------------------------------------------------------------------
+    spdlog::info("  [asset]");
+    spdlog::info("    Version: {}", void_asset::VOID_ASSET_VERSION);
+
+    void_asset::AssetServerConfig asset_config;
+    asset_config.with_asset_dir(config.project_dir.string() + "/assets")
+                .with_hot_reload(true)
+                .with_max_concurrent_loads(4);
+
+    auto asset_service = service_registry.register_service<AssetService>(asset_config, event_bus);
+    spdlog::info("    AssetService: registered with ServiceRegistry");
+
+    // -------------------------------------------------------------------------
+    // SHADER SERVICE - Create and register
+    // -------------------------------------------------------------------------
+    spdlog::info("  [shader]");
+    spdlog::info("    Version: {}", void_shader::void_shader_version_string());
+
+    void_shader::ShaderPipelineConfig shader_config;
+    shader_config.with_base_path(config.project_dir.string() + "/shaders")
+                 .with_validation(true)
+                 .with_hot_reload(true)
+                 .with_cache_size(256);
+
+    auto shader_service = service_registry.register_service<ShaderService>(shader_config);
+    spdlog::info("    ShaderService: registered with ServiceRegistry");
+
+    // -------------------------------------------------------------------------
+    // START SERVICES
+    // -------------------------------------------------------------------------
+    spdlog::info("  [services]");
+
+    // Wire service events to log
+    service_registry.set_event_callback([](const void_services::ServiceEvent& e) {
+        spdlog::info("    [service-event] {} on '{}'",
+            [](void_services::ServiceEventType t) {
+                switch(t) {
+                    case void_services::ServiceEventType::Registered: return "Registered";
+                    case void_services::ServiceEventType::Unregistered: return "Unregistered";
+                    case void_services::ServiceEventType::Starting: return "Starting";
+                    case void_services::ServiceEventType::Started: return "Started";
+                    case void_services::ServiceEventType::Stopping: return "Stopping";
+                    case void_services::ServiceEventType::Stopped: return "Stopped";
+                    case void_services::ServiceEventType::Failed: return "Failed";
+                    case void_services::ServiceEventType::Restarting: return "Restarting";
+                    case void_services::ServiceEventType::HealthChanged: return "HealthChanged";
+                    default: return "Unknown";
+                }
+            }(e.type),
+            e.service_id.name);
+    });
+
+    // Start all services (respects priority order)
+    service_registry.start_all();
+
+    auto svc_stats = service_registry.stats();
+    spdlog::info("    ServiceRegistry: {} total, {} running",
+                 svc_stats.total_services, svc_stats.running_services);
+
+    // -------------------------------------------------------------------------
+    // INTEGRATION: Event wiring
+    // -------------------------------------------------------------------------
+    spdlog::info("  [integration]");
+
+    // Subscribe to asset events
+    event_bus.subscribe<void_asset::AssetEvent>([](const void_asset::AssetEvent& e) {
+        spdlog::info("    [asset-event] {} on '{}'",
+                     void_asset::asset_event_type_name(e.type), e.path.str());
+    });
+    spdlog::info("    EventBus: asset event subscription wired");
+
+    // Wire hot-reload from core to asset service
+    event_bus.subscribe<void_core::ReloadEvent>([&asset_service](const void_core::ReloadEvent& e) {
+        if (e.type == void_core::ReloadEventType::FileModified && asset_service) {
+            std::string path = e.path;
+            if (auto id = asset_service->server().get_id(path)) {
+                spdlog::info("    [hot-reload] Reloading asset: {}", path);
+                asset_service->server().reload(*id);
+            }
+        }
+    });
+    spdlog::info("    HotReload: wired to AssetService");
+
+    // Register services with kernel's hot-reload system
+    kernel->hot_reload().manager().on_reload([](const std::string& path, bool success) {
+        spdlog::info("    [kernel-reload] {} {}", path, success ? "succeeded" : "failed");
+    });
+    spdlog::info("    Kernel: hot-reload callback registered");
+
+    // -------------------------------------------------------------------------
+    // VALIDATION: Test the services
+    // -------------------------------------------------------------------------
+    spdlog::info("  [validation]");
+
+    // Test AssetPath
+    void_asset::AssetPath test_path("textures/player.png");
+    spdlog::info("    AssetPath: '{}' ext={} stem={}",
+                 test_path.str(), test_path.extension(), test_path.stem());
+
+    // Verify services are running
+    if (asset_service && asset_service->state() == void_services::ServiceState::Running) {
+        spdlog::info("    AssetService: RUNNING, loaded={}, pending={}",
+                     asset_service->server().loaded_count(),
+                     asset_service->server().pending_count());
     }
 
-    spdlog::info("Compositor initialized:");
-    spdlog::info("  - Backend: {}", void_compositor::CompositorFactory::backend_name());
-    spdlog::info("  - HDR: {}", compositor_config.enable_hdr ? "ON" : "OFF");
-    spdlog::info("  - VRR: {}", compositor_config.enable_vrr ? "ON" : "OFF");
-    spdlog::info("  - Target FPS: {}", compositor_config.target_fps);
-
-    spdlog::info("=== void_engine Runtime Started ===");
-    spdlog::info("Systems active:");
-    spdlog::info("  - Service Registry: health monitoring ON");
-    spdlog::info("  - Event Bus: inter-system messaging ON");
-    spdlog::info("  - Frame Timing: 60 FPS target, statistics ON");
-    spdlog::info("  - ECS World: {} entity capacity", 1024);
-    spdlog::info("  - Physics World: {} body capacity", 10000);
-    spdlog::info("  - Asset Server: hot-reload {}", asset_config.hot_reload ? "ON" : "OFF");
-    spdlog::info("  - Scene Manager: {}", config.scene_file);
-    spdlog::info("  - Renderer: shader hot-reload ON");
-    spdlog::info("  - Compositor: {}, HDR={}, VRR={}",
-                 void_compositor::CompositorFactory::backend_name(),
-                 compositor_config.enable_hdr ? "ON" : "OFF",
-                 compositor_config.enable_vrr ? "ON" : "OFF");
-    spdlog::info("Controls: Left-drag=orbit, Middle-drag=pan, Scroll=zoom, R=reload shaders, ESC=quit");
-
-    // Main loop
-    int frame_count = 0;
-    auto last_fps_time = std::chrono::steady_clock::now();
-    float hot_reload_timer = 0.0f;
-
-    while (!glfwWindowShouldClose(window)) {
-        // Use FrameTiming for accurate delta time tracking and statistics
-        auto now = frame_timing.begin_frame();
-        float delta_time = frame_timing.delta_time();
-
-        glfwPollEvents();
-
-        // =======================================================================
-        // Service & Event Bus Update Phase
-        // =======================================================================
-
-        // Publish frame start event for subscribers
-        event_bus.publish(FrameStartEvent{delta_time});
-
-        // Process any queued events
-        event_bus.process_queue();
-
-        // =======================================================================
-        // Asset Server Update Phase
-        // =======================================================================
-
-        // Process pending asset loads (async loading with callbacks)
-        asset_server.process();
-
-        // Handle asset events (loaded, failed, reloaded)
-        for (const auto& asset_event : asset_server.drain_events()) {
-            switch (asset_event.type) {
-                case void_asset::AssetEventType::Loaded:
-                    spdlog::debug("Asset loaded: {}", asset_event.path.str());
-                    // Publish through event bus for any subscribers
-                    event_bus.publish(AssetLoadedEvent{asset_event.path.str()});
-                    break;
-                case void_asset::AssetEventType::Failed:
-                    spdlog::warn("Asset failed: {} - {}", asset_event.path.str(), asset_event.error);
-                    break;
-                case void_asset::AssetEventType::Reloaded:
-                    spdlog::info("Asset hot-reloaded: {}", asset_event.path.str());
-                    event_bus.publish(AssetLoadedEvent{asset_event.path.str()});
-                    break;
-                case void_asset::AssetEventType::Unloaded:
-                    spdlog::debug("Asset unloaded: {}", asset_event.path.str());
-                    break;
-                case void_asset::AssetEventType::FileChanged:
-                    spdlog::debug("Asset file changed: {}", asset_event.path.str());
-                    break;
-            }
-        }
-
-        // =======================================================================
-        // Physics Update Phase
-        // =======================================================================
-
-        // Step physics simulation (uses fixed timestep internally with accumulator)
-        physics_world->step(delta_time);
-
-        // TODO: Sync physics transforms back to ECS entities
-        // When we add RigidbodyComponent to ECS, we'll iterate physics bodies
-        // and update their corresponding TransformComponents here.
-        // Example:
-        // physics_world->for_each_body([&ecs_world](const void_physics::IRigidbody& body) {
-        //     auto entity_id = body.user_id();
-        //     if (auto* transform = ecs_world.get_component<TransformComponent>(entity_id)) {
-        //         transform->position = body.position();
-        //         transform->rotation = body.rotation();
-        //     }
-        // });
-
-        // =======================================================================
-        // ECS Update Phase
-        // =======================================================================
-
-        // Check for scene file changes and hot-reload into ECS
-        hot_reload_timer += delta_time;
-        if (hot_reload_timer >= 0.5f) {
-            hot_reload_timer = 0.0f;
-            live_scene_mgr.update(delta_time);
-        }
-
-        // Update ECS animation system (transforms updated in ECS)
-        void_scene::AnimationSystem::update(ecs_world, delta_time);
-
-        // =======================================================================
-        // Render Phase
-        // =======================================================================
-
-        // Update renderer (shader hot-reload, animation sync)
-        renderer.update(delta_time);
-
-        // Render the scene
-        renderer.render();
-
-        // =======================================================================
-        // Compositor Post-Processing Phase
-        // =======================================================================
-
-        // Dispatch compositor events (VRR timing, input, etc.)
-        compositor->dispatch();
-
-        // Begin compositor frame if we should render
-        if (compositor->should_render()) {
-            auto render_target = compositor->begin_frame();
-            if (render_target) {
-                // In a full GPU pipeline, post-processing would happen here
-                // For now, we just end the frame
-                compositor->end_frame(std::move(render_target));
-            }
-        }
-
-        // Update content velocity for VRR adaptation
-        compositor->update_content_velocity(0.5f);  // Mid-velocity for typical 3D scene
-
-        glfwSwapBuffers(window);
-
-        // Publish frame end event
-        event_bus.publish(FrameEndEvent{frame_count});
-
-        // FPS counter with ECS, Physics, Services, Presenter, and Asset stats
-        frame_count++;
-        auto fps_elapsed = std::chrono::duration<double>(now - last_fps_time).count();
-        if (fps_elapsed >= 1.0) {
-            auto& render_stats = renderer.stats();
-            auto physics_stats = physics_world->stats();
-            auto service_stats = service_registry.stats();
-            auto event_stats = event_bus.stats();
-
-            // Use frame_timing for accurate FPS reporting
-            double avg_fps = frame_timing.average_fps();
-            float frame_ms = std::chrono::duration<float, std::milli>(
-                frame_timing.average_frame_duration()).count();
-
-            auto& compositor_scheduler = compositor->frame_scheduler();
-            spdlog::info("FPS: {:.1f} ({:.2f}ms) | Draws: {} | Tris: {} | ECS: {} | Physics: {}/{} | Assets: {} | Comp: {:.1f}fps",
-                         avg_fps, frame_ms,
-                         render_stats.draw_calls, render_stats.triangles,
-                         ecs_world.entity_count(),
-                         physics_stats.active_bodies, physics_world->body_count(),
-                         asset_server.loaded_count(),
-                         compositor_scheduler.current_fps());
-            frame_count = 0;
-            last_fps_time = now;
-
-            // Periodic garbage collection
-            auto gc_count = asset_server.collect_garbage();
-            if (gc_count > 0) {
-                spdlog::debug("Asset GC: {} unreferenced assets cleaned", gc_count);
-            }
-
-            // Log service health if any services are degraded
-            if (service_stats.degraded_services > 0 || service_stats.failed_services > 0) {
-                spdlog::warn("Services: {} running, {} degraded, {} failed",
-                             service_stats.running_services,
-                             service_stats.degraded_services,
-                             service_stats.failed_services);
-            }
-
-            // Log event bus throughput
-            if (event_stats.events_processed > 0) {
-                spdlog::debug("Events: {} processed, {} subscriptions",
-                              event_stats.events_processed, event_stats.active_subscriptions);
-            }
-        }
+    if (shader_service && shader_service->state() == void_services::ServiceState::Running) {
+        spdlog::info("    ShaderService: RUNNING, shader_count={}",
+                     shader_service->pipeline().shader_count());
     }
 
-    spdlog::info("Shutting down...");
+    // Test service health
+    auto asset_health = service_registry.get_health(void_services::ServiceId("asset_service"));
+    auto shader_health = service_registry.get_health(void_services::ServiceId("shader_service"));
+    spdlog::info("    Health: asset={:.2f}, shader={:.2f}",
+                 asset_health ? asset_health->score : 0.0f,
+                 shader_health ? shader_health->score : 0.0f);
 
-    // Log final frame timing statistics
-    spdlog::info("Frame Timing final stats: {} total frames, {:.1f} avg FPS, {:.2f}ms avg frame time",
-                 frame_timing.frame_count(),
-                 frame_timing.average_fps(),
-                 std::chrono::duration<float, std::milli>(frame_timing.average_frame_duration()).count());
+    spdlog::info("Phase 3 complete");
 
-    // Shutdown in reverse order of initialization
+    // =========================================================================
+    // PHASE 4: PLATFORM
+    // =========================================================================
+    // spdlog::info("Phase 4: Platform");
+    // TODO: presenter, render, compositor init
 
-    // Stop service health monitoring first
-    service_registry.stop_health_monitor();
-    spdlog::info("Service health monitor stopped");
+    // =========================================================================
+    // PHASE 5: I/O
+    // =========================================================================
+    // spdlog::info("Phase 5: I/O");
+    // TODO: audio init
 
-    // Stop all registered services
-    service_registry.stop_all();
-    auto final_service_stats = service_registry.stats();
-    spdlog::info("Services stopped: {} total, {} restarts during session",
-                 final_service_stats.total_services, final_service_stats.total_restarts);
+    // =========================================================================
+    // PHASE 6: SIMULATION
+    // =========================================================================
+    // spdlog::info("Phase 6: Simulation");
+    // TODO: ecs, physics, triggers init
 
-    // Log final event bus statistics
-    auto final_event_stats = event_bus.stats();
-    spdlog::info("Event Bus final stats: {} published, {} processed, {} dropped",
-                 final_event_stats.events_published,
-                 final_event_stats.events_processed,
-                 final_event_stats.events_dropped);
+    // =========================================================================
+    // PHASE 7: SCENE
+    // =========================================================================
+    // spdlog::info("Phase 7: Scene");
+    // TODO: scene, graph init
 
-    live_scene_mgr.shutdown();       // Unload all scenes, destroy ECS entities
-    ecs_world.clear();               // Clear any remaining ECS state
+    // =========================================================================
+    // PHASE 8: SCRIPTING
+    // =========================================================================
+    // spdlog::info("Phase 8: Scripting");
+    // TODO: script, scripting, cpp, shell init
 
-    // Log final physics statistics
-    auto final_physics_stats = physics_world->stats();
-    spdlog::info("Physics World final stats: {} bodies, {} active, {} sleeping",
-                 physics_world->body_count(),
-                 final_physics_stats.active_bodies,
-                 final_physics_stats.sleeping_bodies);
-    physics_world->clear();          // Destroy all physics bodies and joints
+    // =========================================================================
+    // PHASE 9: GAMEPLAY
+    // =========================================================================
+    // spdlog::info("Phase 9: Gameplay");
+    // TODO: ai, combat, inventory, gamestate init
 
-    asset_server.collect_garbage();  // Clean up unreferenced assets
+    // =========================================================================
+    // PHASE 10: UI
+    // =========================================================================
+    // spdlog::info("Phase 10: UI");
+    // TODO: ui, hud init
 
-    // Log final asset statistics
-    spdlog::info("Asset Server final stats: {} loaded, {} pending",
-                 asset_server.loaded_count(), asset_server.pending_count());
+    // =========================================================================
+    // PHASE 11: EXTENSIONS
+    // =========================================================================
+    // spdlog::info("Phase 11: Extensions");
+    // TODO: xr, editor init
 
-    // Shutdown compositor
-    spdlog::info("Compositor final stats: {} frames, {:.1f} avg FPS",
-                 compositor->frame_number(),
-                 compositor->frame_scheduler().current_fps());
-    compositor->shutdown();
+    // =========================================================================
+    // PHASE 12: APPLICATION
+    // =========================================================================
+    // spdlog::info("Phase 12: Application");
+    // TODO: runtime, engine init
+    // TODO: main loop
+    // TODO: shutdown (reverse order)
 
-    g_renderer = nullptr;
-    renderer.shutdown();
-    glfwDestroyWindow(window);
-    glfwTerminate();
-
-    spdlog::info("Shutdown complete.");
+    spdlog::info("Phase 3 complete - resources working");
     return 0;
 }

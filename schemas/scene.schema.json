@@ -1,0 +1,465 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://void-engine.dev/schemas/scene.schema.json",
+  "title": "Void Engine Scene",
+  "description": "Scene definition for void_engine",
+  "type": "object",
+  "required": ["scene"],
+  "properties": {
+    "scene": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "version": { "type": "string" }
+      }
+    },
+    "cameras": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/camera" }
+    },
+    "lights": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/light" }
+    },
+    "shadows": { "$ref": "#/$defs/shadow_config" },
+    "environment": { "$ref": "#/$defs/environment" },
+    "picking": { "$ref": "#/$defs/picking_config" },
+    "spatial": { "$ref": "#/$defs/spatial_config" },
+    "debug": { "$ref": "#/$defs/debug_config" },
+    "input": { "$ref": "#/$defs/input_config" },
+    "entities": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/entity" }
+    },
+    "particle_emitters": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/particle_emitter" }
+    },
+    "textures": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/texture" }
+    }
+  },
+  "$defs": {
+    "vec2": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "vec3": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "vec4": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "color3": { "$ref": "#/$defs/vec3" },
+    "color4": { "$ref": "#/$defs/vec4" },
+    "transform": {
+      "type": "object",
+      "properties": {
+        "position": { "$ref": "#/$defs/vec3" },
+        "rotation": { "$ref": "#/$defs/vec3" },
+        "scale": {
+          "oneOf": [
+            { "type": "number" },
+            { "$ref": "#/$defs/vec3" }
+          ]
+        },
+        "target": { "$ref": "#/$defs/vec3" },
+        "up": { "$ref": "#/$defs/vec3" }
+      }
+    },
+    "camera": {
+      "type": "object",
+      "required": ["name", "type"],
+      "properties": {
+        "name": { "type": "string" },
+        "active": { "type": "boolean", "default": false },
+        "type": { "type": "string", "enum": ["perspective", "orthographic"] },
+        "transform": { "$ref": "#/$defs/transform" },
+        "perspective": {
+          "type": "object",
+          "properties": {
+            "fov": { "type": "number" },
+            "near": { "type": "number" },
+            "far": { "type": "number" },
+            "aspect": { "oneOf": [{ "type": "number" }, { "const": "auto" }] }
+          }
+        },
+        "orthographic": {
+          "type": "object",
+          "properties": {
+            "left": { "type": "number" },
+            "right": { "type": "number" },
+            "bottom": { "type": "number" },
+            "top": { "type": "number" },
+            "near": { "type": "number" },
+            "far": { "type": "number" }
+          }
+        }
+      }
+    },
+    "light": {
+      "type": "object",
+      "required": ["name", "type"],
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["directional", "point", "spot", "area"] },
+        "enabled": { "type": "boolean", "default": true },
+        "directional": {
+          "type": "object",
+          "properties": {
+            "direction": { "$ref": "#/$defs/vec3" },
+            "color": { "$ref": "#/$defs/color3" },
+            "intensity": { "type": "number" },
+            "cast_shadows": { "type": "boolean" }
+          }
+        },
+        "point": {
+          "type": "object",
+          "properties": {
+            "position": { "$ref": "#/$defs/vec3" },
+            "color": { "$ref": "#/$defs/color3" },
+            "intensity": { "type": "number" },
+            "range": { "type": "number" },
+            "cast_shadows": { "type": "boolean" },
+            "attenuation": {
+              "type": "object",
+              "properties": {
+                "constant": { "type": "number" },
+                "linear": { "type": "number" },
+                "quadratic": { "type": "number" }
+              }
+            }
+          }
+        },
+        "spot": {
+          "type": "object",
+          "properties": {
+            "position": { "$ref": "#/$defs/vec3" },
+            "direction": { "$ref": "#/$defs/vec3" },
+            "color": { "$ref": "#/$defs/color3" },
+            "intensity": { "type": "number" },
+            "range": { "type": "number" },
+            "inner_angle": { "type": "number" },
+            "outer_angle": { "type": "number" },
+            "cast_shadows": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "shadow_config": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "atlas_size": { "type": "integer" },
+        "max_shadow_distance": { "type": "number" },
+        "shadow_fade_distance": { "type": "number" },
+        "cascades": {
+          "type": "object",
+          "properties": {
+            "count": { "type": "integer" },
+            "split_scheme": { "type": "string" },
+            "lambda": { "type": "number" },
+            "levels": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "resolution": { "type": "integer" },
+                  "distance": { "type": "number" },
+                  "bias": { "type": "number" }
+                }
+              }
+            }
+          }
+        },
+        "filtering": {
+          "type": "object",
+          "properties": {
+            "method": { "type": "string" },
+            "pcf_samples": { "type": "integer" },
+            "pcf_radius": { "type": "number" },
+            "soft_shadows": { "type": "boolean" },
+            "contact_hardening": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "properties": {
+        "environment_map": { "type": "string" },
+        "ambient_intensity": { "type": "number" },
+        "sky": {
+          "type": "object",
+          "properties": {
+            "zenith_color": { "$ref": "#/$defs/color3" },
+            "horizon_color": { "$ref": "#/$defs/color3" },
+            "ground_color": { "$ref": "#/$defs/color3" },
+            "sun_size": { "type": "number" },
+            "sun_intensity": { "type": "number" },
+            "sun_falloff": { "type": "number" },
+            "fog_density": { "type": "number" }
+          }
+        }
+      }
+    },
+    "picking_config": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "method": { "type": "string", "enum": ["gpu", "cpu", "hybrid"] },
+        "max_distance": { "type": "number" },
+        "layer_mask": { "type": "array", "items": { "type": "string" } },
+        "gpu": {
+          "type": "object",
+          "properties": {
+            "buffer_size": { "$ref": "#/$defs/vec2" },
+            "readback_delay": { "type": "integer" }
+          }
+        }
+      }
+    },
+    "spatial_config": {
+      "type": "object",
+      "properties": {
+        "structure": { "type": "string", "enum": ["bvh", "octree", "grid"] },
+        "auto_rebuild": { "type": "boolean" },
+        "rebuild_threshold": { "type": "number" },
+        "bvh": {
+          "type": "object",
+          "properties": {
+            "max_leaf_size": { "type": "integer" },
+            "build_quality": { "type": "string" }
+          }
+        },
+        "queries": {
+          "type": "object",
+          "properties": {
+            "frustum_culling": { "type": "boolean" },
+            "occlusion_culling": { "type": "boolean" },
+            "max_query_results": { "type": "integer" }
+          }
+        }
+      }
+    },
+    "debug_config": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "stats": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "position": { "type": "string" },
+            "font_size": { "type": "integer" },
+            "background_alpha": { "type": "number" },
+            "display": {
+              "type": "object",
+              "additionalProperties": { "type": "boolean" }
+            }
+          }
+        },
+        "visualization": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "bounds": { "type": "boolean" },
+            "wireframe": { "type": "boolean" },
+            "normals": { "type": "boolean" },
+            "light_volumes": { "type": "boolean" },
+            "shadow_cascades": { "type": "boolean" },
+            "lod_levels": { "type": "boolean" },
+            "skeleton": { "type": "boolean" },
+            "appearance": {
+              "type": "object",
+              "properties": {
+                "bounds_color": { "$ref": "#/$defs/color4" },
+                "normal_color": { "$ref": "#/$defs/color4" },
+                "normal_length": { "type": "number" },
+                "line_width": { "type": "number" }
+              }
+            }
+          }
+        },
+        "controls": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "input_config": {
+      "type": "object",
+      "properties": {
+        "camera": {
+          "type": "object",
+          "properties": {
+            "orbit_button": { "type": "string" },
+            "pan_button": { "type": "string" },
+            "zoom_scroll": { "type": "boolean" },
+            "orbit_sensitivity": { "type": "number" },
+            "pan_sensitivity": { "type": "number" },
+            "zoom_sensitivity": { "type": "number" },
+            "invert_y": { "type": "boolean" },
+            "invert_x": { "type": "boolean" },
+            "min_distance": { "type": "number" },
+            "max_distance": { "type": "number" }
+          }
+        },
+        "bindings": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "material": {
+      "type": "object",
+      "properties": {
+        "albedo": {
+          "oneOf": [
+            { "$ref": "#/$defs/color3" },
+            { "type": "object", "properties": { "texture": { "type": "string" } } }
+          ]
+        },
+        "normal_map": { "type": "string" },
+        "metallic": {
+          "oneOf": [
+            { "type": "number" },
+            { "type": "object", "properties": { "texture": { "type": "string" } } }
+          ]
+        },
+        "roughness": {
+          "oneOf": [
+            { "type": "number" },
+            { "type": "object", "properties": { "texture": { "type": "string" } } }
+          ]
+        },
+        "emissive": { "$ref": "#/$defs/color3" },
+        "transmission": {
+          "type": "object",
+          "properties": {
+            "factor": { "type": "number" },
+            "ior": { "type": "number" },
+            "thickness": { "type": "number" },
+            "attenuation_color": { "$ref": "#/$defs/color3" },
+            "attenuation_distance": { "type": "number" }
+          }
+        },
+        "sheen": {
+          "type": "object",
+          "properties": {
+            "color": { "$ref": "#/$defs/color3" },
+            "roughness": { "type": "number" }
+          }
+        },
+        "clearcoat": {
+          "type": "object",
+          "properties": {
+            "intensity": { "type": "number" },
+            "roughness": { "type": "number" }
+          }
+        },
+        "anisotropy": {
+          "type": "object",
+          "properties": {
+            "strength": { "type": "number" },
+            "rotation": { "type": "number" }
+          }
+        }
+      }
+    },
+    "animation": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string", "enum": ["rotate", "oscillate", "orbit", "pulse", "path"] },
+        "axis": { "$ref": "#/$defs/vec3" },
+        "speed": { "type": "number" },
+        "amplitude": { "type": "number" },
+        "frequency": { "type": "number" },
+        "phase": { "type": "number" },
+        "rotate": { "type": "boolean" },
+        "center": { "$ref": "#/$defs/vec3" },
+        "radius": { "type": "number" },
+        "start_angle": { "type": "number" },
+        "face_center": { "type": "boolean" },
+        "min_scale": { "type": "number" },
+        "max_scale": { "type": "number" },
+        "points": { "type": "array", "items": { "$ref": "#/$defs/vec3" } },
+        "duration": { "type": "number" },
+        "loop_animation": { "type": "boolean" },
+        "ping_pong": { "type": "boolean" },
+        "interpolation": { "type": "string" },
+        "orient_to_path": { "type": "boolean" },
+        "easing": { "type": "string" }
+      }
+    },
+    "pickable": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "priority": { "type": "integer" },
+        "bounds": { "type": "string" },
+        "highlight_on_hover": { "type": "boolean" }
+      }
+    },
+    "entity": {
+      "type": "object",
+      "required": ["name", "mesh"],
+      "properties": {
+        "name": { "type": "string" },
+        "mesh": { "type": "string" },
+        "layer": { "type": "string" },
+        "visible": { "type": "boolean", "default": true },
+        "transform": { "$ref": "#/$defs/transform" },
+        "material": { "$ref": "#/$defs/material" },
+        "animation": { "$ref": "#/$defs/animation" },
+        "pickable": { "$ref": "#/$defs/pickable" },
+        "input_events": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "particle_emitter": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string" },
+        "position": { "$ref": "#/$defs/vec3" },
+        "emit_rate": { "type": "number" },
+        "max_particles": { "type": "integer" },
+        "lifetime": { "$ref": "#/$defs/vec2" },
+        "speed": { "$ref": "#/$defs/vec2" },
+        "size": { "$ref": "#/$defs/vec2" },
+        "color_start": { "$ref": "#/$defs/color4" },
+        "color_end": { "$ref": "#/$defs/color4" },
+        "gravity": { "$ref": "#/$defs/vec3" },
+        "spread": { "type": "number" },
+        "direction": { "$ref": "#/$defs/vec3" },
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "texture": {
+      "type": "object",
+      "required": ["name", "path"],
+      "properties": {
+        "name": { "type": "string" },
+        "path": { "type": "string" },
+        "srgb": { "type": "boolean" },
+        "mipmap": { "type": "boolean" },
+        "hdr": { "type": "boolean" }
+      }
+    }
+  }
+}

@@ -5,6 +5,7 @@
 
 #include <void_engine/asset/loader.hpp>
 
+#include <array>
 #include <cstdint>
 #include <map>
 #include <optional>

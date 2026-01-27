@@ -127,7 +127,10 @@
       "Bash(cmd \")",
       "Bash(for dir in include/void_engine/*/)",
       "Bash(for dir in src/*/)",
-      "Bash(do if [ -d \"$dir\" ])"
+      "Bash(do if [ -d \"$dir\" ])",
+      "Bash(for dir in \"C:\\\\Users\\\\ShaneRobinson\\\\Documents\\\\GitHub\\\\void_engine\\\\include\\\\void_engine\"/*)",
+      "WebSearch",
+      "WebFetch(domain:www.gameenginebook.com)"
     ]
   }
 }

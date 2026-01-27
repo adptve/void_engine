@@ -1,0 +1,465 @@
+{
+  "$schema": "../../schemas/scene.schema.json",
+  "scene": {
+    "name": "Model Viewer Demo",
+    "description": "Interactive 3D model viewer showcasing PBR materials, lighting, shadows, animations, picking, and debug visualization",
+    "version": "2.0.0"
+  },
+  "cameras": [
+    {
+      "name": "main_camera",
+      "active": true,
+      "type": "perspective",
+      "transform": {
+        "position": [0.0, 2.0, 5.0],
+        "target": [0.0, 0.5, 0.0],
+        "up": [0.0, 1.0, 0.0]
+      },
+      "perspective": {
+        "fov": 60.0,
+        "near": 0.1,
+        "far": 1000.0,
+        "aspect": "auto"
+      }
+    },
+    {
+      "name": "top_down",
+      "active": false,
+      "type": "orthographic",
+      "transform": {
+        "position": [0.0, 20.0, 0.0],
+        "target": [0.0, 0.0, 0.0],
+        "up": [0.0, 0.0, -1.0]
+      },
+      "orthographic": {
+        "left": -10.0,
+        "right": 10.0,
+        "bottom": -10.0,
+        "top": 10.0,
+        "near": 0.1,
+        "far": 50.0
+      }
+    }
+  ],
+  "lights": [
+    {
+      "name": "sun",
+      "type": "directional",
+      "enabled": true,
+      "directional": {
+        "direction": [0.5, -0.7, 0.5],
+        "color": [1.0, 0.95, 0.85],
+        "intensity": 3.0,
+        "cast_shadows": true
+      }
+    },
+    {
+      "name": "fill_light",
+      "type": "directional",
+      "enabled": true,
+      "directional": {
+        "direction": [-0.3, -0.5, -0.4],
+        "color": [0.6, 0.7, 0.9],
+        "intensity": 0.5,
+        "cast_shadows": false
+      }
+    },
+    {
+      "name": "accent_light",
+      "type": "point",
+      "enabled": true,
+      "point": {
+        "position": [3.0, 2.0, 2.0],
+        "color": [1.0, 0.8, 0.6],
+        "intensity": 50.0,
+        "range": 8.0,
+        "cast_shadows": false,
+        "attenuation": {
+          "constant": 1.0,
+          "linear": 0.09,
+          "quadratic": 0.032
+        }
+      }
+    },
+    {
+      "name": "spotlight",
+      "type": "spot",
+      "enabled": false,
+      "spot": {
+        "position": [0.0, 5.0, 0.0],
+        "direction": [0.0, -1.0, 0.0],
+        "color": [1.0, 1.0, 1.0],
+        "intensity": 200.0,
+        "range": 10.0,
+        "inner_angle": 20.0,
+        "outer_angle": 35.0,
+        "cast_shadows": true
+      }
+    }
+  ],
+  "shadows": {
+    "enabled": true,
+    "atlas_size": 4096,
+    "max_shadow_distance": 50.0,
+    "shadow_fade_distance": 5.0,
+    "cascades": {
+      "count": 3,
+      "split_scheme": "practical",
+      "lambda": 0.5,
+      "levels": [
+        { "resolution": 2048, "distance": 10.0, "bias": 0.0005 },
+        { "resolution": 1024, "distance": 25.0, "bias": 0.001 },
+        { "resolution": 512, "distance": 50.0, "bias": 0.002 }
+      ]
+    },
+    "filtering": {
+      "method": "pcf",
+      "pcf_samples": 16,
+      "pcf_radius": 1.5,
+      "soft_shadows": true,
+      "contact_hardening": false
+    }
+  },
+  "environment": {
+    "environment_map": "textures/env/blue_photo_studio_1k.hdr",
+    "ambient_intensity": 0.12,
+    "sky": {
+      "zenith_color": [0.1, 0.3, 0.6],
+      "horizon_color": [0.5, 0.7, 0.9],
+      "ground_color": [0.15, 0.12, 0.1],
+      "sun_size": 0.03,
+      "sun_intensity": 50.0,
+      "sun_falloff": 3.0,
+      "fog_density": 0.0
+    }
+  },
+  "picking": {
+    "enabled": true,
+    "method": "gpu",
+    "max_distance": 100.0,
+    "layer_mask": ["world", "transparent"],
+    "gpu": {
+      "buffer_size": [256, 256],
+      "readback_delay": 1
+    }
+  },
+  "spatial": {
+    "structure": "bvh",
+    "auto_rebuild": true,
+    "rebuild_threshold": 0.3,
+    "bvh": {
+      "max_leaf_size": 4,
+      "build_quality": "medium"
+    },
+    "queries": {
+      "frustum_culling": true,
+      "occlusion_culling": false,
+      "max_query_results": 500
+    }
+  },
+  "debug": {
+    "enabled": false,
+    "stats": {
+      "enabled": false,
+      "position": "top_left",
+      "font_size": 14,
+      "background_alpha": 0.7,
+      "display": {
+        "fps": true,
+        "frame_time": true,
+        "draw_calls": true,
+        "triangles": true,
+        "entities_total": true,
+        "entities_visible": true,
+        "gpu_memory": false,
+        "cpu_time": true
+      }
+    },
+    "visualization": {
+      "enabled": false,
+      "bounds": false,
+      "wireframe": false,
+      "normals": false,
+      "light_volumes": false,
+      "shadow_cascades": false,
+      "lod_levels": false,
+      "skeleton": false,
+      "appearance": {
+        "bounds_color": [0.0, 1.0, 0.0, 0.5],
+        "normal_color": [0.0, 0.5, 1.0, 1.0],
+        "normal_length": 0.1,
+        "line_width": 1.0
+      }
+    },
+    "controls": {
+      "toggle_key": "F3",
+      "cycle_mode_key": "F4",
+      "reload_shaders_key": "F5"
+    }
+  },
+  "input": {
+    "camera": {
+      "orbit_button": "left",
+      "pan_button": "middle",
+      "zoom_scroll": true,
+      "orbit_sensitivity": 0.005,
+      "pan_sensitivity": 0.01,
+      "zoom_sensitivity": 0.1,
+      "invert_y": false,
+      "invert_x": false,
+      "min_distance": 0.5,
+      "max_distance": 50.0
+    },
+    "bindings": {
+      "next_material": "Tab",
+      "prev_material": "Shift+Tab",
+      "model_sphere": "1",
+      "model_cube": "2",
+      "model_torus": "3",
+      "model_diamond": "4",
+      "reset_camera": "R",
+      "toggle_wireframe": "F",
+      "toggle_grid": "G",
+      "toggle_debug": "F3",
+      "toggle_stats": "F2",
+      "toggle_shadows": "H",
+      "screenshot": "F12"
+    }
+  },
+  "entities": [
+    {
+      "name": "gold_sphere",
+      "mesh": "sphere",
+      "layer": "world",
+      "visible": true,
+      "transform": { "position": [0.0, 0.5, 0.0], "scale": 1.0 },
+      "material": {
+        "albedo": { "texture": "textures/Metal038/Metal038_1K-PNG_Color.png" },
+        "normal_map": "textures/Metal038/Metal038_1K-PNG_NormalGL.png",
+        "metallic": { "texture": "textures/Metal038/Metal038_1K-PNG_Metalness.png" },
+        "roughness": { "texture": "textures/Metal038/Metal038_1K-PNG_Roughness.png" }
+      },
+      "animation": { "type": "rotate", "axis": [0.0, 1.0, 0.0], "speed": 0.5 },
+      "pickable": { "enabled": true, "priority": 0, "bounds": "mesh", "highlight_on_hover": true },
+      "input_events": { "on_click": "select_entity", "on_pointer_enter": "highlight_on", "on_pointer_exit": "highlight_off" }
+    },
+    {
+      "name": "chrome_torus",
+      "mesh": "torus",
+      "layer": "world",
+      "visible": true,
+      "transform": { "position": [2.0, 0.3, 0.0], "scale": 1.0 },
+      "material": {
+        "albedo": { "texture": "textures/Metal009/Metal009_1K-PNG_Color.png" },
+        "normal_map": "textures/Metal009/Metal009_1K-PNG_NormalGL.png",
+        "metallic": { "texture": "textures/Metal009/Metal009_1K-PNG_Metalness.png" },
+        "roughness": { "texture": "textures/Metal009/Metal009_1K-PNG_Roughness.png" }
+      },
+      "animation": { "type": "oscillate", "axis": [0.0, 1.0, 0.0], "amplitude": 0.3, "frequency": 0.5, "phase": 0.0, "rotate": false },
+      "pickable": { "enabled": true, "highlight_on_hover": true }
+    },
+    {
+      "name": "metal_cube",
+      "mesh": "cube",
+      "layer": "world",
+      "visible": true,
+      "transform": { "position": [-2.0, 0.5, 0.0], "scale": 0.8 },
+      "material": {
+        "albedo": { "texture": "textures/Metal034/Metal034_1K-PNG_Color.png" },
+        "normal_map": "textures/Metal034/Metal034_1K-PNG_NormalGL.png",
+        "metallic": { "texture": "textures/Metal034/Metal034_1K-PNG_Metalness.png" },
+        "roughness": { "texture": "textures/Metal034/Metal034_1K-PNG_Roughness.png" }
+      },
+      "animation": { "type": "rotate", "axis": [0.0, 1.0, 0.0], "speed": 0.3 },
+      "pickable": { "enabled": true, "highlight_on_hover": true }
+    },
+    {
+      "name": "purple_diamond",
+      "mesh": "diamond",
+      "layer": "world",
+      "visible": true,
+      "transform": { "position": [0.0, 0.5, -2.5], "scale": 0.7 },
+      "material": {
+        "albedo": { "texture": "textures/Fabric041/Fabric041_1K-PNG_Color.png" },
+        "normal_map": "textures/Fabric041/Fabric041_1K-PNG_NormalGL.png",
+        "metallic": 0.8,
+        "roughness": { "texture": "textures/Fabric041/Fabric041_1K-PNG_Roughness.png" },
+        "emissive": [0.1, 0.0, 0.15]
+      },
+      "animation": { "type": "orbit", "center": [0.0, 0.5, 0.0], "radius": 2.5, "speed": 0.4, "axis": [0.0, 1.0, 0.0], "start_angle": 4.71, "face_center": true },
+      "pickable": { "enabled": true, "highlight_on_hover": true }
+    },
+    {
+      "name": "glass_sphere",
+      "mesh": "sphere",
+      "layer": "transparent",
+      "visible": true,
+      "transform": { "position": [1.5, 0.6, 2.0], "scale": 0.6 },
+      "material": {
+        "albedo": [1.0, 1.0, 1.0],
+        "metallic": 0.0,
+        "roughness": 0.0,
+        "transmission": { "factor": 0.95, "ior": 1.5, "thickness": 0.3, "attenuation_color": [0.95, 0.98, 1.0], "attenuation_distance": 1.0 }
+      },
+      "pickable": { "enabled": true, "highlight_on_hover": true }
+    },
+    {
+      "name": "velvet_sphere",
+      "mesh": "sphere",
+      "layer": "world",
+      "visible": true,
+      "transform": { "position": [-1.5, 0.4, 2.0], "scale": 0.5 },
+      "material": {
+        "albedo": [0.2, 0.05, 0.15],
+        "metallic": 0.0,
+        "roughness": 0.9,
+        "sheen": { "color": [0.6, 0.3, 0.5], "roughness": 0.3 }
+      },
+      "pickable": { "enabled": true, "highlight_on_hover": true }
+    },
+    {
+      "name": "car_paint_sphere",
+      "mesh": "sphere",
+      "layer": "world",
+      "visible": true,
+      "transform": { "position": [0.0, 0.4, 2.5], "scale": 0.5 },
+      "material": {
+        "albedo": [0.8, 0.1, 0.1],
+        "metallic": 0.0,
+        "roughness": 0.4,
+        "clearcoat": { "intensity": 1.0, "roughness": 0.1 }
+      },
+      "animation": { "type": "pulse", "min_scale": 0.9, "max_scale": 1.1, "frequency": 0.8, "phase": 0.0 },
+      "pickable": { "enabled": true, "highlight_on_hover": true }
+    },
+    {
+      "name": "pathfinder",
+      "mesh": "sphere",
+      "layer": "world",
+      "visible": true,
+      "transform": { "position": [0.0, 1.0, 0.0], "scale": 0.3 },
+      "material": {
+        "albedo": { "texture": "textures/Plastic011/Plastic011_1K-PNG_Color.png" },
+        "normal_map": "textures/Plastic011/Plastic011_1K-PNG_NormalGL.png",
+        "metallic": 0.2,
+        "roughness": { "texture": "textures/Plastic011/Plastic011_1K-PNG_Roughness.png" },
+        "emissive": [0.05, 0.2, 0.05]
+      },
+      "animation": {
+        "type": "path",
+        "points": [[-3.0, 1.0, 3.0], [3.0, 1.5, 3.0], [3.0, 0.5, -3.0], [-3.0, 1.0, -3.0], [-3.0, 1.0, 3.0]],
+        "duration": 10.0,
+        "loop_animation": true,
+        "ping_pong": false,
+        "interpolation": "linear",
+        "orient_to_path": true,
+        "easing": "smooth_step"
+      },
+      "pickable": { "enabled": true, "highlight_on_hover": true }
+    },
+    {
+      "name": "pulsing_sphere",
+      "mesh": "sphere",
+      "layer": "world",
+      "visible": true,
+      "transform": { "position": [0.0, 0.3, -2.5], "scale": 0.4 },
+      "material": {
+        "albedo": { "texture": "textures/Plastic009/Plastic009_1K-PNG_Color.png" },
+        "normal_map": "textures/Plastic009/Plastic009_1K-PNG_NormalGL.png",
+        "metallic": 0.3,
+        "roughness": { "texture": "textures/Plastic009/Plastic009_1K-PNG_Roughness.png" },
+        "emissive": [0.3, 0.05, 0.05]
+      },
+      "animation": { "type": "pulse", "min_scale": 0.8, "max_scale": 1.2, "frequency": 1.5, "phase": 0.0 },
+      "pickable": { "enabled": true, "highlight_on_hover": true }
+    },
+    {
+      "name": "brushed_cylinder",
+      "mesh": "cylinder",
+      "layer": "world",
+      "visible": true,
+      "transform": { "position": [2.5, 0.4, -1.5], "scale": [0.4, 0.8, 0.4] },
+      "material": {
+        "albedo": [0.85, 0.85, 0.9],
+        "metallic": 1.0,
+        "roughness": 0.35,
+        "anisotropy": { "strength": 0.7, "rotation": 0.0 }
+      },
+      "animation": { "type": "rotate", "axis": [0.0, 1.0, 0.0], "speed": 0.2 },
+      "pickable": { "enabled": true, "highlight_on_hover": true }
+    },
+    {
+      "name": "ground",
+      "mesh": "plane",
+      "layer": "world",
+      "visible": true,
+      "transform": { "position": [0.0, -0.01, 0.0], "scale": 10.0 },
+      "material": {
+        "albedo": { "texture": "textures/Wood049/Wood049_1K-PNG_Color.png" },
+        "normal_map": "textures/Wood049/Wood049_1K-PNG_NormalGL.png",
+        "metallic": 0.0,
+        "roughness": { "texture": "textures/Wood049/Wood049_1K-PNG_Roughness.png" }
+      },
+      "pickable": { "enabled": false }
+    }
+  ],
+  "particle_emitters": [
+    {
+      "name": "fire",
+      "position": [3.5, 0.0, 2.0],
+      "emit_rate": 100.0,
+      "max_particles": 2000,
+      "lifetime": [0.8, 2.0],
+      "speed": [1.5, 3.0],
+      "size": [0.08, 0.2],
+      "color_start": [1.0, 0.7, 0.2, 1.0],
+      "color_end": [1.0, 0.1, 0.0, 0.0],
+      "gravity": [0.0, 1.5, 0.0],
+      "spread": 0.4,
+      "direction": [0.0, 1.0, 0.0],
+      "enabled": true
+    },
+    {
+      "name": "sparkles",
+      "position": [0.0, 1.5, 0.0],
+      "emit_rate": 20.0,
+      "max_particles": 500,
+      "lifetime": [1.0, 3.0],
+      "speed": [0.5, 1.5],
+      "size": [0.02, 0.05],
+      "color_start": [1.0, 1.0, 0.8, 1.0],
+      "color_end": [0.5, 0.5, 1.0, 0.0],
+      "gravity": [0.0, -0.5, 0.0],
+      "spread": 1.0,
+      "direction": [0.0, 1.0, 0.0],
+      "enabled": true
+    }
+  ],
+  "textures": [
+    { "name": "metal034_albedo", "path": "textures/Metal034/Metal034_1K-PNG_Color.png", "srgb": true, "mipmap": true },
+    { "name": "metal034_normal", "path": "textures/Metal034/Metal034_1K-PNG_NormalGL.png", "srgb": false },
+    { "name": "metal034_roughness", "path": "textures/Metal034/Metal034_1K-PNG_Roughness.png", "srgb": false },
+    { "name": "metal034_metalness", "path": "textures/Metal034/Metal034_1K-PNG_Metalness.png", "srgb": false },
+    { "name": "metal038_albedo", "path": "textures/Metal038/Metal038_1K-PNG_Color.png", "srgb": true },
+    { "name": "metal038_normal", "path": "textures/Metal038/Metal038_1K-PNG_NormalGL.png", "srgb": false },
+    { "name": "metal038_roughness", "path": "textures/Metal038/Metal038_1K-PNG_Roughness.png", "srgb": false },
+    { "name": "metal038_metalness", "path": "textures/Metal038/Metal038_1K-PNG_Metalness.png", "srgb": false },
+    { "name": "metal009_albedo", "path": "textures/Metal009/Metal009_1K-PNG_Color.png", "srgb": true },
+    { "name": "metal009_normal", "path": "textures/Metal009/Metal009_1K-PNG_NormalGL.png", "srgb": false },
+    { "name": "metal009_roughness", "path": "textures/Metal009/Metal009_1K-PNG_Roughness.png", "srgb": false },
+    { "name": "metal009_metalness", "path": "textures/Metal009/Metal009_1K-PNG_Metalness.png", "srgb": false },
+    { "name": "wood_albedo", "path": "textures/Wood049/Wood049_1K-PNG_Color.png", "srgb": true },
+    { "name": "wood_normal", "path": "textures/Wood049/Wood049_1K-PNG_NormalGL.png", "srgb": false },
+    { "name": "wood_roughness", "path": "textures/Wood049/Wood049_1K-PNG_Roughness.png", "srgb": false },
+    { "name": "fabric041_albedo", "path": "textures/Fabric041/Fabric041_1K-PNG_Color.png", "srgb": true },
+    { "name": "fabric041_normal", "path": "textures/Fabric041/Fabric041_1K-PNG_NormalGL.png", "srgb": false },
+    { "name": "fabric041_roughness", "path": "textures/Fabric041/Fabric041_1K-PNG_Roughness.png", "srgb": false },
+    { "name": "plastic011_albedo", "path": "textures/Plastic011/Plastic011_1K-PNG_Color.png", "srgb": true },
+    { "name": "plastic011_normal", "path": "textures/Plastic011/Plastic011_1K-PNG_NormalGL.png", "srgb": false },
+    { "name": "plastic011_roughness", "path": "textures/Plastic011/Plastic011_1K-PNG_Roughness.png", "srgb": false },
+    { "name": "plastic009_albedo", "path": "textures/Plastic009/Plastic009_1K-PNG_Color.png", "srgb": true },
+    { "name": "plastic009_normal", "path": "textures/Plastic009/Plastic009_1K-PNG_NormalGL.png", "srgb": false },
+    { "name": "plastic009_roughness", "path": "textures/Plastic009/Plastic009_1K-PNG_Roughness.png", "srgb": false },
+    { "name": "environment", "path": "textures/env/blue_photo_studio_1k.hdr", "hdr": true }
+  ]
+}

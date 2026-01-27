@@ -1,0 +1,340 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://void-engine.dev/schemas/manifest.schema.json",
+  "title": "Void Engine Manifest",
+  "description": "Project configuration for void_engine applications",
+  "type": "object",
+  "required": ["package", "app"],
+  "properties": {
+    "package": {
+      "type": "object",
+      "description": "Package metadata",
+      "required": ["name", "version"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "description": "Package identifier (lowercase, hyphens allowed)"
+        },
+        "display_name": {
+          "type": "string",
+          "description": "Human-readable name"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Semantic version (X.Y.Z)"
+        },
+        "description": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "license": {
+          "type": "string"
+        },
+        "keywords": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "categories": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "app": {
+      "type": "object",
+      "description": "Application configuration",
+      "required": ["scene"],
+      "properties": {
+        "app_type": {
+          "type": "string",
+          "enum": ["game", "tool", "demo"],
+          "default": "game"
+        },
+        "scene": {
+          "type": "string",
+          "description": "Path to initial scene file (relative to project)"
+        },
+        "layers": {
+          "type": "array",
+          "description": "Render layer pipeline",
+          "items": {
+            "$ref": "#/$defs/layer"
+          }
+        },
+        "render_passes": {
+          "type": "array",
+          "description": "Custom render passes",
+          "items": {
+            "$ref": "#/$defs/render_pass"
+          }
+        },
+        "lod": {
+          "$ref": "#/$defs/lod_config"
+        },
+        "streaming": {
+          "$ref": "#/$defs/streaming_config"
+        },
+        "precision": {
+          "$ref": "#/$defs/precision_config"
+        },
+        "debug": {
+          "$ref": "#/$defs/debug_config"
+        },
+        "spatial": {
+          "$ref": "#/$defs/spatial_config"
+        },
+        "permissions": {
+          "$ref": "#/$defs/permissions"
+        },
+        "resources": {
+          "$ref": "#/$defs/resource_limits"
+        }
+      }
+    },
+    "window": {
+      "type": "object",
+      "description": "Window configuration",
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 320,
+          "default": 1280
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 240,
+          "default": 720
+        },
+        "fullscreen": {
+          "type": "boolean",
+          "default": false
+        },
+        "vsync": {
+          "type": "boolean",
+          "default": true
+        },
+        "resizable": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "assets": {
+      "type": "object",
+      "properties": {
+        "include": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Asset directories to include"
+        },
+        "compression": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9
+        }
+      }
+    },
+    "platform": {
+      "type": "object",
+      "properties": {
+        "min_version": {
+          "type": "string"
+        },
+        "required_features": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "layer": {
+      "type": "object",
+      "required": ["name", "type"],
+      "properties": {
+        "name": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["shadow", "content", "overlay"]
+        },
+        "priority": {
+          "type": "integer",
+          "default": 0
+        },
+        "blend": {
+          "type": "string",
+          "enum": ["replace", "normal", "additive", "multiply"],
+          "default": "normal"
+        }
+      }
+    },
+    "render_pass": {
+      "type": "object",
+      "required": ["name", "type"],
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "priority": { "type": "integer" },
+        "enabled": { "type": "boolean", "default": true },
+        "config": {
+          "type": "object",
+          "properties": {
+            "resolution": {
+              "type": "array",
+              "items": { "type": "integer" },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "format": { "type": "string" },
+            "clear_depth": { "type": "number" },
+            "entity_filter": { "type": "string" }
+          }
+        },
+        "dependencies": {
+          "type": "object",
+          "properties": {
+            "requires": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "provides": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "lod_config": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "mode": {
+          "type": "string",
+          "enum": ["distance", "screen_size", "manual"]
+        },
+        "default_mode": {
+          "type": "string",
+          "enum": ["instant", "cross_fade", "dither"]
+        },
+        "cross_fade_duration": { "type": "number" },
+        "dither_pattern": { "type": "string" },
+        "hysteresis": { "type": "number" },
+        "update_frequency": { "type": "number" }
+      }
+    },
+    "streaming_config": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "chunk_size": { "type": "number" },
+        "load_distance": { "type": "number" },
+        "unload_distance": { "type": "number" },
+        "max_concurrent_loads": { "type": "integer" },
+        "max_memory_mb": { "type": "integer" },
+        "preload_neighbors": { "type": "boolean" },
+        "priority_bias": { "type": "string" },
+        "recycling": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "pool_size": { "type": "integer" },
+            "cooldown_frames": { "type": "integer" }
+          }
+        }
+      }
+    },
+    "precision_config": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "origin_rebase_threshold": { "type": "number" },
+        "camera_relative_rendering": { "type": "boolean" },
+        "double_precision_physics": { "type": "boolean" },
+        "coordinate_system": {
+          "type": "string",
+          "enum": ["right_handed", "left_handed"]
+        }
+      }
+    },
+    "debug_config": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "show_stats_overlay": { "type": "boolean" },
+        "stats_position": {
+          "type": "string",
+          "enum": ["top_left", "top_right", "bottom_left", "bottom_right"]
+        },
+        "visualization": {
+          "type": "object",
+          "properties": {
+            "bounds": { "type": "boolean" },
+            "normals": { "type": "boolean" },
+            "wireframe": { "type": "boolean" },
+            "light_volumes": { "type": "boolean" },
+            "shadow_cascades": { "type": "boolean" },
+            "lod_colors": { "type": "boolean" },
+            "chunk_boundaries": { "type": "boolean" },
+            "collision_shapes": { "type": "boolean" },
+            "skeleton": { "type": "boolean" },
+            "velocity_vectors": { "type": "boolean" }
+          }
+        },
+        "appearance": {
+          "type": "object",
+          "properties": {
+            "bounds_color": { "$ref": "#/$defs/color4" },
+            "normal_color": { "$ref": "#/$defs/color4" },
+            "normal_length": { "type": "number" },
+            "line_width": { "type": "number" },
+            "font_size": { "type": "integer" }
+          }
+        }
+      }
+    },
+    "spatial_config": {
+      "type": "object",
+      "properties": {
+        "structure": {
+          "type": "string",
+          "enum": ["bvh", "octree", "grid"]
+        },
+        "rebuild_threshold": { "type": "number" },
+        "max_depth": { "type": "integer" },
+        "min_objects_per_node": { "type": "integer" }
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "properties": {
+        "scripts": { "type": "boolean", "default": false },
+        "network": { "type": "boolean", "default": false },
+        "filesystem": { "type": "boolean", "default": false }
+      }
+    },
+    "resource_limits": {
+      "type": "object",
+      "properties": {
+        "max_entities": { "type": "integer" },
+        "max_memory": { "type": "integer" },
+        "max_layers": { "type": "integer" },
+        "max_cpu_ms": { "type": "number" },
+        "max_draw_calls": { "type": "integer" },
+        "max_triangles": { "type": "integer" },
+        "max_lights": { "type": "integer" },
+        "max_shadow_casters": { "type": "integer" }
+      }
+    },
+    "color4": {
+      "type": "array",
+      "items": { "type": "number", "minimum": 0, "maximum": 1 },
+      "minItems": 4,
+      "maxItems": 4
+    }
+  }
+}

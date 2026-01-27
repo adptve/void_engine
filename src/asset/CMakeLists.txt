@@ -22,7 +22,7 @@ void_add_module(NAME void_asset
     DEPENDENCIES
         void_core
         void_structures
-        tomlplusplus::tomlplusplus
+        nlohmann_json::nlohmann_json
 )
 
 # Optional: libcurl for HTTP client

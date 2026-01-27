@@ -767,12 +767,12 @@ inline void serialize_value(BinaryWriter& writer, const Value& value) {
         case ValueType::String:
             return Value(reader.read_string());
         case ValueType::Vec2:
-            return Value(Vec2{reader.read_f64(), reader.read_f64()});
+            return Value(Vec2{static_cast<float>(reader.read_f64()), static_cast<float>(reader.read_f64())});
         case ValueType::Vec3:
-            return Value(Vec3{reader.read_f64(), reader.read_f64(), reader.read_f64()});
+            return Value(Vec3{static_cast<float>(reader.read_f64()), static_cast<float>(reader.read_f64()), static_cast<float>(reader.read_f64())});
         case ValueType::Vec4:
-            return Value(Vec4{reader.read_f64(), reader.read_f64(),
-                              reader.read_f64(), reader.read_f64()});
+            return Value(Vec4{static_cast<float>(reader.read_f64()), static_cast<float>(reader.read_f64()),
+                              static_cast<float>(reader.read_f64()), static_cast<float>(reader.read_f64())});
         case ValueType::Mat4:
             {
                 Mat4 m;

@@ -24,12 +24,12 @@ FetchContent_Declare(
 )
 
 # ============================================================================
-# tomlplusplus - TOML parser
+# nlohmann_json - JSON parser (replaces tomlplusplus)
 # ============================================================================
 FetchContent_Declare(
-    tomlplusplus
-    GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
-    GIT_TAG        v3.4.0
+    nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG        v3.11.3
     GIT_SHALLOW    TRUE
 )
 
@@ -114,69 +114,75 @@ FetchContent_Declare(
 )
 
 # ============================================================================
-# Make dependencies available
+# Make dependencies available - PHASED
 # ============================================================================
 function(void_fetch_dependencies)
-    message(STATUS "Fetching dependencies...")
+    message(STATUS "Fetching dependencies (Phase 0: skeleton)...")
 
-    # GLM (header-only)
-    FetchContent_MakeAvailable(glm)
-
+    # ========================================================================
+    # PHASE 0: SKELETON - Only spdlog and nlohmann_json
+    # ========================================================================
     # spdlog
     set(SPDLOG_FMT_EXTERNAL OFF CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(spdlog)
 
-    # toml++
-    FetchContent_MakeAvailable(tomlplusplus)
+    # nlohmann_json
+    set(JSON_BuildTests OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(nlohmann_json)
 
-    # GLFW (disable docs, tests, examples)
-    set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-    set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-    set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable(glfw)
+    message(STATUS "Phase 0 dependencies fetched")
 
-    # stb (header-only image library)
-    FetchContent_MakeAvailable(stb)
-    # Create an interface library for stb
-    if(NOT TARGET stb)
-        add_library(stb INTERFACE)
-        target_include_directories(stb INTERFACE ${stb_SOURCE_DIR})
-    endif()
-    set(STB_SOURCE_DIR ${stb_SOURCE_DIR} PARENT_SCOPE)
+    # ========================================================================
+    # PHASE 1+: Uncomment as phases are activated
+    # ========================================================================
+    # # GLM (header-only) - Phase 1
+    # FetchContent_MakeAvailable(glm)
 
-    # tinygltf (header-only glTF loader)
-    set(TINYGLTF_HEADER_ONLY ON CACHE BOOL "" FORCE)
-    set(TINYGLTF_INSTALL OFF CACHE BOOL "" FORCE)
-    set(TINYGLTF_BUILD_LOADER_EXAMPLE OFF CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable(tinygltf)
-    set(TINYGLTF_SOURCE_DIR ${tinygltf_SOURCE_DIR} PARENT_SCOPE)
+    # # GLFW (disable docs, tests, examples) - Phase 4
+    # set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+    # set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    # set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    # set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+    # FetchContent_MakeAvailable(glfw)
 
-    # dr_libs (header-only audio decoders)
-    FetchContent_MakeAvailable(dr_libs)
-    if(NOT TARGET dr_libs)
-        add_library(dr_libs INTERFACE)
-        target_include_directories(dr_libs INTERFACE ${dr_libs_SOURCE_DIR})
-    endif()
-    set(DR_LIBS_SOURCE_DIR ${dr_libs_SOURCE_DIR} PARENT_SCOPE)
+    # # stb (header-only image library) - Phase 3
+    # FetchContent_MakeAvailable(stb)
+    # if(NOT TARGET stb)
+    #     add_library(stb INTERFACE)
+    #     target_include_directories(stb INTERFACE ${stb_SOURCE_DIR})
+    # endif()
+    # set(STB_SOURCE_DIR ${stb_SOURCE_DIR} PARENT_SCOPE)
 
-    # minimp3 (header-only MP3 decoder)
-    FetchContent_MakeAvailable(minimp3)
-    if(NOT TARGET minimp3)
-        add_library(minimp3 INTERFACE)
-        target_include_directories(minimp3 INTERFACE ${minimp3_SOURCE_DIR})
-    endif()
-    set(MINIMP3_SOURCE_DIR ${minimp3_SOURCE_DIR} PARENT_SCOPE)
+    # # tinygltf (header-only glTF loader) - Phase 3
+    # set(TINYGLTF_HEADER_ONLY ON CACHE BOOL "" FORCE)
+    # set(TINYGLTF_INSTALL OFF CACHE BOOL "" FORCE)
+    # set(TINYGLTF_BUILD_LOADER_EXAMPLE OFF CACHE BOOL "" FORCE)
+    # FetchContent_MakeAvailable(tinygltf)
+    # set(TINYGLTF_SOURCE_DIR ${tinygltf_SOURCE_DIR} PARENT_SCOPE)
 
-    # miniaudio (single-header cross-platform audio)
-    FetchContent_MakeAvailable(miniaudio)
-    if(NOT TARGET miniaudio)
-        add_library(miniaudio INTERFACE)
-        target_include_directories(miniaudio INTERFACE ${miniaudio_SOURCE_DIR})
-    endif()
-    set(MINIAUDIO_SOURCE_DIR ${miniaudio_SOURCE_DIR} PARENT_SCOPE)
+    # # dr_libs (header-only audio decoders) - Phase 5
+    # FetchContent_MakeAvailable(dr_libs)
+    # if(NOT TARGET dr_libs)
+    #     add_library(dr_libs INTERFACE)
+    #     target_include_directories(dr_libs INTERFACE ${dr_libs_SOURCE_DIR})
+    # endif()
+    # set(DR_LIBS_SOURCE_DIR ${dr_libs_SOURCE_DIR} PARENT_SCOPE)
 
-    message(STATUS "Dependencies fetched successfully")
+    # # minimp3 (header-only MP3 decoder) - Phase 5
+    # FetchContent_MakeAvailable(minimp3)
+    # if(NOT TARGET minimp3)
+    #     add_library(minimp3 INTERFACE)
+    #     target_include_directories(minimp3 INTERFACE ${minimp3_SOURCE_DIR})
+    # endif()
+    # set(MINIMP3_SOURCE_DIR ${minimp3_SOURCE_DIR} PARENT_SCOPE)
+
+    # # miniaudio (single-header cross-platform audio) - Phase 5
+    # FetchContent_MakeAvailable(miniaudio)
+    # if(NOT TARGET miniaudio)
+    #     add_library(miniaudio INTERFACE)
+    #     target_include_directories(miniaudio INTERFACE ${miniaudio_SOURCE_DIR})
+    # endif()
+    # set(MINIAUDIO_SOURCE_DIR ${miniaudio_SOURCE_DIR} PARENT_SCOPE)
 endfunction()
 
 function(void_fetch_test_dependencies)
