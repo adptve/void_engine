@@ -41,7 +41,8 @@ Kernel::Kernel(KernelConfig config)
     , m_module_registry(std::make_unique<ModuleRegistry>())
     , m_supervisor_tree(std::make_unique<SupervisorTree>())
     , m_hot_reload(std::make_unique<void_core::HotReloadSystem>())
-    , m_plugin_registry(std::make_unique<void_core::PluginRegistry>()) {
+    , m_plugin_registry(std::make_unique<void_core::PluginRegistry>())
+    , m_hot_reload_enabled(config.enable_hot_reload) {
 
     // Configure module loader
     m_module_loader->add_search_path(m_config.module_path);
@@ -50,6 +51,12 @@ Kernel::Kernel(KernelConfig config)
 
     // Initialize frame time array
     m_frame_times.fill(std::chrono::nanoseconds{0});
+
+    // Initialize stage arrays
+    m_stage_dirty.fill(false);
+    for (auto& config : m_stage_configs) {
+        config = StageConfig{true, false};
+    }
 }
 
 Kernel::~Kernel() {
@@ -387,6 +394,143 @@ void Kernel::update_modules(float dt) {
 
 void Kernel::update_plugins(float dt) {
     m_plugin_registry->update_all(dt);
+}
+
+// =============================================================================
+// Stage Scheduler Implementation
+// =============================================================================
+
+void Kernel::register_system(Stage stage, const std::string& name,
+                              SystemFunc func, std::int32_t priority) {
+    if (stage == Stage::_Count) return;
+
+    std::lock_guard<std::mutex> lock(m_stage_mutex);
+    auto stage_idx = static_cast<std::size_t>(stage);
+
+    // Check if system already exists
+    auto& systems = m_stage_systems[stage_idx];
+    auto it = std::find_if(systems.begin(), systems.end(),
+                           [&name](const SystemInfo& s) { return s.name == name; });
+
+    if (it != systems.end()) {
+        // Update existing
+        it->func = std::move(func);
+        it->priority = priority;
+    } else {
+        // Add new
+        systems.push_back(SystemInfo{name, std::move(func), priority, true});
+    }
+
+    m_stage_dirty[stage_idx] = true;
+}
+
+void Kernel::unregister_system(Stage stage, const std::string& name) {
+    if (stage == Stage::_Count) return;
+
+    std::lock_guard<std::mutex> lock(m_stage_mutex);
+    auto stage_idx = static_cast<std::size_t>(stage);
+
+    auto& systems = m_stage_systems[stage_idx];
+    systems.erase(
+        std::remove_if(systems.begin(), systems.end(),
+                       [&name](const SystemInfo& s) { return s.name == name; }),
+        systems.end());
+}
+
+void Kernel::set_system_enabled(Stage stage, const std::string& name, bool enabled) {
+    if (stage == Stage::_Count) return;
+
+    std::lock_guard<std::mutex> lock(m_stage_mutex);
+    auto stage_idx = static_cast<std::size_t>(stage);
+
+    auto& systems = m_stage_systems[stage_idx];
+    auto it = std::find_if(systems.begin(), systems.end(),
+                           [&name](const SystemInfo& s) { return s.name == name; });
+
+    if (it != systems.end()) {
+        it->enabled = enabled;
+    }
+}
+
+void Kernel::run_stage(Stage stage, float dt) {
+    if (stage == Stage::_Count) return;
+    if (m_phase.load() != KernelPhase::Running) return;
+
+    auto stage_idx = static_cast<std::size_t>(stage);
+
+    // Check if stage is enabled
+    if (!m_stage_configs[stage_idx].enabled) return;
+
+    // Sort by priority if dirty (under lock)
+    {
+        std::lock_guard<std::mutex> lock(m_stage_mutex);
+        if (m_stage_dirty[stage_idx]) {
+            auto& systems = m_stage_systems[stage_idx];
+            std::stable_sort(systems.begin(), systems.end(),
+                             [](const SystemInfo& a, const SystemInfo& b) {
+                                 return a.priority < b.priority;
+                             });
+            m_stage_dirty[stage_idx] = false;
+        }
+    }
+
+    // Execute systems (make a copy to allow modification during iteration)
+    std::vector<SystemInfo> systems_copy;
+    {
+        std::lock_guard<std::mutex> lock(m_stage_mutex);
+        systems_copy = m_stage_systems[stage_idx];
+    }
+
+    for (const auto& sys : systems_copy) {
+        if (sys.enabled && sys.func) {
+            sys.func(dt);
+        }
+    }
+
+    // Special handling for built-in stages
+    switch (stage) {
+        case Stage::HotReloadPoll:
+            if (m_hot_reload_enabled) {
+                update_hot_reload(dt);
+            }
+            update_supervisors(dt);
+            break;
+
+        case Stage::Update:
+            update_modules(dt);
+            update_plugins(dt);
+            break;
+
+        default:
+            break;
+    }
+}
+
+void Kernel::enable_hot_reload(std::uint32_t poll_ms, std::uint32_t debounce_ms) {
+    m_hot_reload_enabled = true;
+    m_hot_reload_poll_ms = poll_ms;
+    m_hot_reload_debounce_ms = debounce_ms;
+
+    if (m_hot_reload) {
+        m_hot_reload->set_poll_interval(std::chrono::milliseconds(poll_ms));
+    }
+}
+
+void Kernel::disable_hot_reload() {
+    m_hot_reload_enabled = false;
+    if (m_hot_reload) {
+        m_hot_reload->stop_watching();
+    }
+}
+
+StageConfig Kernel::get_stage_config(Stage stage) const {
+    if (stage == Stage::_Count) return StageConfig{};
+    return m_stage_configs[static_cast<std::size_t>(stage)];
+}
+
+void Kernel::set_stage_config(Stage stage, const StageConfig& config) {
+    if (stage == Stage::_Count) return;
+    m_stage_configs[static_cast<std::size_t>(stage)] = config;
 }
 
 } // namespace void_kernel

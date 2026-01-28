@@ -8,6 +8,7 @@
 #include "volumes.hpp"
 #include "conditions.hpp"
 #include "actions.hpp"
+#include "events.hpp"
 
 #include <functional>
 #include <memory>
@@ -15,6 +16,9 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+
+// Forward declaration for event bus integration
+namespace void_event { class EventBus; }
 
 namespace void_triggers {
 
@@ -195,13 +199,39 @@ private:
 // =============================================================================
 
 /// @brief Main trigger system
+///
+/// The TriggerSystem emits events via the EventBus as the primary
+/// communication path. This is hot-reload safe because:
+/// - Events are data, not function pointers
+/// - Subscribers re-register on plugin load
+/// - No dangling references after DLL unload
+///
+/// Legacy callbacks are still supported for internal wiring and
+/// non-plugin code, but event bus emission is always performed.
 class TriggerSystem {
 public:
     TriggerSystem();
     explicit TriggerSystem(const TriggerSystemConfig& config);
     ~TriggerSystem();
 
+    // -------------------------------------------------------------------------
+    // Event Bus Integration (hot-reload safe)
+    // -------------------------------------------------------------------------
+
+    /// @brief Set the event bus for event emission
+    ///
+    /// When set, the trigger system emits typed events for every trigger
+    /// interaction (enter, exit, stay, activate, state changes).
+    /// Plugins subscribe via EventBus and re-register on hot-reload.
+    void set_event_bus(void_event::EventBus* event_bus) { m_event_bus = event_bus; }
+
+    /// @brief Get the current event bus
+    [[nodiscard]] void_event::EventBus* event_bus() const { return m_event_bus; }
+
+    // -------------------------------------------------------------------------
     // Configuration
+    // -------------------------------------------------------------------------
+
     const TriggerSystemConfig& config() const { return m_config; }
     void set_config(const TriggerSystemConfig& config);
 
@@ -303,7 +333,19 @@ private:
     bool check_entity_filter(EntityId entity, const Trigger& trigger) const;
     TriggerEvent create_event(TriggerEventType type, TriggerId trigger, EntityId entity, const Vec3& position);
 
+    // Event bus emission helpers
+    void emit_enter_event(const Trigger& trigger, EntityId entity, const Vec3& position);
+    void emit_exit_event(const Trigger& trigger, EntityId entity, const Vec3& position);
+    void emit_stay_event(const Trigger& trigger, EntityId entity, const Vec3& position, float dt);
+    void emit_activated_event(const Trigger& trigger, EntityId entity, const Vec3& position, TriggerEventType cause);
+    void emit_cooldown_started(const Trigger& trigger);
+    void emit_cooldown_ended(const Trigger& trigger);
+    void emit_state_change(const Trigger& trigger, bool enabled);
+
     TriggerSystemConfig m_config;
+
+    // Event bus for hot-reload-safe event emission
+    void_event::EventBus* m_event_bus{nullptr};
 
     std::unordered_map<TriggerId, std::unique_ptr<Trigger>> m_triggers;
     std::unordered_map<ZoneId, std::unique_ptr<TriggerZone>> m_zones;
@@ -313,6 +355,21 @@ private:
     // Entity tracking
     std::unordered_map<EntityId, Vec3> m_entity_positions;
     std::unordered_map<EntityId, std::unordered_set<TriggerId>> m_entity_triggers;
+
+    // Per-entity per-trigger stay time tracking (for TriggerStayEvent.time_inside)
+    struct EntityTriggerKey {
+        EntityId entity;
+        TriggerId trigger;
+        bool operator==(const EntityTriggerKey&) const = default;
+    };
+    struct EntityTriggerKeyHash {
+        std::size_t operator()(const EntityTriggerKey& k) const noexcept {
+            auto h1 = std::hash<std::uint64_t>{}(k.entity.value);
+            auto h2 = std::hash<std::uint64_t>{}(k.trigger.value);
+            return h1 ^ (h2 * 2654435761ULL);
+        }
+    };
+    std::unordered_map<EntityTriggerKey, float, EntityTriggerKeyHash> m_entity_stay_times;
 
     // Spatial acceleration
     struct SpatialCell {
@@ -324,6 +381,7 @@ private:
     EntityTagsCallback m_tags_getter;
     IsPlayerCallback m_is_player;
 
+    // Legacy callbacks (still supported for non-plugin code)
     TriggerCallback m_on_trigger_enter;
     TriggerCallback m_on_trigger_exit;
     TriggerCallback m_on_trigger_activate;
@@ -406,6 +464,31 @@ namespace prelude {
     using void_triggers::Trigger;
     using void_triggers::TriggerZone;
     using void_triggers::TriggerSystem;
+
+    // Event types (hot-reload safe)
+    using void_triggers::TriggerEnterEvent;
+    using void_triggers::TriggerExitEvent;
+    using void_triggers::TriggerStayEvent;
+    using void_triggers::TriggerActivatedEvent;
+    using void_triggers::TriggerCooldownStartedEvent;
+    using void_triggers::TriggerCooldownEndedEvent;
+    using void_triggers::TriggerEnabledEvent;
+    using void_triggers::TriggerDisabledEvent;
+    using void_triggers::TriggerCreatedEvent;
+    using void_triggers::TriggerDestroyedEvent;
+    using void_triggers::TriggerResetEvent;
+    using void_triggers::ZoneCreatedEvent;
+    using void_triggers::ZoneDestroyedEvent;
+
+    // Action request events (for plugin-based handling)
+    using void_triggers::SpawnRequestEvent;
+    using void_triggers::DestroyRequestEvent;
+    using void_triggers::TeleportRequestEvent;
+    using void_triggers::PlayAudioRequestEvent;
+    using void_triggers::PlayEffectRequestEvent;
+    using void_triggers::SetVariableRequestEvent;
+    using void_triggers::EnableTriggerRequestEvent;
+    using void_triggers::TriggerCustomEvent;
 }
 
 } // namespace void_triggers

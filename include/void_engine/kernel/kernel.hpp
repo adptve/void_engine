@@ -114,6 +114,43 @@ public:
     virtual void remove_sandbox(const std::string& name) = 0;
 
     // =========================================================================
+    // Stage Scheduler (Frame Execution)
+    // =========================================================================
+
+    /// @brief Register a system into a stage
+    /// @param stage The stage to register into
+    /// @param name Unique name for the system (for debugging/profiling)
+    /// @param func System function to call each frame
+    /// @param priority Execution order within stage (lower = earlier)
+    virtual void register_system(Stage stage, const std::string& name,
+                                  SystemFunc func, std::int32_t priority = 0) = 0;
+
+    /// @brief Unregister a system from a stage
+    virtual void unregister_system(Stage stage, const std::string& name) = 0;
+
+    /// @brief Enable/disable a system
+    virtual void set_system_enabled(Stage stage, const std::string& name, bool enabled) = 0;
+
+    /// @brief Run a single stage (called by Runtime during frame loop)
+    /// @param stage The stage to execute
+    /// @param dt Delta time in seconds
+    virtual void run_stage(Stage stage, float dt) = 0;
+
+    /// @brief Configure hot-reload polling
+    /// @param poll_ms Poll interval in milliseconds
+    /// @param debounce_ms Debounce time in milliseconds
+    virtual void enable_hot_reload(std::uint32_t poll_ms, std::uint32_t debounce_ms) = 0;
+
+    /// @brief Disable hot-reload
+    virtual void disable_hot_reload() = 0;
+
+    /// @brief Get stage configuration
+    [[nodiscard]] virtual StageConfig get_stage_config(Stage stage) const = 0;
+
+    /// @brief Set stage configuration
+    virtual void set_stage_config(Stage stage, const StageConfig& config) = 0;
+
+    // =========================================================================
     // Events
     // =========================================================================
 
@@ -170,6 +207,17 @@ public:
     [[nodiscard]] std::shared_ptr<Sandbox> create_sandbox(const SandboxConfig& config) override;
     [[nodiscard]] std::shared_ptr<Sandbox> get_sandbox(const std::string& name) override;
     void remove_sandbox(const std::string& name) override;
+
+    // Stage Scheduler
+    void register_system(Stage stage, const std::string& name,
+                         SystemFunc func, std::int32_t priority = 0) override;
+    void unregister_system(Stage stage, const std::string& name) override;
+    void set_system_enabled(Stage stage, const std::string& name, bool enabled) override;
+    void run_stage(Stage stage, float dt) override;
+    void enable_hot_reload(std::uint32_t poll_ms, std::uint32_t debounce_ms) override;
+    void disable_hot_reload() override;
+    [[nodiscard]] StageConfig get_stage_config(Stage stage) const override;
+    void set_stage_config(Stage stage, const StageConfig& config) override;
 
     void set_on_phase_change(std::function<void(const KernelPhaseEvent&)> callback) override;
 
@@ -249,6 +297,18 @@ private:
 
     // Callbacks
     std::function<void(const KernelPhaseEvent&)> m_on_phase_change;
+
+    // Stage Scheduler
+    static constexpr std::size_t STAGE_COUNT = static_cast<std::size_t>(Stage::_Count);
+    std::array<std::vector<SystemInfo>, STAGE_COUNT> m_stage_systems;
+    std::array<StageConfig, STAGE_COUNT> m_stage_configs;
+    std::array<bool, STAGE_COUNT> m_stage_dirty;  // Need re-sort by priority
+    mutable std::mutex m_stage_mutex;
+
+    // Hot-reload configuration
+    std::uint32_t m_hot_reload_poll_ms{100};
+    std::uint32_t m_hot_reload_debounce_ms{500};
+    bool m_hot_reload_enabled{true};
 };
 
 // =============================================================================

@@ -350,6 +350,68 @@ enum class SandboxState : std::uint8_t {
 [[nodiscard]] const char* to_string(SandboxState state);
 
 // =============================================================================
+// Frame Stage Types (for Runtime frame loop)
+// =============================================================================
+
+/// @brief Frame execution stages
+///
+/// These stages define the order of execution within each frame.
+/// Systems register into stages; Kernel executes stages in order.
+/// This separates frame execution order from initialization order.
+enum class Stage : std::uint8_t {
+    Input,          ///< Poll and process input events
+    HotReloadPoll,  ///< Check for hot-reload (plugins, widgets, assets)
+    EventDispatch,  ///< Dispatch queued events
+    Update,         ///< Variable timestep update (gameplay, AI, etc.)
+    FixedUpdate,    ///< Fixed timestep update (physics)
+    PostFixed,      ///< Post-physics (trigger events, collision response)
+    RenderPrepare,  ///< Prepare render state (culling, batching)
+    Render,         ///< Submit render commands
+    UI,             ///< UI update and render
+    Audio,          ///< Audio update
+    Streaming,      ///< Asset streaming, API sync
+
+    _Count          ///< Number of stages (internal use)
+};
+
+/// Convert Stage to string
+[[nodiscard]] inline const char* to_string(Stage stage) {
+    switch (stage) {
+        case Stage::Input:         return "Input";
+        case Stage::HotReloadPoll: return "HotReloadPoll";
+        case Stage::EventDispatch: return "EventDispatch";
+        case Stage::Update:        return "Update";
+        case Stage::FixedUpdate:   return "FixedUpdate";
+        case Stage::PostFixed:     return "PostFixed";
+        case Stage::RenderPrepare: return "RenderPrepare";
+        case Stage::Render:        return "Render";
+        case Stage::UI:            return "UI";
+        case Stage::Audio:         return "Audio";
+        case Stage::Streaming:     return "Streaming";
+        case Stage::_Count:        return "_Count";
+    }
+    return "Unknown";
+}
+
+/// @brief System function signature
+/// @param dt Delta time in seconds (for Update), or fixed timestep (for FixedUpdate)
+using SystemFunc = std::function<void(float dt)>;
+
+/// @brief System registration info
+struct SystemInfo {
+    std::string name;
+    SystemFunc func;
+    std::int32_t priority{0};  ///< Lower = runs first within stage
+    bool enabled{true};
+};
+
+/// @brief Stage configuration
+struct StageConfig {
+    bool enabled{true};
+    bool profile{false};  ///< Collect timing stats
+};
+
+// =============================================================================
 // Kernel Types
 // =============================================================================
 

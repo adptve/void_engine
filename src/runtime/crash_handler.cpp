@@ -2,7 +2,7 @@
 /// @brief Crash handling implementation for void_runtime
 
 #include "crash_handler.hpp"
-#include "runtime.hpp"
+#include "runtime_legacy.hpp"
 
 #include <chrono>
 #include <cstdlib>

@@ -2,6 +2,7 @@
 /// @brief Action system implementation for void_triggers module
 
 #include <void_engine/triggers/actions.hpp>
+#include <void_engine/event/event_bus.hpp>
 
 #include <cmath>
 
@@ -169,18 +170,30 @@ SpawnAction::SpawnAction(const std::string& prefab, const Vec3& offset)
 SpawnAction::~SpawnAction() = default;
 
 ActionResult SpawnAction::execute(const TriggerEvent& event, float /*dt*/) {
-    if (!m_spawn_callback) {
-        return ActionResult::Failed;
-    }
-
     Vec3 spawn_pos = m_spawn_at_trigger ? event.position : m_offset;
     spawn_pos = spawn_pos + m_offset;
 
-    for (std::uint32_t i = 0; i < m_count; ++i) {
-        m_last_spawned = m_spawn_callback(m_prefab, spawn_pos, m_rotation);
+    // Prefer callback for direct execution; fall back to event bus
+    if (m_spawn_callback) {
+        for (std::uint32_t i = 0; i < m_count; ++i) {
+            m_last_spawned = m_spawn_callback(m_prefab, spawn_pos, m_rotation);
+        }
+        return m_last_spawned ? ActionResult::Success : ActionResult::Failed;
     }
 
-    return m_last_spawned ? ActionResult::Success : ActionResult::Failed;
+    if (m_event_bus) {
+        m_event_bus->publish(SpawnRequestEvent{
+            event.trigger,
+            m_prefab,
+            spawn_pos,
+            m_rotation,
+            m_count,
+            event.timestamp
+        });
+        return ActionResult::Success;
+    }
+
+    return ActionResult::Failed;
 }
 
 void SpawnAction::reset() {
@@ -208,17 +221,25 @@ DestroyAction::DestroyAction() = default;
 DestroyAction::~DestroyAction() = default;
 
 ActionResult DestroyAction::execute(const TriggerEvent& event, float /*dt*/) {
-    if (!m_destroy_callback) {
-        return ActionResult::Failed;
-    }
-
     EntityId target = m_destroy_triggering ? event.entity : m_target;
-    if (!target) {
-        return ActionResult::Failed;
+
+    if (m_destroy_callback) {
+        if (!target) return ActionResult::Failed;
+        m_destroy_callback(target);
+        return ActionResult::Success;
     }
 
-    m_destroy_callback(target);
-    return ActionResult::Success;
+    if (m_event_bus) {
+        m_event_bus->publish(DestroyRequestEvent{
+            event.trigger,
+            target,
+            m_destroy_triggering,
+            event.timestamp
+        });
+        return ActionResult::Success;
+    }
+
+    return ActionResult::Failed;
 }
 
 void DestroyAction::reset() {
@@ -250,17 +271,30 @@ TeleportAction::TeleportAction(const Vec3& destination)
 TeleportAction::~TeleportAction() = default;
 
 ActionResult TeleportAction::execute(const TriggerEvent& event, float /*dt*/) {
-    if (!m_teleport_callback) {
-        return ActionResult::Failed;
-    }
-
     Vec3 final_pos = m_destination;
     if (m_relative) {
         final_pos = event.position + m_destination;
     }
 
-    m_teleport_callback(event.entity, final_pos, m_rotation);
-    return ActionResult::Success;
+    if (m_teleport_callback) {
+        m_teleport_callback(event.entity, final_pos, m_rotation);
+        return ActionResult::Success;
+    }
+
+    if (m_event_bus) {
+        m_event_bus->publish(TeleportRequestEvent{
+            event.trigger,
+            event.entity,
+            final_pos,
+            m_rotation,
+            m_set_rotation,
+            m_relative,
+            event.timestamp
+        });
+        return ActionResult::Success;
+    }
+
+    return ActionResult::Failed;
 }
 
 void TeleportAction::reset() {
@@ -294,7 +328,19 @@ SetVariableAction::SetVariableAction(const std::string& variable, const Variable
 
 SetVariableAction::~SetVariableAction() = default;
 
-ActionResult SetVariableAction::execute(const TriggerEvent& /*event*/, float /*dt*/) {
+ActionResult SetVariableAction::execute(const TriggerEvent& event, float /*dt*/) {
+    // Event bus path: emit a request event for GameState to handle
+    if (!m_setter && m_event_bus) {
+        m_event_bus->publish(SetVariableRequestEvent{
+            event.trigger,
+            m_variable,
+            m_value,
+            static_cast<std::uint8_t>(m_operation),
+            event.timestamp
+        });
+        return ActionResult::Success;
+    }
+
     if (!m_setter) {
         return ActionResult::Failed;
     }
@@ -387,17 +433,34 @@ SendEventAction::SendEventAction(const std::string& event_name)
 SendEventAction::~SendEventAction() = default;
 
 ActionResult SendEventAction::execute(const TriggerEvent& event, float /*dt*/) {
-    if (!m_sender || m_event_name.empty()) {
+    if (m_event_name.empty()) {
         return ActionResult::Failed;
     }
 
-    TriggerEvent new_event = event;
-    new_event.custom_type = m_event_name;
-    new_event.type = TriggerEventType::Custom;
-    new_event.data = m_data;
+    // Legacy callback path
+    if (m_sender) {
+        TriggerEvent new_event = event;
+        new_event.custom_type = m_event_name;
+        new_event.type = TriggerEventType::Custom;
+        new_event.data = m_data;
+        m_sender(m_event_name, new_event);
+        return ActionResult::Success;
+    }
 
-    m_sender(m_event_name, new_event);
-    return ActionResult::Success;
+    // Event bus path (hot-reload safe)
+    if (m_event_bus) {
+        m_event_bus->publish(TriggerCustomEvent{
+            event.trigger,
+            event.entity,
+            m_event_name,
+            event.position,
+            m_broadcast,
+            event.timestamp
+        });
+        return ActionResult::Success;
+    }
+
+    return ActionResult::Failed;
 }
 
 void SendEventAction::reset() {
@@ -430,13 +493,31 @@ PlayAudioAction::PlayAudioAction(const std::string& audio_path)
 PlayAudioAction::~PlayAudioAction() = default;
 
 ActionResult PlayAudioAction::execute(const TriggerEvent& event, float /*dt*/) {
-    if (!m_audio_callback || m_audio_path.empty()) {
+    if (m_audio_path.empty()) {
         return ActionResult::Failed;
     }
 
     Vec3 pos = m_spatial ? event.position : Vec3{};
-    m_audio_callback(m_audio_path, pos, m_volume, m_pitch);
-    return ActionResult::Success;
+
+    if (m_audio_callback) {
+        m_audio_callback(m_audio_path, pos, m_volume, m_pitch);
+        return ActionResult::Success;
+    }
+
+    if (m_event_bus) {
+        m_event_bus->publish(PlayAudioRequestEvent{
+            event.trigger,
+            m_audio_path,
+            pos,
+            m_volume,
+            m_pitch,
+            m_spatial,
+            event.timestamp
+        });
+        return ActionResult::Success;
+    }
+
+    return ActionResult::Failed;
 }
 
 void PlayAudioAction::reset() {
@@ -469,13 +550,32 @@ PlayEffectAction::PlayEffectAction(const std::string& effect_path)
 PlayEffectAction::~PlayEffectAction() = default;
 
 ActionResult PlayEffectAction::execute(const TriggerEvent& event, float /*dt*/) {
-    if (!m_effect_callback || m_effect_path.empty()) {
+    if (m_effect_path.empty()) {
         return ActionResult::Failed;
     }
 
     Vec3 pos = event.position + m_offset;
-    m_effect_callback(m_effect_path, pos, m_rotation, m_scale);
-    return ActionResult::Success;
+
+    if (m_effect_callback) {
+        m_effect_callback(m_effect_path, pos, m_rotation, m_scale);
+        return ActionResult::Success;
+    }
+
+    if (m_event_bus) {
+        EntityId attach_entity = m_attach ? event.entity : EntityId{};
+        m_event_bus->publish(PlayEffectRequestEvent{
+            event.trigger,
+            m_effect_path,
+            pos,
+            m_rotation,
+            m_scale,
+            attach_entity,
+            event.timestamp
+        });
+        return ActionResult::Success;
+    }
+
+    return ActionResult::Failed;
 }
 
 void PlayEffectAction::reset() {
@@ -509,13 +609,28 @@ EnableTriggerAction::EnableTriggerAction(TriggerId trigger, bool enable)
 
 EnableTriggerAction::~EnableTriggerAction() = default;
 
-ActionResult EnableTriggerAction::execute(const TriggerEvent& /*event*/, float /*dt*/) {
-    if (!m_callback || !m_target) {
+ActionResult EnableTriggerAction::execute(const TriggerEvent& event, float /*dt*/) {
+    if (!m_target) {
         return ActionResult::Failed;
     }
 
-    m_callback(m_target, m_toggle ? true : m_enable);  // Toggle handled elsewhere
-    return ActionResult::Success;
+    if (m_callback) {
+        m_callback(m_target, m_toggle ? true : m_enable);
+        return ActionResult::Success;
+    }
+
+    if (m_event_bus) {
+        m_event_bus->publish(EnableTriggerRequestEvent{
+            event.trigger,
+            m_target,
+            m_enable,
+            m_toggle,
+            event.timestamp
+        });
+        return ActionResult::Success;
+    }
+
+    return ActionResult::Failed;
 }
 
 void EnableTriggerAction::reset() {

@@ -2,6 +2,7 @@
 /// @brief Main trigger system implementation for void_triggers module
 
 #include <void_engine/triggers/triggers.hpp>
+#include <void_engine/event/event_bus.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -278,6 +279,17 @@ TriggerId TriggerSystem::create_trigger(const TriggerConfig& config) {
     m_triggers[id] = std::move(trigger);
     m_stats.total_triggers = m_triggers.size();
 
+    // Emit creation event via EventBus
+    if (m_event_bus) {
+        m_event_bus->publish(TriggerCreatedEvent{
+            id,
+            config.name,
+            config.type,
+            config.flags,
+            m_current_time
+        });
+    }
+
     return id;
 }
 
@@ -297,18 +309,35 @@ bool TriggerSystem::remove_trigger(TriggerId id) {
         return false;
     }
 
+    // Capture info before destruction for event emission
+    std::string trigger_name = it->second->name();
+    std::uint32_t total_activations = it->second->activation_count();
+
     // Remove from name lookup
-    if (!it->second->name().empty()) {
-        m_trigger_names.erase(it->second->name());
+    if (!trigger_name.empty()) {
+        m_trigger_names.erase(trigger_name);
     }
 
-    // Remove from entity tracking
+    // Remove from entity tracking and stay times
     for (auto& [entity, triggers] : m_entity_triggers) {
-        triggers.erase(id);
+        if (triggers.erase(id)) {
+            m_entity_stay_times.erase({entity, id});
+        }
     }
 
     m_triggers.erase(it);
     m_stats.total_triggers = m_triggers.size();
+
+    // Emit destruction event via EventBus
+    if (m_event_bus) {
+        m_event_bus->publish(TriggerDestroyedEvent{
+            id,
+            trigger_name,
+            total_activations,
+            m_current_time
+        });
+    }
+
     return true;
 }
 
@@ -334,6 +363,17 @@ ZoneId TriggerSystem::create_zone(const ZoneConfig& config) {
     m_zones[id] = std::move(zone);
     m_stats.total_zones = m_zones.size();
 
+    // Emit zone creation event via EventBus
+    if (m_event_bus) {
+        m_event_bus->publish(ZoneCreatedEvent{
+            id,
+            config.name,
+            config.position,
+            config.volume_type,
+            m_current_time
+        });
+    }
+
     return id;
 }
 
@@ -353,12 +393,24 @@ bool TriggerSystem::remove_zone(ZoneId id) {
         return false;
     }
 
-    if (!it->second->name().empty()) {
-        m_zone_names.erase(it->second->name());
+    std::string zone_name = it->second->name();
+
+    if (!zone_name.empty()) {
+        m_zone_names.erase(zone_name);
     }
 
     m_zones.erase(it);
     m_stats.total_zones = m_zones.size();
+
+    // Emit zone destruction event via EventBus
+    if (m_event_bus) {
+        m_event_bus->publish(ZoneDestroyedEvent{
+            id,
+            zone_name,
+            m_current_time
+        });
+    }
+
     return true;
 }
 
@@ -473,7 +525,13 @@ bool TriggerSystem::fire_trigger(TriggerId trigger, const TriggerEvent& event) {
         return false;
     }
 
-    return t->try_activate(event);
+    bool activated = t->try_activate(event);
+    if (activated) {
+        emit_activated_event(*t, event.entity, event.position, event.type);
+        m_stats.total_activations++;
+    }
+
+    return activated;
 }
 
 void TriggerSystem::send_event(const std::string& event_type, EntityId entity, const Vec3& position) {
@@ -489,8 +547,22 @@ void TriggerSystem::send_event(const std::string& event_type, EntityId entity, c
         if (trigger->config().type == TriggerType::Event) {
             TriggerEvent trigger_event = event;
             trigger_event.trigger = id;
-            trigger->try_activate(trigger_event);
+            if (trigger->try_activate(trigger_event)) {
+                emit_activated_event(*trigger, entity, position, TriggerEventType::Custom);
+            }
         }
+    }
+
+    // Emit custom event via EventBus for plugin consumption
+    if (m_event_bus) {
+        m_event_bus->publish(TriggerCustomEvent{
+            TriggerId{},
+            entity,
+            event_type,
+            position,
+            true, // broadcast
+            m_current_time
+        });
     }
 }
 
@@ -503,12 +575,13 @@ void TriggerSystem::update(float dt) {
             continue;
         }
 
+        // Track cooldown transitions for event emission
+        bool was_in_cooldown = (trigger->state() == TriggerState::Cooldown);
+
         // Process stay events
         if (trigger->config().type == TriggerType::Stay) {
             for (auto entity : trigger->entities_inside()) {
-                Vec3 pos = m_entity_positions[entity];
-                TriggerEvent event = create_event(TriggerEventType::Activate, id, entity, pos);
-                trigger->update(dt, event);
+                process_entity_stay(entity, *trigger, dt);
             }
         } else {
             TriggerEvent event;
@@ -517,10 +590,17 @@ void TriggerSystem::update(float dt) {
             trigger->update(dt, event);
         }
 
+        // Detect cooldown completion and emit event
+        if (was_in_cooldown && trigger->state() != TriggerState::Cooldown) {
+            emit_cooldown_ended(*trigger);
+        }
+
         // Handle timed triggers
         if (trigger->config().type == TriggerType::Timed) {
             TriggerEvent event = create_event(TriggerEventType::Timer, id, EntityId{}, Vec3{});
-            trigger->try_activate(event);
+            if (trigger->try_activate(event)) {
+                emit_activated_event(*trigger, EntityId{}, Vec3{}, TriggerEventType::Timer);
+            }
         }
     }
 }
@@ -531,12 +611,22 @@ void TriggerSystem::process_entity_enter(EntityId entity, Trigger& trigger) {
     Vec3 pos = m_entity_positions[entity];
     TriggerEvent event = create_event(TriggerEventType::Enter, trigger.id(), entity, pos);
 
+    // Start tracking stay time for this entity-trigger pair
+    m_entity_stay_times[{entity, trigger.id()}] = 0.0f;
+
+    // Emit enter event via EventBus (hot-reload safe)
+    emit_enter_event(trigger, entity, pos);
+
     if (trigger.config().type == TriggerType::Enter ||
         trigger.config().type == TriggerType::EnterExit) {
         trigger.try_activate(event);
         m_stats.total_activations++;
+
+        // Emit activation event via EventBus
+        emit_activated_event(trigger, entity, pos, TriggerEventType::Enter);
     }
 
+    // Legacy callbacks (still fire for non-plugin code)
     if (m_on_trigger_enter) {
         m_on_trigger_enter(event);
     }
@@ -547,15 +637,25 @@ void TriggerSystem::process_entity_enter(EntityId entity, Trigger& trigger) {
 void TriggerSystem::process_entity_exit(EntityId entity, Trigger& trigger) {
     trigger.remove_entity(entity);
 
+    // Stop tracking stay time
+    m_entity_stay_times.erase({entity, trigger.id()});
+
     Vec3 pos = m_entity_positions[entity];
     TriggerEvent event = create_event(TriggerEventType::Exit, trigger.id(), entity, pos);
+
+    // Emit exit event via EventBus (hot-reload safe)
+    emit_exit_event(trigger, entity, pos);
 
     if (trigger.config().type == TriggerType::Exit ||
         trigger.config().type == TriggerType::EnterExit) {
         trigger.try_activate(event);
         m_stats.total_activations++;
+
+        // Emit activation event via EventBus
+        emit_activated_event(trigger, entity, pos, TriggerEventType::Exit);
     }
 
+    // Legacy callbacks
     if (m_on_trigger_exit) {
         m_on_trigger_exit(event);
     }
@@ -566,6 +666,16 @@ void TriggerSystem::process_entity_exit(EntityId entity, Trigger& trigger) {
 void TriggerSystem::process_entity_stay(EntityId entity, Trigger& trigger, float dt) {
     Vec3 pos = m_entity_positions[entity];
     TriggerEvent event = create_event(TriggerEventType::Activate, trigger.id(), entity, pos);
+
+    // Update stay time tracking
+    auto stay_key = EntityTriggerKey{entity, trigger.id()};
+    auto stay_it = m_entity_stay_times.find(stay_key);
+    if (stay_it != m_entity_stay_times.end()) {
+        stay_it->second += dt;
+    }
+
+    // Emit stay event via EventBus (hot-reload safe)
+    emit_stay_event(trigger, entity, pos, dt);
 
     trigger.update(dt, event);
 }
@@ -680,8 +790,165 @@ void TriggerSystem::clear() {
     m_zone_names.clear();
     m_entity_positions.clear();
     m_entity_triggers.clear();
+    m_entity_stay_times.clear();
     m_spatial_grid.clear();
     m_stats = Stats{};
+}
+
+// =============================================================================
+// Event Bus Emission Helpers
+// =============================================================================
+
+void TriggerSystem::emit_enter_event(const Trigger& trigger, EntityId entity, const Vec3& position) {
+    if (!m_event_bus) return;
+
+    Vec3 trigger_center;
+    if (trigger.volume()) {
+        trigger_center = trigger.volume()->center();
+    }
+
+    m_event_bus->publish(TriggerEnterEvent{
+        trigger.id(),
+        entity,
+        trigger.name(),
+        trigger.config().type,
+        trigger.config().flags,
+        position,
+        trigger_center,
+        m_current_time,
+        trigger.activation_count(),
+        trigger.entities_inside().size()
+    });
+}
+
+void TriggerSystem::emit_exit_event(const Trigger& trigger, EntityId entity, const Vec3& position) {
+    if (!m_event_bus) return;
+
+    Vec3 trigger_center;
+    if (trigger.volume()) {
+        trigger_center = trigger.volume()->center();
+    }
+
+    m_event_bus->publish(TriggerExitEvent{
+        trigger.id(),
+        entity,
+        trigger.name(),
+        trigger.config().type,
+        trigger.config().flags,
+        position,
+        trigger_center,
+        m_current_time,
+        trigger.activation_count(),
+        trigger.entities_inside().size()
+    });
+}
+
+void TriggerSystem::emit_stay_event(const Trigger& trigger, EntityId entity, const Vec3& position, float dt) {
+    if (!m_event_bus) return;
+
+    Vec3 trigger_center;
+    if (trigger.volume()) {
+        trigger_center = trigger.volume()->center();
+    }
+
+    // Look up accumulated stay time
+    float time_inside = 0.0f;
+    auto stay_it = m_entity_stay_times.find({entity, trigger.id()});
+    if (stay_it != m_entity_stay_times.end()) {
+        time_inside = stay_it->second;
+    }
+
+    m_event_bus->publish(TriggerStayEvent{
+        trigger.id(),
+        entity,
+        trigger.name(),
+        position,
+        trigger_center,
+        m_current_time,
+        dt,
+        time_inside
+    });
+}
+
+void TriggerSystem::emit_activated_event(const Trigger& trigger, EntityId entity,
+                                          const Vec3& position, TriggerEventType cause) {
+    if (!m_event_bus) return;
+
+    Vec3 trigger_center;
+    if (trigger.volume()) {
+        trigger_center = trigger.volume()->center();
+    }
+
+    const auto& config = trigger.config();
+    std::uint32_t count = trigger.activation_count();
+    bool is_final = (config.max_activations > 0 && count >= config.max_activations) ||
+                    has_flag(config.flags, TriggerFlags::OneShot);
+
+    m_event_bus->publish(TriggerActivatedEvent{
+        trigger.id(),
+        entity,
+        trigger.name(),
+        config.type,
+        config.flags,
+        cause,
+        position,
+        trigger_center,
+        m_current_time,
+        count,
+        config.max_activations,
+        is_final
+    });
+
+    // Also emit the global legacy callback
+    if (m_on_trigger_activate) {
+        TriggerEvent legacy_event;
+        legacy_event.id = TriggerEventId{m_next_event_id++};
+        legacy_event.type = TriggerEventType::Activate;
+        legacy_event.trigger = trigger.id();
+        legacy_event.entity = entity;
+        legacy_event.position = position;
+        legacy_event.timestamp = m_current_time;
+        m_on_trigger_activate(legacy_event);
+    }
+}
+
+void TriggerSystem::emit_cooldown_started(const Trigger& trigger) {
+    if (!m_event_bus) return;
+
+    m_event_bus->publish(TriggerCooldownStartedEvent{
+        trigger.id(),
+        trigger.name(),
+        trigger.config().cooldown,
+        m_current_time
+    });
+}
+
+void TriggerSystem::emit_cooldown_ended(const Trigger& trigger) {
+    if (!m_event_bus) return;
+
+    m_event_bus->publish(TriggerCooldownEndedEvent{
+        trigger.id(),
+        trigger.name(),
+        m_current_time
+    });
+}
+
+void TriggerSystem::emit_state_change(const Trigger& trigger, bool enabled) {
+    if (!m_event_bus) return;
+
+    if (enabled) {
+        m_event_bus->publish(TriggerEnabledEvent{
+            trigger.id(),
+            trigger.name(),
+            m_current_time
+        });
+    } else {
+        m_event_bus->publish(TriggerDisabledEvent{
+            trigger.id(),
+            trigger.name(),
+            m_current_time
+        });
+    }
 }
 
 } // namespace void_triggers

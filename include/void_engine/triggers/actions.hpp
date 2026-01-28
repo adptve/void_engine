@@ -5,11 +5,15 @@
 
 #include "fwd.hpp"
 #include "types.hpp"
+#include "events.hpp"
 
 #include <functional>
 #include <memory>
 #include <string>
 #include <vector>
+
+// Forward declaration for event bus integration
+namespace void_event { class EventBus; }
 
 namespace void_triggers {
 
@@ -166,6 +170,10 @@ public:
     void set_spawn_at_trigger(bool at_trigger) { m_spawn_at_trigger = at_trigger; }
     void set_spawn_callback(SpawnCallback callback) { m_spawn_callback = std::move(callback); }
 
+    /// @brief Set event bus for hot-reload-safe event emission
+    /// When set and no callback is provided, emits SpawnRequestEvent instead
+    void set_event_bus(void_event::EventBus* bus) { m_event_bus = bus; }
+
     /// @brief Get last spawned entity
     EntityId last_spawned() const { return m_last_spawned; }
 
@@ -176,6 +184,7 @@ private:
     std::uint32_t m_count{1};
     bool m_spawn_at_trigger{true};
     SpawnCallback m_spawn_callback;
+    void_event::EventBus* m_event_bus{nullptr};
     EntityId m_last_spawned;
 };
 
@@ -199,11 +208,13 @@ public:
     void set_target_entity(EntityId entity) { m_target = entity; m_destroy_triggering = false; }
     void set_destroy_triggering(bool destroy) { m_destroy_triggering = destroy; }
     void set_destroy_callback(DestroyCallback callback) { m_destroy_callback = std::move(callback); }
+    void set_event_bus(void_event::EventBus* bus) { m_event_bus = bus; }
 
 private:
     EntityId m_target;
     bool m_destroy_triggering{true};
     DestroyCallback m_destroy_callback;
+    void_event::EventBus* m_event_bus{nullptr};
 };
 
 // =============================================================================
@@ -228,6 +239,7 @@ public:
     void set_rotation(const Quat& rotation) { m_rotation = rotation; m_set_rotation = true; }
     void set_relative(bool relative) { m_relative = relative; }
     void set_teleport_callback(TeleportCallback callback) { m_teleport_callback = std::move(callback); }
+    void set_event_bus(void_event::EventBus* bus) { m_event_bus = bus; }
 
 private:
     Vec3 m_destination;
@@ -235,6 +247,7 @@ private:
     bool m_set_rotation{false};
     bool m_relative{false};
     TeleportCallback m_teleport_callback;
+    void_event::EventBus* m_event_bus{nullptr};
 };
 
 // =============================================================================
@@ -270,6 +283,7 @@ public:
     void set_value(const VariableValue& value) { m_value = value; }
     void set_operation(Operation op) { m_operation = op; }
     void set_variable_setter(VariableSetter setter) { m_setter = std::move(setter); }
+    void set_event_bus(void_event::EventBus* bus) { m_event_bus = bus; }
 
     using VariableGetter = std::function<VariableValue(const std::string&)>;
     void set_variable_getter(VariableGetter getter) { m_getter = std::move(getter); }
@@ -280,6 +294,7 @@ private:
     Operation m_operation{Operation::Set};
     VariableSetter m_setter;
     VariableGetter m_getter;
+    void_event::EventBus* m_event_bus{nullptr};
 };
 
 // =============================================================================
@@ -304,6 +319,7 @@ public:
     void set_target_entity(EntityId entity) { m_target = entity; }
     void set_broadcast(bool broadcast) { m_broadcast = broadcast; }
     void set_event_sender(EventSender sender) { m_sender = std::move(sender); }
+    void set_event_bus(void_event::EventBus* bus) { m_event_bus = bus; }
 
     template<typename T>
     void set_data(const std::string& key, const T& value) {
@@ -316,6 +332,7 @@ private:
     bool m_broadcast{false};
     std::unordered_map<std::string, std::any> m_data;
     EventSender m_sender;
+    void_event::EventBus* m_event_bus{nullptr};
 };
 
 // =============================================================================
@@ -341,6 +358,7 @@ public:
     void set_pitch(float pitch) { m_pitch = pitch; }
     void set_spatial(bool spatial) { m_spatial = spatial; }
     void set_audio_callback(AudioCallback callback) { m_audio_callback = std::move(callback); }
+    void set_event_bus(void_event::EventBus* bus) { m_event_bus = bus; }
 
 private:
     std::string m_audio_path;
@@ -348,6 +366,7 @@ private:
     float m_pitch{1.0f};
     bool m_spatial{true};
     AudioCallback m_audio_callback;
+    void_event::EventBus* m_event_bus{nullptr};
 };
 
 // =============================================================================
@@ -374,6 +393,7 @@ public:
     void set_scale(float scale) { m_scale = scale; }
     void set_attach_to_entity(bool attach) { m_attach = attach; }
     void set_effect_callback(EffectCallback callback) { m_effect_callback = std::move(callback); }
+    void set_event_bus(void_event::EventBus* bus) { m_event_bus = bus; }
 
 private:
     std::string m_effect_path;
@@ -382,6 +402,7 @@ private:
     float m_scale{1.0f};
     bool m_attach{false};
     EffectCallback m_effect_callback;
+    void_event::EventBus* m_event_bus{nullptr};
 };
 
 // =============================================================================
@@ -406,12 +427,14 @@ public:
     void set_enable(bool enable) { m_enable = enable; }
     void set_toggle(bool toggle) { m_toggle = toggle; }
     void set_enable_callback(TriggerEnableCallback callback) { m_callback = std::move(callback); }
+    void set_event_bus(void_event::EventBus* bus) { m_event_bus = bus; }
 
 private:
     TriggerId m_target;
     bool m_enable{true};
     bool m_toggle{false};
     TriggerEnableCallback m_callback;
+    void_event::EventBus* m_event_bus{nullptr};
 };
 
 // =============================================================================

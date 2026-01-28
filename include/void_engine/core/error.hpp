@@ -339,7 +339,7 @@ private:
 
 /// Result type (similar to Rust's Result<T, E>)
 /// @tparam T Value type
-/// @tparam E Error type (defaults to Error)
+/// @tparam E Error type (defaults to Error, see fwd.hpp)
 template<typename T, typename E>
 class Result {
 public:

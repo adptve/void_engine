@@ -202,11 +202,15 @@ add_subdirectory(src/gamestate)
 add_subdirectory(plugins/example_ai)
 
 # ============================================================================
-# PHASE 10: UI
-# Modules: ui, hud
+# PHASE 10: WIDGET SYSTEM (ACTIVE)
+# Modules: widget (core owns all state, widget plugins hot-swap)
+# Architecture: WidgetStateCore owns all widget state
+#               Widget plugins read state and render through IWidgetAPI
 # ============================================================================
-# add_subdirectory(src/ui)
-# add_subdirectory(src/hud)
+add_subdirectory(src/widget)
+
+# Widget Plugins (hot-swappable widget renderers)
+add_subdirectory(widgets/core)
 
 # ============================================================================
 # PHASE 11: EXTENSIONS
@@ -219,13 +223,20 @@ add_subdirectory(plugins/example_ai)
 # PHASE 12: APPLICATION
 # Modules: runtime, engine
 # ============================================================================
-# add_subdirectory(src/runtime)
+# PHASE 12: RUNTIME
+# ============================================================================
+add_subdirectory(src/runtime)
 # add_subdirectory(src/engine)
 
 # ============================================================================
-# EXECUTABLE
+# EXECUTABLES
 # ============================================================================
+
+# Production executable - thin main, delegates to Runtime
 add_executable(void_engine src/main.cpp)
+
+# Validation/bootstrap harness - full integration test (preserved from phases 1-10)
+add_executable(void_engine_bootstrap src/main-bootstrap.cpp)
 
 # Phase 0 dependencies only
 target_link_libraries(void_engine PRIVATE
@@ -269,14 +280,50 @@ target_link_libraries(void_engine PRIVATE void_cpp)            # Phase 8
 target_link_libraries(void_engine PRIVATE void_shell)          # Phase 8
 target_link_libraries(void_engine PRIVATE void_plugin_api)     # Phase 9
 target_link_libraries(void_engine PRIVATE void_gamestate)      # Phase 9
-# target_link_libraries(void_engine PRIVATE void_ui)            # Phase 10
-# target_link_libraries(void_engine PRIVATE void_hud)           # Phase 10
+target_link_libraries(void_engine PRIVATE void_widget)         # Phase 10
 # target_link_libraries(void_engine PRIVATE void_xr)            # Phase 11
 # target_link_libraries(void_engine PRIVATE void_editor)        # Phase 11
-# target_link_libraries(void_engine PRIVATE void_runtime)       # Phase 12
-# target_link_libraries(void_engine PRIVATE void_engine_lib)    # Phase 12
+target_link_libraries(void_engine PRIVATE void_runtime)         # Phase 12
 
 target_include_directories(void_engine PRIVATE ${CMAKE_SOURCE_DIR}/include)
+
+# Bootstrap executable - validation harness with all phase dependencies
+target_link_libraries(void_engine_bootstrap PRIVATE
+    spdlog::spdlog
+    nlohmann_json::nlohmann_json
+    glm::glm
+    void_math
+    void_structures
+    void_memory
+    void_core
+    void_event
+    void_services
+    void_ir
+    void_kernel
+    void_asset
+    void_shader
+    glfw
+    OpenGL::GL
+    void_render
+    void_presenter
+    void_compositor
+    void_audio
+    void_input
+    void_ecs
+    void_physics
+    void_triggers
+    void_scene
+    void_graph
+    void_script
+    void_scripting
+    void_cpp
+    void_shell
+    void_plugin_api
+    void_gamestate
+    void_widget
+    void_runtime_legacy
+)
+target_include_directories(void_engine_bootstrap PRIVATE ${CMAKE_SOURCE_DIR}/include)
 
 # ============================================================================
 # TESTING (enable when needed)
@@ -298,7 +345,8 @@ endif()
 message(STATUS "")
 message(STATUS "void_engine ${PROJECT_VERSION}")
 message(STATUS "========================================")
-message(STATUS "Active Phase:    9 (Gameplay)")
+message(STATUS "Active Phase:    12 (Runtime + Architecture)")
+message(STATUS "Executables:     void_engine (production), void_engine_bootstrap (validation)")
 message(STATUS "C++ Standard:    ${CMAKE_CXX_STANDARD}")
 message(STATUS "Build Type:      ${CMAKE_BUILD_TYPE}")
 message(STATUS "")

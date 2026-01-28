@@ -96,6 +96,19 @@ class Sandbox;
 class SandboxFactory;
 
 // =============================================================================
+// Stage Scheduler
+// =============================================================================
+
+/// Frame execution stages
+enum class Stage : std::uint8_t;
+
+/// System registration info
+struct SystemInfo;
+
+/// Stage configuration
+struct StageConfig;
+
+// =============================================================================
 // Kernel System
 // =============================================================================
 
