@@ -190,13 +190,16 @@ add_subdirectory(src/cpp)
 add_subdirectory(src/shell)
 
 # ============================================================================
-# PHASE 9: GAMEPLAY
-# Modules: ai, combat, inventory, gamestate
+# PHASE 9: GAMEPLAY (ACTIVE)
+# Modules: plugin_api, gamestate (core owns all state, plugins hot-swap)
+# Architecture: GameStateCore owns AI/Combat/Inventory state stores
+#               Plugins read state and submit commands through IPluginAPI
 # ============================================================================
-# add_subdirectory(src/ai)
-# add_subdirectory(src/combat)
-# add_subdirectory(src/inventory)
-# add_subdirectory(src/gamestate)
+add_subdirectory(src/plugin_api)
+add_subdirectory(src/gamestate)
+
+# Example plugins (hot-swappable gameplay plugins)
+add_subdirectory(plugins/example_ai)
 
 # ============================================================================
 # PHASE 10: UI
@@ -264,10 +267,8 @@ target_link_libraries(void_engine PRIVATE void_script)         # Phase 8
 target_link_libraries(void_engine PRIVATE void_scripting)      # Phase 8
 target_link_libraries(void_engine PRIVATE void_cpp)            # Phase 8
 target_link_libraries(void_engine PRIVATE void_shell)          # Phase 8
-# target_link_libraries(void_engine PRIVATE void_ai)            # Phase 9
-# target_link_libraries(void_engine PRIVATE void_combat)        # Phase 9
-# target_link_libraries(void_engine PRIVATE void_inventory)     # Phase 9
-# target_link_libraries(void_engine PRIVATE void_gamestate)     # Phase 9
+target_link_libraries(void_engine PRIVATE void_plugin_api)     # Phase 9
+target_link_libraries(void_engine PRIVATE void_gamestate)      # Phase 9
 # target_link_libraries(void_engine PRIVATE void_ui)            # Phase 10
 # target_link_libraries(void_engine PRIVATE void_hud)           # Phase 10
 # target_link_libraries(void_engine PRIVATE void_xr)            # Phase 11
@@ -297,7 +298,7 @@ endif()
 message(STATUS "")
 message(STATUS "void_engine ${PROJECT_VERSION}")
 message(STATUS "========================================")
-message(STATUS "Active Phase:    7 (Scene)")
+message(STATUS "Active Phase:    9 (Gameplay)")
 message(STATUS "C++ Standard:    ${CMAKE_CXX_STANDARD}")
 message(STATUS "Build Type:      ${CMAKE_BUILD_TYPE}")
 message(STATUS "")

@@ -98,6 +98,15 @@
 #include "shell/shell.hpp"
 
 // =============================================================================
+// PHASE 9: GAMEPLAY (ACTIVE)
+// =============================================================================
+#include <void_engine/plugin_api/plugin_api.hpp>
+#include <void_engine/plugin_api/state_stores.hpp>
+#include <void_engine/plugin_api/commands.hpp>
+#include <void_engine/plugin_api/plugin_watcher.hpp>
+#include <void_engine/gamestate/gamestate_core.hpp>
+
+// =============================================================================
 // PHASE 9: GAMEPLAY
 // =============================================================================
 // #include <void_engine/ai/fsm.hpp>
@@ -2010,10 +2019,211 @@ int main(int argc, char** argv) {
     spdlog::info("Phase 8 complete");
 
     // =========================================================================
-    // PHASE 9: GAMEPLAY
+    // PHASE 9: GAMEPLAY (ACTIVE)
     // =========================================================================
-    // spdlog::info("Phase 9: Gameplay");
-    // TODO: ai, combat, inventory, gamestate init
+    // Plugin-based gameplay architecture:
+    // - GameStateCore owns all state (AI, Combat, Inventory)
+    // - Plugins read state through IPluginAPI
+    // - Plugins submit commands to modify state
+    // - State survives plugin hot-reloads
+    spdlog::info("Phase 9: Gameplay");
+
+    // -------------------------------------------------------------------------
+    // GAMESTATE CORE - Owns all persistent state
+    // -------------------------------------------------------------------------
+    spdlog::info("  [gamestate_core]");
+
+    void_gamestate::GameStateCoreConfig gamestate_config;
+    gamestate_config.max_ai_entities = 10000;
+    gamestate_config.max_combat_entities = 10000;
+    gamestate_config.max_inventory_entities = 10000;
+    gamestate_config.max_projectiles = 5000;
+    gamestate_config.enable_hot_reload = true;
+    gamestate_config.validate_commands = true;
+
+    void_gamestate::GameStateCore game_state(gamestate_config);
+    game_state.initialize();
+
+    spdlog::info("    State stores initialized (AI, Combat, Inventory)");
+    spdlog::info("    Command processor ready");
+    spdlog::info("    Save/load integration: ready");
+
+    // -------------------------------------------------------------------------
+    // REGISTER TEST ENTITIES
+    // -------------------------------------------------------------------------
+    spdlog::info("  [entities]");
+
+    // Register some test entities with the gameplay systems
+    void_plugin_api::EntityId player_entity{1};
+    void_plugin_api::EntityId enemy_entity{2};
+    void_plugin_api::EntityId npc_entity{3};
+
+    game_state.register_entity(player_entity);
+    game_state.register_entity(enemy_entity);
+    game_state.register_entity(npc_entity);
+
+    spdlog::info("    Registered {} gameplay entities", game_state.stats().ai_entities);
+
+    // Set up player vitals
+    auto& combat_state = game_state.combat_state();
+    combat_state.entity_vitals[player_entity].max_health = 100.0f;
+    combat_state.entity_vitals[player_entity].current_health = 100.0f;
+    combat_state.entity_vitals[player_entity].max_shield = 50.0f;
+    combat_state.entity_vitals[player_entity].current_shield = 50.0f;
+
+    // Set up enemy with more health
+    combat_state.entity_vitals[enemy_entity].max_health = 200.0f;
+    combat_state.entity_vitals[enemy_entity].current_health = 200.0f;
+    combat_state.combat_stats[enemy_entity].base_damage = 15.0f;
+
+    // -------------------------------------------------------------------------
+    // TEST COMMANDS - Demonstrate command pattern
+    // -------------------------------------------------------------------------
+    spdlog::info("  [commands]");
+
+    // Set blackboard values via command
+    auto* api = game_state.plugin_api();
+
+    // AI: Set player's blackboard values
+    api->set_blackboard_bool(player_entity, "is_player", true);
+    api->set_blackboard_float(player_entity, "move_speed", 5.0f);
+    api->set_blackboard_vec3(player_entity, "spawn_position",
+                             void_plugin_api::Vec3{0.0f, 0.0f, 0.0f});
+
+    // AI: Set enemy perception target
+    api->set_perception_target(enemy_entity, player_entity);
+
+    // Verify blackboard was set
+    const auto& ai_state = game_state.ai_state();
+    if (ai_state.entity_blackboards.count(player_entity)) {
+        const auto& bb = ai_state.entity_blackboards.at(player_entity);
+        auto it = bb.bool_values.find("is_player");
+        if (it != bb.bool_values.end() && it->second) {
+            spdlog::info("    Blackboard: is_player = true");
+        }
+    }
+
+    // Combat: Deal damage to enemy
+    auto damage_result = api->apply_damage(enemy_entity, 50.0f, player_entity,
+                                           void_plugin_api::DamageType::Physical);
+    if (damage_result == void_plugin_api::CommandResult::Success) {
+        float remaining = combat_state.entity_vitals[enemy_entity].current_health;
+        spdlog::info("    Damage dealt: enemy health = {:.0f}", remaining);
+    }
+
+    // Inventory: Give player an item
+    void_plugin_api::ItemDefId sword_def{1001};  // Hypothetical sword item
+    auto item_id = api->add_item(player_entity, sword_def, 1);
+    if (item_id.value != 0) {
+        spdlog::info("    Item added: instance={}", item_id.value);
+    }
+
+    // Log command stats
+    auto stats = game_state.stats();
+    spdlog::info("    Commands executed: {}", stats.commands_executed);
+    spdlog::info("    Commands failed: {}", stats.commands_failed);
+
+    // -------------------------------------------------------------------------
+    // STATE SERIALIZATION TEST
+    // -------------------------------------------------------------------------
+    spdlog::info("  [serialization]");
+
+    auto serialized = game_state.serialize_state();
+    spdlog::info("    State serialized: {} bytes", serialized.size());
+
+    // -------------------------------------------------------------------------
+    // PLUGIN WATCHER - Automatic hot-reload
+    // -------------------------------------------------------------------------
+    spdlog::info("  [plugin_watcher]");
+
+    // Configure the watcher for automatic plugin discovery and hot-reload
+    void_plugin_api::PluginWatcherConfig watcher_config;
+    watcher_config.watch_paths = {
+        std::filesystem::current_path() / "plugins"
+    };
+    watcher_config.auto_load_new = true;
+    watcher_config.auto_reload_changed = true;
+    watcher_config.watch_sources = true;  // Detect source changes, trigger rebuild
+    watcher_config.debounce_time = std::chrono::milliseconds(500);
+    watcher_config.poll_interval = std::chrono::milliseconds(100);
+
+    // Set build command (cmake-based build)
+    // {plugin} = plugin name, {source} = source directory
+    watcher_config.build_command = "cmake --build build --target {plugin}";
+
+    game_state.configure_watcher(watcher_config);
+
+    // Subscribe to plugin events for logging
+    if (auto* watcher = game_state.watcher()) {
+        watcher->on_event([](const void_plugin_api::PluginEvent& event) {
+            switch (event.type) {
+                case void_plugin_api::PluginEventType::Discovered:
+                    spdlog::info("    Plugin discovered: {}", event.plugin_name);
+                    break;
+                case void_plugin_api::PluginEventType::LoadSucceeded:
+                    spdlog::info("    Plugin loaded: {}", event.plugin_name);
+                    break;
+                case void_plugin_api::PluginEventType::ReloadStarted:
+                    spdlog::info("    Hot-reload starting: {}", event.plugin_name);
+                    break;
+                case void_plugin_api::PluginEventType::ReloadSucceeded:
+                    spdlog::info("    Hot-reload complete: {}", event.plugin_name);
+                    break;
+                case void_plugin_api::PluginEventType::ReloadFailed:
+                    spdlog::warn("    Hot-reload FAILED: {} - {}", event.plugin_name, event.message);
+                    break;
+                case void_plugin_api::PluginEventType::BuildStarted:
+                    spdlog::info("    Building plugin: {}", event.plugin_name);
+                    break;
+                case void_plugin_api::PluginEventType::BuildFailed:
+                    spdlog::error("    Build FAILED: {} - {}", event.plugin_name, event.message);
+                    break;
+                default:
+                    break;
+            }
+        });
+
+        // Start watching for plugin changes
+        game_state.start_watching();
+        spdlog::info("    Watching: {}", watcher_config.watch_paths[0].string());
+    }
+
+    spdlog::info("    Platform: {} (extension: {})",
+        void_plugin_api::current_platform() == void_plugin_api::Platform::Windows ? "Windows" :
+        void_plugin_api::current_platform() == void_plugin_api::Platform::Linux ? "Linux" :
+        void_plugin_api::current_platform() == void_plugin_api::Platform::MacOS ? "macOS" : "Unknown",
+        void_plugin_api::native_plugin_extension());
+    spdlog::info("    Auto-load new plugins: {}", watcher_config.auto_load_new ? "yes" : "no");
+    spdlog::info("    Auto-reload changed plugins: {}", watcher_config.auto_reload_changed ? "yes" : "no");
+    spdlog::info("    Hot-reload: FULLY ENABLED");
+
+    // -------------------------------------------------------------------------
+    // MANUAL PLUGIN LOADING - Load example_ai if it exists
+    // -------------------------------------------------------------------------
+    spdlog::info("  [plugin_loading]");
+
+    // Check for example_ai plugin
+    std::filesystem::path plugin_path = std::filesystem::current_path() / "plugins" /
+        (std::string("example_ai") + void_plugin_api::native_plugin_extension());
+
+    if (std::filesystem::exists(plugin_path)) {
+        spdlog::info("    Found plugin: {}", plugin_path.filename().string());
+
+        if (game_state.watcher_load_plugin(plugin_path)) {
+            spdlog::info("    Loaded plugin: example_ai");
+            spdlog::info("    Active plugins: {}", game_state.active_plugin_count());
+        } else {
+            spdlog::warn("    Failed to load plugin: example_ai");
+        }
+    } else {
+        spdlog::info("    No example_ai plugin found at: {}", plugin_path.string());
+        spdlog::info("    Build with: cmake --build build --target example_ai");
+    }
+
+    // Update game state (simulates one frame)
+    game_state.update(1.0f / 60.0f);
+
+    spdlog::info("Phase 9 complete");
 
     // =========================================================================
     // PHASE 10: UI
@@ -2039,6 +2249,11 @@ int main(int argc, char** argv) {
     // SHUTDOWN (reverse order)
     // =========================================================================
     spdlog::info("Shutting down...");
+
+    // Shutdown gameplay systems first (stops plugin watcher, unloads plugins)
+    spdlog::info("  [gamestate-shutdown]");
+    game_state.shutdown();
+    spdlog::info("    GameStateCore: shutdown complete (plugins unloaded, watcher stopped)");
 
     // Stop all services (reverse priority order)
     // This will call stop() on each service which handles cleanup

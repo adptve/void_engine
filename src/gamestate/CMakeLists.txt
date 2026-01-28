@@ -6,8 +6,10 @@ void_add_module(NAME void_gamestate
         saveload.cpp
         objectives.cpp
         gamestate.cpp
+        gamestate_core.cpp
     DEPENDENCIES
         void_core
         void_ecs
         void_event
+        void_plugin_api
 )
