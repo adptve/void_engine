@@ -13,6 +13,7 @@ void_add_module(NAME void_runtime
         void_scene
         void_render
         spdlog::spdlog
+        nlohmann_json::nlohmann_json
 )
 
 # Platform-specific libraries for void_runtime

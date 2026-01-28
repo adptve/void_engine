@@ -9,11 +9,17 @@
 #include <void_engine/kernel/kernel.hpp>
 #include <void_engine/event/event_bus.hpp>
 #include <void_engine/scene/world.hpp>
+#include <void_engine/scene/scene_data.hpp>
+#include <void_engine/scene/scene_parser.hpp>
+#include <void_engine/render/gl_renderer.hpp>
 #include <void_engine/ecs/world.hpp>
 
 #include <spdlog/spdlog.h>
+#include <nlohmann/json.hpp>
 
 #include <chrono>
+#include <filesystem>
+#include <fstream>
 #include <thread>
 
 namespace void_runtime {
@@ -36,12 +42,24 @@ struct Runtime::PlatformContext {
 };
 
 // =============================================================================
+// Render Context
+// =============================================================================
+
+struct Runtime::RenderContext {
+    std::unique_ptr<void_render::SceneRenderer> renderer;
+    std::unique_ptr<void_scene::SceneData> scene_data;
+    bool initialized{false};
+    std::filesystem::path scene_path;
+};
+
+// =============================================================================
 // Constructor / Destructor
 // =============================================================================
 
 Runtime::Runtime(const RuntimeConfig& config)
     : m_config(config)
-    , m_platform(std::make_unique<PlatformContext>()) {
+    , m_platform(std::make_unique<PlatformContext>())
+    , m_render(std::make_unique<RenderContext>()) {
 }
 
 Runtime::~Runtime() {
@@ -86,6 +104,11 @@ void_core::Result<void> Runtime::initialize() {
 
     if (m_config.mode != RuntimeMode::Headless) {
         if (auto result = init_platform(); !result) {
+            m_state = RuntimeState::Uninitialized;
+            return result;
+        }
+
+        if (auto result = init_render(); !result) {
             m_state = RuntimeState::Uninitialized;
             return result;
         }
@@ -195,6 +218,7 @@ void Runtime::shutdown() {
     shutdown_io();
 
     if (m_config.mode != RuntimeMode::Headless) {
+        shutdown_render();
         shutdown_platform();
     }
 
@@ -400,6 +424,84 @@ void_core::Result<void> Runtime::init_platform() {
     return void_core::Ok();
 }
 
+void_core::Result<void> Runtime::init_render() {
+    spdlog::info("  [render] Initializing...");
+
+    // Get window dimensions
+    std::uint32_t width, height;
+    m_platform->platform->get_window_size(width, height);
+
+    // Create and initialize the scene renderer
+    m_render->renderer = std::make_unique<void_render::SceneRenderer>();
+    if (!m_render->renderer->initialize(width, height)) {
+        return void_core::Error("Failed to initialize SceneRenderer");
+    }
+
+    // Load scene from manifest if specified
+    if (!m_config.manifest_path.empty()) {
+        std::filesystem::path manifest_path(m_config.manifest_path);
+        std::filesystem::path manifest_dir = manifest_path.parent_path();
+
+        // Read manifest to find scene file
+        std::ifstream manifest_file(manifest_path);
+        if (manifest_file.is_open()) {
+            try {
+                nlohmann::json manifest;
+                manifest_file >> manifest;
+
+                // Get scene file from manifest
+                std::string scene_file;
+                if (manifest.contains("app") && manifest["app"].contains("scene")) {
+                    scene_file = manifest["app"]["scene"].get<std::string>();
+                }
+
+                if (!scene_file.empty()) {
+                    std::filesystem::path scene_path = manifest_dir / scene_file;
+                    m_render->scene_path = scene_path;
+
+                    spdlog::info("  [render] Loading scene: {}", scene_path.string());
+
+                    // Parse the scene file
+                    void_scene::SceneParser parser;
+                    auto result = parser.parse(scene_path);
+
+                    if (result) {
+                        m_render->scene_data = std::make_unique<void_scene::SceneData>(std::move(*result));
+                        m_render->renderer->load_scene(*m_render->scene_data);
+                        spdlog::info("  [render] Scene loaded: {} entities, {} lights",
+                                     m_render->scene_data->entities.size(),
+                                     m_render->scene_data->lights.size());
+                    } else {
+                        spdlog::warn("  [render] Failed to parse scene: {}", parser.last_error());
+                    }
+                }
+            } catch (const std::exception& e) {
+                spdlog::warn("  [render] Failed to parse manifest: {}", e.what());
+            }
+        }
+    }
+
+    // Register render update into RenderPrepare stage
+    m_kernel->register_system(void_kernel::Stage::RenderPrepare, "scene_update",
+        [this](float dt) {
+            if (m_render->renderer) {
+                m_render->renderer->update(dt);
+            }
+        }, 0);
+
+    // Register scene rendering into Render stage (before platform_present)
+    m_kernel->register_system(void_kernel::Stage::Render, "scene_render",
+        [this](float) {
+            if (m_render->renderer) {
+                m_render->renderer->render();
+            }
+        }, 0);  // Before platform_present (which is at 1000)
+
+    m_render->initialized = true;
+    spdlog::info("  [render] Initialized successfully");
+    return void_core::Ok();
+}
+
 void_core::Result<void> Runtime::init_io() {
     spdlog::info("  [io] Initializing...");
 
@@ -447,6 +549,10 @@ void_ecs::World* Runtime::ecs_world() const {
 
 IPlatform* Runtime::platform() const {
     return m_platform ? m_platform->platform.get() : nullptr;
+}
+
+void_render::SceneRenderer* Runtime::renderer() const {
+    return m_render ? m_render->renderer.get() : nullptr;
 }
 
 // =============================================================================
@@ -576,6 +682,24 @@ void Runtime::shutdown_io() {
     m_kernel->unregister_system(void_kernel::Stage::Audio, "audio_update");
 
     spdlog::info("  [io] Shutdown complete");
+}
+
+void Runtime::shutdown_render() {
+    spdlog::info("  [render] Shutting down...");
+
+    // Unregister render systems
+    m_kernel->unregister_system(void_kernel::Stage::RenderPrepare, "scene_update");
+    m_kernel->unregister_system(void_kernel::Stage::Render, "scene_render");
+
+    // Shutdown renderer
+    if (m_render->renderer) {
+        m_render->renderer->shutdown();
+        m_render->renderer.reset();
+    }
+
+    m_render->scene_data.reset();
+    m_render->initialized = false;
+    spdlog::info("  [render] Shutdown complete");
 }
 
 void Runtime::shutdown_platform() {

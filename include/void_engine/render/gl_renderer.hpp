@@ -10,6 +10,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <array>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -225,8 +226,14 @@ public:
     SceneRenderer(const SceneRenderer&) = delete;
     SceneRenderer& operator=(const SceneRenderer&) = delete;
 
-    /// @brief Initialize the renderer
+    /// @brief Initialize the renderer with GLFW window
     bool initialize(GLFWwindow* window);
+
+    /// @brief Initialize the renderer with dimensions (no GLFW required)
+    /// @param width Framebuffer width
+    /// @param height Framebuffer height
+    /// @return true if initialization succeeded
+    bool initialize(std::uint32_t width, std::uint32_t height);
 
     /// @brief Shutdown the renderer
     void shutdown();

@@ -535,9 +535,7 @@ public:
         // Set viewport to match window
         glViewport(0, 0, static_cast<GLsizei>(width), static_cast<GLsizei>(height));
 
-        // Clear with dark blue-gray background
-        glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        // Note: Screen clearing is handled by SceneRenderer::render()
     }
 
     void end_frame() override {

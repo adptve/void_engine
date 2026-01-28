@@ -46,7 +46,8 @@
 namespace void_kernel { class Kernel; }
 namespace void_event { class EventBus; }
 namespace void_ecs { class World; }
-namespace void_scene { class World; }
+namespace void_scene { class World; struct SceneData; }
+namespace void_render { class SceneRenderer; }
 
 namespace void_runtime {
 
@@ -247,6 +248,9 @@ public:
     /// @brief Get the platform interface
     [[nodiscard]] IPlatform* platform() const;
 
+    /// @brief Get the scene renderer
+    [[nodiscard]] void_render::SceneRenderer* renderer() const;
+
     // -------------------------------------------------------------------------
     // Configuration
     // -------------------------------------------------------------------------
@@ -277,6 +281,7 @@ private:
     void_core::Result<void> init_infrastructure();
     void_core::Result<void> init_api_connectivity();
     void_core::Result<void> init_platform();
+    void_core::Result<void> init_render();
     void_core::Result<void> init_io();
     void_core::Result<void> init_simulation();
 
@@ -289,6 +294,7 @@ private:
     // Shutdown phases
     void shutdown_simulation();
     void shutdown_io();
+    void shutdown_render();
     void shutdown_platform();
     void shutdown_infrastructure();
     void shutdown_kernel();
@@ -309,6 +315,10 @@ private:
     // Platform handle (opaque, mode-dependent)
     struct PlatformContext;
     std::unique_ptr<PlatformContext> m_platform;
+
+    // Render context (scene renderer, loaded scene data)
+    struct RenderContext;
+    std::unique_ptr<RenderContext> m_render;
 
     // Callbacks
     FrameCallback m_on_frame;

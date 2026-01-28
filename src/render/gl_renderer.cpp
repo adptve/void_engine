@@ -428,6 +428,36 @@ bool SceneRenderer::initialize(GLFWwindow* window) {
     return true;
 }
 
+bool SceneRenderer::initialize(std::uint32_t width, std::uint32_t height) {
+    m_window = nullptr;  // No GLFW window
+
+    if (!load_opengl_functions()) {
+        spdlog::error("Failed to load OpenGL functions");
+        return false;
+    }
+
+    m_width = static_cast<int>(width);
+    m_height = static_cast<int>(height);
+    m_camera.aspect = static_cast<float>(m_width) / static_cast<float>(m_height);
+
+    // Create built-in meshes
+    create_builtin_meshes();
+
+    // Create shaders
+    if (!create_shaders()) {
+        spdlog::error("Failed to create shaders");
+        return false;
+    }
+
+    // Setup initial OpenGL state
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+
+    spdlog::info("SceneRenderer initialized (no GLFW): {}x{}", m_width, m_height);
+    return true;
+}
+
 void SceneRenderer::shutdown() {
     for (auto& [name, mesh] : m_meshes) {
         mesh.destroy();
