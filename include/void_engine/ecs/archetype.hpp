@@ -27,7 +27,7 @@ inline constexpr EntityLocation::EntityLocation(ArchetypeId arch, std::size_t r)
     : archetype_id(arch), row(r) {}
 
 inline EntityLocation EntityLocation::invalid() noexcept {
-    return EntityLocation{ArchetypeId::invalid(), std::numeric_limits<std::size_t>::max()};
+    return EntityLocation{ArchetypeId::invalid(), (std::numeric_limits<std::size_t>::max)()};
 }
 
 inline bool EntityLocation::is_valid() const noexcept {

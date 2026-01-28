@@ -543,26 +543,39 @@ private:
                 continue;
             }
 
-            // Use solved positions if available
-            if (static_cast<size_t>(index) < m_positions.size()) {
-                body->set_position(m_positions[static_cast<size_t>(index)].p);
-                body->set_rotation(m_positions[static_cast<size_t>(index)].q);
-            } else {
-                // Fallback to direct integration
-                auto new_pos = body->position() + body->linear_velocity() * dt;
-                body->set_position(new_pos);
+            // ALWAYS integrate position from velocity first (semi-implicit Euler)
+            // This is the core physics step - position = position + velocity * dt
+            auto new_pos = body->position() + body->linear_velocity() * dt;
+            body->set_position(new_pos);
 
-                auto w = body->angular_velocity();
-                auto q = body->rotation();
-                void_math::Quat dq{w.x * dt * 0.5f, w.y * dt * 0.5f, w.z * dt * 0.5f, 0.0f};
-                dq = void_math::Quat{
-                    dq.x * q.w + dq.w * q.x + dq.y * q.z - dq.z * q.y,
-                    dq.y * q.w + dq.w * q.y + dq.z * q.x - dq.x * q.z,
-                    dq.z * q.w + dq.w * q.z + dq.x * q.y - dq.y * q.x,
-                    dq.w * q.w - dq.x * q.x - dq.y * q.y - dq.z * q.z
-                };
-                q = void_math::Quat{q.x + dq.x, q.y + dq.y, q.z + dq.z, q.w + dq.w};
-                body->set_rotation(void_math::normalize(q));
+            // Integrate rotation from angular velocity
+            auto w = body->angular_velocity();
+            auto q = body->rotation();
+            void_math::Quat dq{w.x * dt * 0.5f, w.y * dt * 0.5f, w.z * dt * 0.5f, 0.0f};
+            dq = void_math::Quat{
+                dq.x * q.w + dq.w * q.x + dq.y * q.z - dq.z * q.y,
+                dq.y * q.w + dq.w * q.y + dq.z * q.x - dq.x * q.z,
+                dq.z * q.w + dq.w * q.z + dq.x * q.y - dq.y * q.x,
+                dq.w * q.w - dq.x * q.x - dq.y * q.y - dq.z * q.z
+            };
+            q = void_math::Quat{q.x + dq.x, q.y + dq.y, q.z + dq.z, q.w + dq.w};
+            body->set_rotation(void_math::normalize(q));
+
+            // Apply solver position corrections for penetration resolution
+            // The solver modifies m_positions during position iterations
+            // These corrections are applied ON TOP of velocity integration
+            if (static_cast<size_t>(index) < m_positions.size()) {
+                // Calculate the correction delta from what the solver computed
+                auto original_pos = body->position() - body->linear_velocity() * dt;
+                auto solver_correction = m_positions[static_cast<size_t>(index)].p - original_pos;
+
+                // Only apply if there's a meaningful correction (from constraint solving)
+                float correction_mag = void_math::length(solver_correction);
+                if (correction_mag > 0.0001f) {
+                    // Add solver's penetration correction to velocity-integrated position
+                    body->set_position(body->position() + solver_correction);
+                    body->set_rotation(m_positions[static_cast<size_t>(index)].q);
+                }
             }
 
             ++index;

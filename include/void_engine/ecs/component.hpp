@@ -18,6 +18,7 @@
 #include <cassert>
 #include <functional>
 #include <limits>
+#include <optional>
 
 namespace void_ecs {
 
@@ -30,7 +31,7 @@ struct ComponentId {
     std::uint32_t id;
 
     /// Invalid component ID constant
-    static constexpr std::uint32_t INVALID_ID = std::numeric_limits<std::uint32_t>::max();
+    static constexpr std::uint32_t INVALID_ID = (std::numeric_limits<std::uint32_t>::max)();
 
     /// Create from raw ID
     constexpr explicit ComponentId(std::uint32_t i = INVALID_ID) noexcept : id(i) {}

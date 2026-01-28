@@ -488,6 +488,12 @@ class BodyBuilder {
 public:
     BodyBuilder() = default;
 
+    // Move-only (contains unique_ptr)
+    BodyBuilder(BodyBuilder&&) noexcept = default;
+    BodyBuilder& operator=(BodyBuilder&&) noexcept = default;
+    BodyBuilder(const BodyBuilder&) = delete;
+    BodyBuilder& operator=(const BodyBuilder&) = delete;
+
     /// Set body type
     BodyBuilder& type(BodyType t) { m_config.type = t; return *this; }
     BodyBuilder& static_body() { return type(BodyType::Static); }

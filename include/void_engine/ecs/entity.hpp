@@ -12,6 +12,7 @@
 #include <limits>
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <format>
 
@@ -40,8 +41,8 @@ struct Entity {
 
     /// Create null entity
     constexpr Entity() noexcept
-        : index(std::numeric_limits<EntityIndex>::max())
-        , generation(std::numeric_limits<Generation>::max()) {}
+        : index((std::numeric_limits<EntityIndex>::max)())
+        , generation((std::numeric_limits<Generation>::max)()) {}
 
     /// Create null entity (factory)
     [[nodiscard]] static constexpr Entity null() noexcept {
@@ -54,8 +55,8 @@ struct Entity {
 
     /// Check if this is a null/invalid entity
     [[nodiscard]] constexpr bool is_null() const noexcept {
-        return index == std::numeric_limits<EntityIndex>::max() &&
-               generation == std::numeric_limits<Generation>::max();
+        return index == (std::numeric_limits<EntityIndex>::max)() &&
+               generation == (std::numeric_limits<Generation>::max)();
     }
 
     /// Check if this is a valid (non-null) entity
@@ -295,7 +296,7 @@ public:
 struct ArchetypeId {
     std::uint32_t id;
 
-    static constexpr std::uint32_t INVALID_ID = std::numeric_limits<std::uint32_t>::max();
+    static constexpr std::uint32_t INVALID_ID = (std::numeric_limits<std::uint32_t>::max)();
 
     constexpr explicit ArchetypeId(std::uint32_t i = INVALID_ID) noexcept : id(i) {}
 

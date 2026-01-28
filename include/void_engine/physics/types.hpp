@@ -299,7 +299,7 @@ struct MassProperties {
 
     /// Check if mass is effectively infinite
     [[nodiscard]] bool is_infinite() const noexcept {
-        return mass >= std::numeric_limits<float>::max() * 0.5f;
+        return mass >= (std::numeric_limits<float>::max)() * 0.5f;
     }
 };
 
@@ -516,7 +516,7 @@ struct SpringJointConfig : JointConfig {
     float stiffness = 100.0f;
     float damping = 1.0f;
     float min_length = 0.0f;
-    float max_length = std::numeric_limits<float>::max();
+    float max_length = (std::numeric_limits<float>::max)();
 
     SpringJointConfig() { type = JointType::Spring; }
 };

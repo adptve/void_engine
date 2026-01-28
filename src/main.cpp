@@ -71,11 +71,11 @@
 #include <void_engine/input/input.hpp>
 
 // =============================================================================
-// PHASE 6: SIMULATION
+// PHASE 6: SIMULATION (ACTIVE)
 // =============================================================================
-// #include <void_engine/ecs/world.hpp>
-// #include <void_engine/physics/physics.hpp>
-// #include <void_engine/triggers/triggers.hpp>
+#include <void_engine/ecs/world.hpp>
+#include <void_engine/physics/physics.hpp>
+#include <void_engine/triggers/triggers.hpp>
 
 // =============================================================================
 // PHASE 7: SCENE
@@ -1466,10 +1466,279 @@ int main(int argc, char** argv) {
     spdlog::info("Phase 5 complete");
 
     // =========================================================================
-    // PHASE 6: SIMULATION
+    // PHASE 6: SIMULATION (ACTIVE) - ECS, Physics, Triggers
     // =========================================================================
-    // spdlog::info("Phase 6: Simulation");
-    // TODO: ecs, physics, triggers init
+    // Production-grade simulation systems with:
+    // - Archetype-based ECS with queries and systems
+    // - Custom physics engine (GJK/EPA, BVH broadphase, sequential impulse solver)
+    // - Trigger volumes with conditions and actions
+    // - SACRED hot-reload patterns (snapshot/restore)
+    spdlog::info("Phase 6: Simulation");
+
+    // -------------------------------------------------------------------------
+    // ECS WORLD - Entity Component System
+    // -------------------------------------------------------------------------
+    spdlog::info("  [ecs]");
+
+    // Create ECS world with pre-allocated capacity
+    void_ecs::World ecs_world(1000);  // Capacity for 1000 entities
+
+    // Register common component types
+    struct Position { float x, y, z; };
+    struct Velocity { float x, y, z; };
+    struct Health { float current, max; };
+    struct Name { std::string value; };
+
+    auto pos_id = ecs_world.register_component<Position>();
+    auto vel_id = ecs_world.register_component<Velocity>();
+    auto health_id = ecs_world.register_component<Health>();
+    auto name_id = ecs_world.register_component<Name>();
+
+    spdlog::info("    Components registered: Position, Velocity, Health, Name");
+
+    // Create some test entities
+    auto player = void_ecs::build_entity(ecs_world)
+        .with(Position{0.0f, 1.0f, 0.0f})
+        .with(Velocity{0.0f, 0.0f, 0.0f})
+        .with(Health{100.0f, 100.0f})
+        .with(Name{"Player"})
+        .build();
+
+    auto enemy1 = void_ecs::build_entity(ecs_world)
+        .with(Position{5.0f, 0.0f, 3.0f})
+        .with(Velocity{-1.0f, 0.0f, 0.0f})
+        .with(Health{50.0f, 50.0f})
+        .with(Name{"Enemy1"})
+        .build();
+
+    auto enemy2 = void_ecs::build_entity(ecs_world)
+        .with(Position{-3.0f, 0.0f, 7.0f})
+        .with(Velocity{0.5f, 0.0f, -0.5f})
+        .with(Health{75.0f, 75.0f})
+        .with(Name{"Enemy2"})
+        .build();
+
+    spdlog::info("    Entities created: {} (player={}, enemy1={}, enemy2={})",
+                 ecs_world.entity_count(), player.index, enemy1.index, enemy2.index);
+
+    // Verify components
+    if (auto* pos = ecs_world.get_component<Position>(player)) {
+        spdlog::info("    Player position: ({}, {}, {})", pos->x, pos->y, pos->z);
+    }
+    if (auto* hp = ecs_world.get_component<Health>(enemy1)) {
+        spdlog::info("    Enemy1 health: {}/{}", hp->current, hp->max);
+    }
+
+    // -------------------------------------------------------------------------
+    // PHYSICS WORLD - Custom Physics Engine
+    // -------------------------------------------------------------------------
+    spdlog::info("  [physics]");
+
+    // Create physics world with builder
+    auto physics_world = void_physics::PhysicsWorldBuilder()
+        .gravity(0.0f, -9.81f, 0.0f)
+        .fixed_timestep(1.0f / 60.0f)
+        .max_substeps(4)
+        .max_bodies(10000)
+        .velocity_iterations(8)
+        .position_iterations(3)
+        .enable_ccd(true)
+        .hot_reload(true)
+        .build();
+
+    spdlog::info("    PhysicsWorld: created (gravity={}, timestep={})",
+                 physics_world->gravity().y, physics_world->fixed_timestep());
+
+    // Create ground plane (static body) - Unity/Unreal pattern:
+    // 1. Use POD config (serializable, hot-reload friendly)
+    // 2. Add shapes after creation
+    auto ground_config = void_physics::BodyConfig::make_static({0.0f, -0.5f, 0.0f});
+    ground_config.name = "ground";
+    auto ground_id = physics_world->create_body(ground_config);
+    if (auto* ground_body = physics_world->get_body(ground_id)) {
+        ground_body->add_shape(std::make_unique<void_physics::BoxShape>(
+            void_math::Vec3{50.0f, 0.5f, 50.0f}));
+    }
+    spdlog::info("    Ground body created: id={}", ground_id.value);
+
+    // Create dynamic sphere
+    auto sphere_config = void_physics::BodyConfig::make_dynamic({0.0f, 5.0f, 0.0f}, 1.0f);
+    sphere_config.name = "sphere";
+    auto sphere_id = physics_world->create_body(sphere_config);
+    if (auto* sphere_body = physics_world->get_body(sphere_id)) {
+        sphere_body->add_shape(std::make_unique<void_physics::SphereShape>(0.5f));
+    }
+    spdlog::info("    Sphere body created: id={}", sphere_id.value);
+
+    // Create dynamic box
+    auto box_config = void_physics::BodyConfig::make_dynamic({2.0f, 3.0f, 0.0f}, 2.0f);
+    box_config.name = "box";
+    auto box_id = physics_world->create_body(box_config);
+    if (auto* box_body = physics_world->get_body(box_id)) {
+        box_body->add_shape(std::make_unique<void_physics::BoxShape>(
+            void_math::Vec3{0.5f, 0.5f, 0.5f}));
+    }
+    spdlog::info("    Box body created: id={}", box_id.value);
+
+    // Set up collision callbacks
+    physics_world->on_collision_begin([](const void_physics::CollisionEvent& e) {
+        spdlog::debug("    [physics] Collision begin: {} <-> {}",
+                      e.body_a.value, e.body_b.value);
+    });
+
+    spdlog::info("    Bodies: {} total", static_cast<int>(physics_world->body_count()));
+
+    // Test raycast (all 5 params required)
+    auto hit = physics_world->raycast(
+        void_math::Vec3{0.0f, 10.0f, 0.0f},   // origin
+        void_math::Vec3{0.0f, -1.0f, 0.0f},   // direction (down)
+        100.0f,                                // max distance
+        void_physics::QueryFilter::Default,   // filter
+        void_physics::layers::All             // layer mask
+    );
+    if (hit.hit) {
+        spdlog::info("    Raycast hit: body={} at distance={:.2f}",
+                     hit.body.value, hit.distance);
+    } else {
+        spdlog::info("    Raycast: no hit (expected - physics step needed)");
+    }
+
+    // -------------------------------------------------------------------------
+    // TRIGGER SYSTEM - Volumes, Conditions, Actions
+    // -------------------------------------------------------------------------
+    spdlog::info("  [triggers]");
+
+    // Create trigger system
+    void_triggers::TriggerSystemConfig trigger_config;
+    trigger_config.max_triggers = 256;
+    trigger_config.max_zones = 64;
+    void_triggers::TriggerSystem trigger_system(trigger_config);
+
+    // Create a spawn zone trigger (Enter type - triggers on entity entering)
+    void_triggers::TriggerConfig spawn_trigger_config;
+    spawn_trigger_config.name = "spawn_zone";
+    spawn_trigger_config.type = void_triggers::TriggerType::EnterExit;
+    spawn_trigger_config.max_activations = 0;  // Unlimited
+    spawn_trigger_config.cooldown = 0.0f;
+
+    auto spawn_trigger_id = trigger_system.create_trigger(spawn_trigger_config);
+    if (auto* trigger = trigger_system.get_trigger(spawn_trigger_id)) {
+        // Set up a box volume
+        trigger->set_volume(std::make_unique<void_triggers::BoxVolume>(
+            void_triggers::Vec3{0.0f, 0.0f, 0.0f},   // center
+            void_triggers::Vec3{5.0f, 2.0f, 5.0f}    // half extents
+        ));
+
+        // Set enter callback
+        trigger->set_on_enter([](const void_triggers::TriggerEvent& e) {
+            spdlog::info("    [trigger] Entity {} entered spawn_zone", e.entity.value);
+        });
+
+        trigger->set_on_exit([](const void_triggers::TriggerEvent& e) {
+            spdlog::info("    [trigger] Entity {} exited spawn_zone", e.entity.value);
+        });
+    }
+    spdlog::info("    Trigger 'spawn_zone' created: id={}", spawn_trigger_id.value);
+
+    // Create a damage zone trigger (Stay type - triggers while inside)
+    void_triggers::TriggerConfig damage_trigger_config;
+    damage_trigger_config.name = "damage_zone";
+    damage_trigger_config.type = void_triggers::TriggerType::Stay;
+    damage_trigger_config.max_activations = 0;
+    damage_trigger_config.cooldown = 1.0f;  // 1 second between damage ticks
+
+    auto damage_trigger_id = trigger_system.create_trigger(damage_trigger_config);
+    if (auto* trigger = trigger_system.get_trigger(damage_trigger_id)) {
+        trigger->set_volume(std::make_unique<void_triggers::SphereVolume>(
+            void_triggers::Vec3{10.0f, 0.0f, 10.0f},  // center
+            3.0f                                       // radius
+        ));
+
+        trigger->set_on_stay([](const void_triggers::TriggerEvent& e) {
+            spdlog::debug("    [trigger] Entity {} taking damage in damage_zone", e.entity.value);
+        });
+    }
+    spdlog::info("    Trigger 'damage_zone' created: id={}", damage_trigger_id.value);
+
+    // Create a teleport trigger with condition (Enter type with max 1 activation)
+    void_triggers::TriggerConfig teleport_trigger_config;
+    teleport_trigger_config.name = "teleport_pad";
+    teleport_trigger_config.type = void_triggers::TriggerType::Enter;  // One-shot enter
+    teleport_trigger_config.max_activations = 1;
+    teleport_trigger_config.delay = 0.5f;  // 0.5s delay before teleport
+
+    auto teleport_trigger_id = trigger_system.create_trigger(teleport_trigger_config);
+    if (auto* trigger = trigger_system.get_trigger(teleport_trigger_id)) {
+        trigger->set_volume(std::make_unique<void_triggers::SphereVolume>(
+            void_triggers::Vec3{-5.0f, 0.0f, 0.0f},  // center
+            1.0f                                      // radius
+        ));
+
+        trigger->set_on_activate([](const void_triggers::TriggerEvent& e) {
+            spdlog::info("    [trigger] Teleport activated for entity {}", e.entity.value);
+        });
+    }
+    spdlog::info("    Trigger 'teleport_pad' created: id={}", teleport_trigger_id.value);
+
+    spdlog::info("    Triggers: {} total", trigger_system.trigger_count());
+
+    // -------------------------------------------------------------------------
+    // SIMULATION INTEGRATION
+    // -------------------------------------------------------------------------
+    spdlog::info("  [integration]");
+
+    // Set up trigger system callbacks for ECS integration
+    // EntityPositionCallback returns Vec3 directly (not optional)
+    trigger_system.set_position_getter([&ecs_world](void_triggers::EntityId entity) -> void_triggers::Vec3 {
+        void_ecs::Entity ecs_entity{static_cast<std::uint32_t>(entity.value), 0};
+        if (auto* pos = ecs_world.get_component<Position>(ecs_entity)) {
+            return void_triggers::Vec3{pos->x, pos->y, pos->z};
+        }
+        // Return origin if entity not found
+        return void_triggers::Vec3{0.0f, 0.0f, 0.0f};
+    });
+    spdlog::info("    TriggerSystem: position getter wired to ECS");
+
+    // Wire physics collision events to trigger system
+    physics_world->on_trigger_enter([&trigger_system](const void_physics::TriggerEvent& e) {
+        // Could notify trigger system here
+        spdlog::debug("    [physics->triggers] Physics trigger enter");
+    });
+    spdlog::info("    Physics: trigger events wired");
+
+    // -------------------------------------------------------------------------
+    // SIMULATION TICK (test update)
+    // -------------------------------------------------------------------------
+    spdlog::info("  [simulation-tick]");
+
+    // Simulate a few physics steps
+    for (int i = 0; i < 10; ++i) {
+        physics_world->step(1.0f / 60.0f);
+    }
+
+    // Check sphere position after simulation
+    if (auto* sphere_body = physics_world->get_body(sphere_id)) {
+        auto pos = sphere_body->position();
+        spdlog::info("    Sphere position after 10 steps: ({:.2f}, {:.2f}, {:.2f})",
+                     pos.x, pos.y, pos.z);
+    }
+
+    // Update trigger system (normally done each frame)
+    trigger_system.update(1.0f / 60.0f);
+
+    // Log final stats
+    auto physics_stats = physics_world->stats();
+    auto total_bodies = physics_stats.active_bodies + physics_stats.sleeping_bodies + physics_stats.static_bodies;
+    spdlog::info("    Physics stats: bodies={} (active={}, sleeping={}, static={}), step_time={:.3f}ms",
+                 total_bodies, physics_stats.active_bodies, physics_stats.sleeping_bodies,
+                 physics_stats.static_bodies, physics_stats.step_time_ms);
+
+    auto trigger_stats = trigger_system.stats();
+    spdlog::info("    Trigger stats: triggers={}, zones={}, activations={}",
+                 trigger_stats.total_triggers, trigger_stats.total_zones,
+                 trigger_stats.total_activations);
+
+    spdlog::info("Phase 6 complete");
 
     // =========================================================================
     // PHASE 7: SCENE

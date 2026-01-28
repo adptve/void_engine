@@ -3,13 +3,8 @@
 Use this document to restore context after compaction.
 
 ## Current State
-- **Active Phase:** 5 (I/O) - PRODUCTION READY
-- **Last Successful Phase:** 4 (Platform) - PRODUCTION READY
-  - Real GLFW window with OpenGL 4.5 context
-  - Multi-backend GPU abstraction (OpenGL production, Vulkan/D3D12/Metal/WebGPU stubs)
-  - 4 services: asset, shader, presenter, compositor
-  - Render loop with 170+ FPS on RTX 3060 Ti
-  - Hot-reload patterns (SACRED) preserved
+- **Active Phase:** 6 (Simulation) - IN PROGRESS
+- **Last Successful Phase:** 5 (I/O) - PRODUCTION READY
 
 ### Phase 5 - PRODUCTION READY
   **Audio:**
@@ -27,6 +22,40 @@ Use this document to restore context after compaction.
   - Input contexts with priority (gameplay, menu)
   - Gamepad support with deadzone and axis mapping
   - Mouse capture/release for FPS controls
+  - SACRED hot-reload patterns (snapshot/restore)
+
+### Phase 6 - IN PROGRESS
+  **ECS (Entity Component System):**
+  - Archetype-based storage for cache-friendly iteration
+  - Component registration with type-safe access
+  - Entity spawn/despawn with automatic archetype migration
+  - Query system for efficient component iteration
+  - EntityBuilder fluent API
+  - SACRED hot-reload (snapshot/restore) support
+
+  **Physics:**
+  - Custom physics engine (no external dependencies)
+  - GJK/EPA collision detection
+  - BVH broadphase for efficient spatial queries
+  - Sequential impulse constraint solver
+  - Rigidbody dynamics (static, dynamic, kinematic)
+  - Shape types: box, sphere, capsule, plane, convex hull, mesh, heightfield
+  - Raycast, shape cast, overlap queries
+  - Joint types: hinge, slider, ball, distance, spring
+  - Character controller with ground detection
+  - Collision callbacks (begin, stay, end)
+  - Trigger callbacks (enter, stay, exit)
+  - PhysicsWorldBuilder fluent API
+  - SACRED hot-reload patterns (snapshot/restore)
+
+  **Triggers:**
+  - Volume types: box, sphere, capsule, oriented box, composite
+  - Condition system: variable, entity, timer, count, random, distance, tag
+  - Action system: callback, spawn, destroy, teleport, enable trigger, etc.
+  - Trigger zones for named areas
+  - Entity tracking with spatial acceleration (grid)
+  - Cooldown and delay support
+  - Max activations limit
   - SACRED hot-reload patterns (snapshot/restore)
 
 ## Architecture

@@ -74,8 +74,8 @@ public:
     /// Create a rigidbody
     [[nodiscard]] virtual BodyId create_body(const BodyConfig& config) = 0;
 
-    /// Create body with builder
-    [[nodiscard]] virtual BodyId create_body(BodyBuilder& builder) = 0;
+    /// Create body with builder (takes ownership via move)
+    [[nodiscard]] virtual BodyId create_body(BodyBuilder&& builder) = 0;
 
     /// Destroy a body
     virtual void destroy_body(BodyId id) = 0;
@@ -345,7 +345,7 @@ public:
     [[nodiscard]] const PhysicsConfig& config() const override { return m_config; }
 
     [[nodiscard]] BodyId create_body(const BodyConfig& config) override;
-    [[nodiscard]] BodyId create_body(BodyBuilder& builder) override;
+    [[nodiscard]] BodyId create_body(BodyBuilder&& builder) override;
     void destroy_body(BodyId id) override;
     [[nodiscard]] IRigidbody* get_body(BodyId id) override;
     [[nodiscard]] const IRigidbody* get_body(BodyId id) const override;

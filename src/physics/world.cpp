@@ -76,16 +76,18 @@ void PhysicsWorld::step_with_substeps(float dt, std::uint32_t substeps) {
 BodyId PhysicsWorld::create_body(const BodyConfig& config) {
     BodyId id{m_next_body_id++};
 
-    // Create body with assigned ID
-    auto body = std::make_unique<Rigidbody>(config);
-    // Override the ID
-    // Note: In production, Rigidbody constructor should accept ID
+    // Copy config and set the body ID via user_id field
+    // (Rigidbody constructor uses config.user_id for m_id)
+    BodyConfig body_config = config;
+    body_config.user_id = id.value;
+
+    auto body = std::make_unique<Rigidbody>(body_config);
     m_bodies[id.value] = std::move(body);
 
     return id;
 }
 
-BodyId PhysicsWorld::create_body(BodyBuilder& builder) {
+BodyId PhysicsWorld::create_body(BodyBuilder&& builder) {
     auto body = builder.build();
     if (!body) {
         return BodyId::invalid();

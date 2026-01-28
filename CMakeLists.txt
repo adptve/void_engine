@@ -165,12 +165,12 @@ add_subdirectory(src/audio)
 add_subdirectory(src/input)
 
 # ============================================================================
-# PHASE 6: SIMULATION
+# PHASE 6: SIMULATION (ACTIVE)
 # Modules: ecs, physics, triggers
 # ============================================================================
-# add_subdirectory(src/ecs)
-# add_subdirectory(src/physics)
-# add_subdirectory(src/triggers)
+add_subdirectory(src/ecs)
+add_subdirectory(src/physics)
+add_subdirectory(src/triggers)
 
 # ============================================================================
 # PHASE 7: SCENE
@@ -254,9 +254,9 @@ target_link_libraries(void_engine PRIVATE void_presenter)
 target_link_libraries(void_engine PRIVATE void_compositor)
 target_link_libraries(void_engine PRIVATE void_audio)          # Phase 5
 target_link_libraries(void_engine PRIVATE void_input)          # Phase 5
-# target_link_libraries(void_engine PRIVATE void_ecs)           # Phase 6
-# target_link_libraries(void_engine PRIVATE void_physics)       # Phase 6
-# target_link_libraries(void_engine PRIVATE void_triggers)      # Phase 6
+target_link_libraries(void_engine PRIVATE void_ecs)            # Phase 6
+target_link_libraries(void_engine PRIVATE void_physics)        # Phase 6
+target_link_libraries(void_engine PRIVATE void_triggers)       # Phase 6
 # target_link_libraries(void_engine PRIVATE void_scene)         # Phase 7
 # target_link_libraries(void_engine PRIVATE void_graph)         # Phase 7
 # target_link_libraries(void_engine PRIVATE void_script)        # Phase 8
@@ -296,7 +296,7 @@ endif()
 message(STATUS "")
 message(STATUS "void_engine ${PROJECT_VERSION}")
 message(STATUS "========================================")
-message(STATUS "Active Phase:    5 (I/O)")
+message(STATUS "Active Phase:    6 (Simulation)")
 message(STATUS "C++ Standard:    ${CMAKE_CXX_STANDARD}")
 message(STATUS "Build Type:      ${CMAKE_BUILD_TYPE}")
 message(STATUS "")
