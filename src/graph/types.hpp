@@ -146,6 +146,20 @@ enum class OptimizationLevel : std::uint8_t {
 // =============================================================================
 
 /// @brief Runtime value that can be stored in pins
+/// @brief Vec4 wrapper for PinValue (distinguishes from Quat)
+struct PinVec4 {
+    std::array<float, 4> data;
+    float& operator[](std::size_t i) { return data[i]; }
+    const float& operator[](std::size_t i) const { return data[i]; }
+};
+
+/// @brief Quaternion wrapper for PinValue (distinguishes from Vec4)
+struct PinQuat {
+    std::array<float, 4> data;  // x, y, z, w
+    float& operator[](std::size_t i) { return data[i]; }
+    const float& operator[](std::size_t i) const { return data[i]; }
+};
+
 using PinValue = std::variant<
     std::monostate,             // Null/unset
     bool,                       // Bool
@@ -156,8 +170,8 @@ using PinValue = std::variant<
     std::string,                // String
     std::array<float, 2>,       // Vec2
     std::array<float, 3>,       // Vec3
-    std::array<float, 4>,       // Vec4
-    std::array<float, 4>,       // Quat (stored as vec4)
+    PinVec4,                    // Vec4 (wrapper to distinguish from Quat)
+    PinQuat,                    // Quat (wrapper to distinguish from Vec4)
     std::array<float, 16>,      // Mat4
     std::uint64_t,              // Entity/Handle
     std::vector<std::any>,      // Array
@@ -278,7 +292,8 @@ struct GraphVariable {
     std::string type_name;              ///< For struct/enum types
     PinDefault default_value;
 
-    bool is_public = false;             ///< Exposed to outside
+    bool is_public = false;             ///< Exposed to outside (alias: is_exposed)
+    bool is_exposed = false;            ///< Exposed to Blueprint (same as is_public)
     bool is_replicated = false;         ///< Network replicated
     bool is_save_game = false;          ///< Saved with game
     bool is_read_only = false;

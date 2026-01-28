@@ -12,36 +12,41 @@ namespace void_graph {
 // Handle Types
 // =============================================================================
 
-/// @brief Unique identifier for a graph
+// Tag types with guard to prevent redefinition when public header is also included
+#ifndef VOID_GRAPH_TAG_TYPES_DEFINED
+#define VOID_GRAPH_TAG_TYPES_DEFINED
 struct GraphIdTag {};
+struct NodeIdTag {};
+struct PinIdTag {};
+struct ConnectionIdTag {};
+struct NodeTypeIdTag {};
+struct VariableIdTag {};
+struct SubgraphIdTag {};
+struct ExecutionIdTag {};
+#endif
+
+/// @brief Unique identifier for a graph
 using GraphId = void_core::Handle<GraphIdTag>;
 
 /// @brief Unique identifier for a node within a graph
-struct NodeIdTag {};
 using NodeId = void_core::Handle<NodeIdTag>;
 
 /// @brief Unique identifier for a pin on a node
-struct PinIdTag {};
 using PinId = void_core::Handle<PinIdTag>;
 
 /// @brief Unique identifier for a connection between pins
-struct ConnectionIdTag {};
 using ConnectionId = void_core::Handle<ConnectionIdTag>;
 
 /// @brief Unique identifier for a node template/type
-struct NodeTypeIdTag {};
 using NodeTypeId = void_core::Handle<NodeTypeIdTag>;
 
 /// @brief Unique identifier for a variable in the graph
-struct VariableIdTag {};
 using VariableId = void_core::Handle<VariableIdTag>;
 
 /// @brief Unique identifier for a subgraph/function
-struct SubgraphIdTag {};
 using SubgraphId = void_core::Handle<SubgraphIdTag>;
 
 /// @brief Unique identifier for an execution context
-struct ExecutionIdTag {};
 using ExecutionId = void_core::Handle<ExecutionIdTag>;
 
 // =============================================================================

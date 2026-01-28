@@ -88,6 +88,12 @@ public:
     SceneManager();
     ~SceneManager();
 
+    // Non-copyable, movable
+    SceneManager(const SceneManager&) = delete;
+    SceneManager& operator=(const SceneManager&) = delete;
+    SceneManager(SceneManager&&) = default;
+    SceneManager& operator=(SceneManager&&) = default;
+
     /// Initialize the scene manager
     [[nodiscard]] void_core::Result<void> initialize();
 

@@ -321,6 +321,18 @@ public:
     LiveSceneManager() = default;
     explicit LiveSceneManager(void_ecs::World* world);
 
+    // Non-copyable, movable
+    LiveSceneManager(const LiveSceneManager&) = delete;
+    LiveSceneManager& operator=(const LiveSceneManager&) = delete;
+    LiveSceneManager(LiveSceneManager&&) = default;
+    LiveSceneManager& operator=(LiveSceneManager&&) = default;
+
+    /// Set ECS world (for post-construction initialization)
+    void set_world(void_ecs::World* world) {
+        m_world = world;
+        m_instantiator.set_world(world);
+    }
+
     /// Initialize the manager
     [[nodiscard]] void_core::Result<void> initialize();
 

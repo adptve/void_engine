@@ -21,7 +21,7 @@ void_core::Result<void> AppManager::initialize(void_ecs::World* world) {
     m_world = world;
 
     // Initialize live scene manager with world
-    m_live_scene_manager = LiveSceneManager(world);
+    m_live_scene_manager.set_world(world);
     auto result = m_live_scene_manager.initialize();
     if (!result) {
         return result;

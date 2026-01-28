@@ -69,8 +69,14 @@ void SnapshotWriter::write_value(const PinValue& v) {
             write_f32(val[0]);
             write_f32(val[1]);
             write_f32(val[2]);
-        } else if constexpr (std::is_same_v<T, std::array<float, 4>>) {
-            // Vec4/Quat
+        } else if constexpr (std::is_same_v<T, PinVec4>) {
+            // Vec4
+            write_f32(val[0]);
+            write_f32(val[1]);
+            write_f32(val[2]);
+            write_f32(val[3]);
+        } else if constexpr (std::is_same_v<T, PinQuat>) {
+            // Quat
             write_f32(val[0]);
             write_f32(val[1]);
             write_f32(val[2]);
@@ -171,14 +177,21 @@ PinValue SnapshotReader::read_value() {
             arr[2] = read_f32();
             return arr;
         }
-        case 9:   // Vec4
-        case 10: { // Quat (same as Vec4 storage)
-            std::array<float, 4> arr;
-            arr[0] = read_f32();
-            arr[1] = read_f32();
-            arr[2] = read_f32();
-            arr[3] = read_f32();
-            return arr;
+        case 9: { // Vec4
+            PinVec4 vec;
+            vec[0] = read_f32();
+            vec[1] = read_f32();
+            vec[2] = read_f32();
+            vec[3] = read_f32();
+            return vec;
+        }
+        case 10: { // Quat
+            PinQuat quat;
+            quat[0] = read_f32();
+            quat[1] = read_f32();
+            quat[2] = read_f32();
+            quat[3] = read_f32();
+            return quat;
         }
         case 11: { // Mat4
             std::array<float, 16> arr;
@@ -222,8 +235,8 @@ std::vector<std::uint8_t> GraphSystemSnapshot::serialize() const {
 
     // Write each instance
     for (const auto& instance : instances) {
-        // Graph ID
-        writer.write_u32(instance.graph_id.value);
+        // Graph ID (use bits for serialization)
+        writer.write_u32(instance.graph_id.bits);
 
         // Owner entity
         writer.write_u64(instance.owner_entity);
@@ -238,7 +251,7 @@ std::vector<std::uint8_t> GraphSystemSnapshot::serialize() const {
         // Variables
         writer.write_u32(static_cast<std::uint32_t>(instance.variables.size()));
         for (const auto& var : instance.variables) {
-            writer.write_u32(var.id.value);
+            writer.write_u32(var.id.bits);
             writer.write_string(var.name);
             writer.write_u8(static_cast<std::uint8_t>(var.type));
             writer.write_value(var.value);
@@ -280,8 +293,8 @@ std::optional<GraphSystemSnapshot> GraphSystemSnapshot::deserialize(
         for (std::uint32_t i = 0; i < instance_count; ++i) {
             GraphInstanceSnapshot instance;
 
-            // Graph ID
-            instance.graph_id.value = reader.read_u32();
+            // Graph ID (read bits and reconstruct handle)
+            instance.graph_id.bits = reader.read_u32();
 
             // Owner entity
             instance.owner_entity = reader.read_u64();
@@ -298,7 +311,7 @@ std::optional<GraphSystemSnapshot> GraphSystemSnapshot::deserialize(
             instance.variables.reserve(var_count);
             for (std::uint32_t j = 0; j < var_count; ++j) {
                 VariableSnapshot var;
-                var.id.value = reader.read_u32();
+                var.id.bits = reader.read_u32();
                 var.name = reader.read_string();
                 var.type = static_cast<PinType>(reader.read_u8());
                 var.value = reader.read_value();

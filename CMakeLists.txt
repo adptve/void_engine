@@ -173,11 +173,19 @@ add_subdirectory(src/physics)
 add_subdirectory(src/triggers)
 
 # ============================================================================
-# PHASE 7: SCENE
+# PHASE 7: SCENE (ACTIVE)
 # Modules: scene, graph
+# Dependencies: tomlplusplus
 # ============================================================================
-# add_subdirectory(src/scene)
-# add_subdirectory(src/graph)
+FetchContent_Declare(tomlplusplus
+    GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
+    GIT_TAG        v3.4.0
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(tomlplusplus)
+
+add_subdirectory(src/scene)
+add_subdirectory(src/graph)
 
 # ============================================================================
 # PHASE 8: SCRIPTING
@@ -257,8 +265,8 @@ target_link_libraries(void_engine PRIVATE void_input)          # Phase 5
 target_link_libraries(void_engine PRIVATE void_ecs)            # Phase 6
 target_link_libraries(void_engine PRIVATE void_physics)        # Phase 6
 target_link_libraries(void_engine PRIVATE void_triggers)       # Phase 6
-# target_link_libraries(void_engine PRIVATE void_scene)         # Phase 7
-# target_link_libraries(void_engine PRIVATE void_graph)         # Phase 7
+target_link_libraries(void_engine PRIVATE void_scene)          # Phase 7
+target_link_libraries(void_engine PRIVATE void_graph)          # Phase 7
 # target_link_libraries(void_engine PRIVATE void_script)        # Phase 8
 # target_link_libraries(void_engine PRIVATE void_scripting)     # Phase 8
 # target_link_libraries(void_engine PRIVATE void_cpp)           # Phase 8
@@ -296,7 +304,7 @@ endif()
 message(STATUS "")
 message(STATUS "void_engine ${PROJECT_VERSION}")
 message(STATUS "========================================")
-message(STATUS "Active Phase:    6 (Simulation)")
+message(STATUS "Active Phase:    7 (Scene)")
 message(STATUS "C++ Standard:    ${CMAKE_CXX_STANDARD}")
 message(STATUS "Build Type:      ${CMAKE_BUILD_TYPE}")
 message(STATUS "")
