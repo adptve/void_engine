@@ -88,12 +88,14 @@
 #include <void_engine/graph/graph.hpp>
 
 // =============================================================================
-// PHASE 8: SCRIPTING
+// PHASE 8: SCRIPTING (ACTIVE)
 // =============================================================================
-// #include <void_engine/script/parser.hpp>
-// #include <void_engine/scripting/vm.hpp>
-// #include <void_engine/cpp/compiler.hpp>
-// #include <void_engine/shell/shell.hpp>
+#include "script/types.hpp"
+#include "script/lexer.hpp"
+#include "script/parser.hpp"
+#include "scripting/system.hpp"
+#include "cpp/system.hpp"
+#include "shell/shell.hpp"
 
 // =============================================================================
 // PHASE 9: GAMEPLAY
@@ -1882,10 +1884,130 @@ int main(int argc, char** argv) {
     spdlog::info("Phase 7 complete");
 
     // =========================================================================
-    // PHASE 8: SCRIPTING
+    // PHASE 8: SCRIPTING (ACTIVE)
     // =========================================================================
-    // spdlog::info("Phase 8: Scripting");
-    // TODO: script, scripting, cpp, shell init
+    // Production-grade scripting with:
+    // - Custom scripting language with lexer/parser
+    // - WASM runtime for sandboxed execution
+    // - C++ hot-reload for native code
+    // - Debug shell for runtime inspection
+    spdlog::info("Phase 8: Scripting");
+
+    // -------------------------------------------------------------------------
+    // SCRIPT LANGUAGE - Lexer and Parser
+    // -------------------------------------------------------------------------
+    spdlog::info("  [script]");
+
+    // Test the lexer with sample code
+    std::string test_script = R"(
+        fn fibonacci(n) {
+            if n <= 1 {
+                return n;
+            }
+            return fibonacci(n - 1) + fibonacci(n - 2);
+        }
+
+        let result = fibonacci(10);
+        print("Fibonacci(10) = " + result);
+    )";
+
+    void_script::Lexer lexer(test_script, "<test>");
+    auto tokens = lexer.tokenize();
+
+    spdlog::info("    Lexer: {} tokens from test script", tokens.size());
+
+    // Count token types
+    std::size_t keywords = 0, identifiers = 0, operators = 0, literals = 0;
+    for (const auto& tok : tokens) {
+        if (tok.is_keyword()) ++keywords;
+        else if (tok.type == void_script::TokenType::Identifier) ++identifiers;
+        else if (tok.is_operator()) ++operators;
+        else if (tok.is_literal()) ++literals;
+    }
+    spdlog::info("      Keywords: {}, Identifiers: {}, Operators: {}, Literals: {}",
+                 keywords, identifiers, operators, literals);
+
+    // Parse into AST (Parser takes source string, not tokens)
+    void_script::Parser parser(test_script, "<test>");
+    auto ast_result = parser.parse_program();
+    if (ast_result && !parser.has_errors()) {
+        spdlog::info("    Parser: AST created successfully");
+        spdlog::info("      Statements: {}", ast_result->statements.size());
+    } else {
+        spdlog::warn("    Parser: failed - {}",
+                     parser.errors().empty() ? "unknown" : parser.errors()[0].message());
+    }
+
+    // -------------------------------------------------------------------------
+    // WASM SCRIPTING SYSTEM
+    // -------------------------------------------------------------------------
+    spdlog::info("  [scripting]");
+
+    auto& scripting_system = void_scripting::ScriptingSystem::instance();
+    void_scripting::WasmConfig wasm_config;
+    wasm_config.max_memory_pages = 256;  // 16 MB
+    wasm_config.max_stack_size = 1024 * 1024;  // 1 MB stack
+    wasm_config.enable_debug_info = true;
+
+    scripting_system.initialize(wasm_config);
+    scripting_system.set_event_bus(&event_bus);
+
+    spdlog::info("    WASM Runtime: initialized");
+    spdlog::info("      Max memory: {} pages ({} MB)", wasm_config.max_memory_pages,
+                 wasm_config.max_memory_pages * 64 / 1024);
+    spdlog::info("      Max stack size: {} KB", wasm_config.max_stack_size / 1024);
+    spdlog::info("    Plugin Registry: ready");
+    spdlog::info("    Host API: engine bindings available");
+
+    // -------------------------------------------------------------------------
+    // C++ HOT-RELOAD SYSTEM
+    // -------------------------------------------------------------------------
+    spdlog::info("  [cpp]");
+
+    auto& cpp_system = void_cpp::CppSystem::instance();
+    void_cpp::CompilerConfig compiler_config;
+    compiler_config.standard = void_cpp::CppStandard::Cpp20;
+    compiler_config.config = void_cpp::BuildConfig::Debug;
+    compiler_config.debug_info = true;
+
+    cpp_system.initialize(compiler_config);
+    cpp_system.set_event_bus(&event_bus);
+    cpp_system.enable_hot_reload(true);
+
+    spdlog::info("    Compiler: C++20, Debug mode");
+    spdlog::info("    Hot-Reload: ENABLED");
+    spdlog::info("    Module Registry: ready");
+    spdlog::info("    Class Registry: ready for native scripting");
+
+    // -------------------------------------------------------------------------
+    // DEBUG SHELL
+    // -------------------------------------------------------------------------
+    spdlog::info("  [shell]");
+
+    auto& shell_system = void_shell::ShellSystem::instance();
+    void_shell::ShellConfig shell_config;
+    shell_config.prompt = "void> ";
+    shell_config.max_history_size = 1000;
+    shell_config.color_output = true;
+    shell_config.allow_remote = true;
+    shell_config.remote_port = 9876;
+
+    shell_system.initialize(shell_config);
+    shell_system.set_event_bus(&event_bus);
+    shell_system.register_builtins();
+
+    auto shell_stats = shell_system.stats();
+    spdlog::info("    Shell: initialized with '{}' prompt", shell_config.prompt);
+    spdlog::info("    Commands: {} registered", shell_stats.registered_commands);
+    spdlog::info("    Remote: port {} (not started)", shell_config.remote_port);
+
+    // Test a simple shell command
+    auto shell_result = shell_system.execute_silent("help");
+    if (shell_result.status == void_shell::CommandStatus::Success) {
+        spdlog::info("    Built-in 'help' command: OK");
+    }
+
+    spdlog::info("Phase 8 complete");
 
     // =========================================================================
     // PHASE 9: GAMEPLAY

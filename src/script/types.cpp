@@ -140,6 +140,11 @@ Callable* Value::as_callable() {
     return dynamic_cast<Callable*>(object_value_.get());
 }
 
+Callable* Value::as_callable() const {
+    if (!object_value_) return nullptr;
+    return dynamic_cast<Callable*>(object_value_.get());
+}
+
 void Value::set_object(std::shared_ptr<Object> obj) {
     object_value_ = std::move(obj);
     type_ = obj ? obj->object_type() : ValueType::Null;

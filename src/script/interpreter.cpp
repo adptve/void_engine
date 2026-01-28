@@ -1384,7 +1384,7 @@ void Interpreter::register_stdlib() {
         return Value(nullptr);
     });
 
-    define_native("panic", 1, [](Interpreter&, const std::vector<Value>& args) {
+    define_native("panic", 1, [](Interpreter&, const std::vector<Value>& args) -> Value {
         std::string message = args.empty() ? "Panic!" : args[0].to_string();
         throw ScriptException(ScriptError::RuntimeError, "PANIC: " + message);
     });

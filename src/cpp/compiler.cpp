@@ -320,8 +320,12 @@ void MSVCCompiler::detect_from_registry() {
 
     if (!vswhere_path.empty()) {
         // Run vswhere to find latest VS installation
-        std::string cmd = "-latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath";
-        auto result = execute_process(vswhere_path.string(), cmd);
+        std::vector<std::string> args = {
+            "-latest", "-products", "*",
+            "-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+            "-property", "installationPath"
+        };
+        auto result = execute_process(vswhere_path.string(), args);
 
         if (result.exit_code == 0 && !result.stdout_output.empty()) {
             // Extract installation path

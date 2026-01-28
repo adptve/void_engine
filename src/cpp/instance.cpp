@@ -18,45 +18,34 @@ CppLibrary::CppLibrary(ModuleId module_id, const std::filesystem::path& path)
     , path_(path) {
 
     auto& registry = ModuleRegistry::instance();
-    auto* module = registry.get_module(module_id);
+    auto* module = registry.get(module_id);
     if (!module) {
         VOID_LOG_ERROR("[CppLibrary] Module not found for ID");
         return;
     }
 
-    // Get library info function
-    auto info_result = module->get_symbol<GetLibraryInfoFn>("void_get_library_info");
-    if (!info_result) {
+    // Get library info function (cast void* to function pointer directly)
+    get_library_info_ = reinterpret_cast<GetLibraryInfoFn>(module->get_symbol("void_get_library_info"));
+    if (!get_library_info_) {
         VOID_LOG_ERROR("[CppLibrary] Failed to find void_get_library_info in {}", path.string());
         return;
     }
-    get_library_info_ = info_result.value();
 
     // Get class info function
-    auto class_info_result = module->get_symbol<GetClassInfoFn>("void_get_class_info");
-    if (!class_info_result) {
+    get_class_info_ = reinterpret_cast<GetClassInfoFn>(module->get_symbol("void_get_class_info"));
+    if (!get_class_info_) {
         VOID_LOG_ERROR("[CppLibrary] Failed to find void_get_class_info in {}", path.string());
         return;
     }
-    get_class_info_ = class_info_result.value();
 
     // Optional: get vtable function
-    auto vtable_result = module->get_symbol<GetClassVTableFn>("void_get_class_vtable");
-    if (vtable_result) {
-        get_class_vtable_ = vtable_result.value();
-    }
+    get_class_vtable_ = reinterpret_cast<GetClassVTableFn>(module->get_symbol("void_get_class_vtable"));
 
     // Optional: set entity ID function
-    auto set_entity_result = module->get_symbol<SetEntityIdFn>("void_set_entity_id");
-    if (set_entity_result) {
-        set_entity_id_ = set_entity_result.value();
-    }
+    set_entity_id_ = reinterpret_cast<SetEntityIdFn>(module->get_symbol("void_set_entity_id"));
 
     // Optional: set world context function
-    auto set_world_result = module->get_symbol<SetWorldContextFn>("void_set_world_context");
-    if (set_world_result) {
-        set_world_context_ = set_world_result.value();
-    }
+    set_world_context_ = reinterpret_cast<SetWorldContextFn>(module->get_symbol("void_set_world_context"));
 
     // Get library info
     info_ = get_library_info_();
@@ -434,9 +423,9 @@ CppResult<CppLibrary*> CppClassRegistry::load_library(const std::filesystem::pat
 
     // Load via ModuleRegistry
     auto& module_registry = ModuleRegistry::instance();
-    auto module_result = module_registry.load_module(path);
+    auto module_result = module_registry.load(path);
     if (!module_result) {
-        return void_core::Error{void_core::ErrorCode::IoError, "Failed to load module"};
+        return CppError::LoadFailed;
     }
 
     auto* module = module_result.value();
@@ -444,8 +433,8 @@ CppResult<CppLibrary*> CppClassRegistry::load_library(const std::filesystem::pat
     // Create CppLibrary wrapper
     auto library = std::make_unique<CppLibrary>(module->id(), path);
     if (!library->is_valid()) {
-        module_registry.unload_module(module->id());
-        return void_core::Error{void_core::ErrorCode::InvalidArgument, "Invalid C++ library"};
+        module_registry.unload(module->id());
+        return CppError::InvalidModule;
     }
 
     // Register class-to-library mappings
@@ -491,7 +480,7 @@ bool CppClassRegistry::unload_library(const std::filesystem::path& path) {
     module_to_path_.erase(it->second->module_id());
 
     // Unload from ModuleRegistry
-    ModuleRegistry::instance().unload_module(it->second->module_id());
+    ModuleRegistry::instance().unload(it->second->module_id());
 
     libraries_.erase(it);
 
@@ -564,7 +553,7 @@ CppResult<CppClassInstance*> CppClassRegistry::create_instance(
     // Find library for class
     auto lib_it = class_to_library_.find(class_name);
     if (lib_it == class_to_library_.end()) {
-        return void_core::Error{void_core::ErrorCode::NotFound, "Class not found: " + class_name};
+        return CppError::ModuleNotFound;
     }
 
     auto* library = libraries_[lib_it->second].get();
@@ -572,7 +561,7 @@ CppResult<CppClassInstance*> CppClassRegistry::create_instance(
     // Create C++ object
     CppHandle handle = library->create_instance(class_name);
     if (!handle.is_valid()) {
-        return void_core::Error{void_core::ErrorCode::InvalidState, "Failed to create instance"};
+        return CppError::InvalidModule;
     }
 
     // Create wrapper

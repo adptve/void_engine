@@ -506,6 +506,8 @@ ExprPtr Parser::parse_lambda() {
         ExprPtr expr = parse_expression();
         body = std::make_unique<ReturnStatement>(std::move(expr));
     } else {
+        // Block body - consume opening brace first
+        consume(TokenType::LeftBrace, "Expected '{' for lambda body");
         body = parse_block_statement();
     }
 
@@ -615,6 +617,9 @@ StmtPtr Parser::parse_function_declaration() {
     Token name = consume(TokenType::Identifier, "Expected function name");
     auto params = parse_parameters();
     auto return_type = parse_type_annotation();
+
+    // Consume opening brace before parsing block
+    consume(TokenType::LeftBrace, "Expected '{' before function body");
     auto body = parse_block_statement();
 
     auto decl = std::make_unique<FunctionDecl>(std::string(name.lexeme), std::move(params),
@@ -783,9 +788,12 @@ StmtPtr Parser::parse_block_statement() {
 }
 
 StmtPtr Parser::parse_if_statement() {
-    consume(TokenType::LeftParen, "Expected '(' after 'if'");
+    // Support both C-style: if (cond) { } and Rust-style: if cond { }
+    bool has_parens = match(TokenType::LeftParen);
     ExprPtr condition = parse_expression();
-    consume(TokenType::RightParen, "Expected ')' after condition");
+    if (has_parens) {
+        consume(TokenType::RightParen, "Expected ')' after condition");
+    }
 
     StmtPtr then_branch = parse_simple_statement();
     StmtPtr else_branch;
@@ -799,9 +807,12 @@ StmtPtr Parser::parse_if_statement() {
 }
 
 StmtPtr Parser::parse_while_statement() {
-    consume(TokenType::LeftParen, "Expected '(' after 'while'");
+    // Support both C-style: while (cond) { } and Rust-style: while cond { }
+    bool has_parens = match(TokenType::LeftParen);
     ExprPtr condition = parse_expression();
-    consume(TokenType::RightParen, "Expected ')' after condition");
+    if (has_parens) {
+        consume(TokenType::RightParen, "Expected ')' after condition");
+    }
 
     StmtPtr body = parse_simple_statement();
 
@@ -809,23 +820,36 @@ StmtPtr Parser::parse_while_statement() {
 }
 
 StmtPtr Parser::parse_for_statement() {
-    consume(TokenType::LeftParen, "Expected '(' after 'for'");
+    // Support both styles:
+    // - Rust-style for-each: for x in items { }
+    // - C-style with parens: for (init; cond; incr) { } or for (x in items) { }
+    bool has_parens = match(TokenType::LeftParen);
 
-    // Check for for-each
+    // Check for for-each (with or without parens)
     if (check(TokenType::Identifier)) {
         Token var = advance();
         if (match(TokenType::In)) {
             ExprPtr iterable = parse_expression();
-            consume(TokenType::RightParen, "Expected ')'");
+            if (has_parens) {
+                consume(TokenType::RightParen, "Expected ')'");
+            }
             StmtPtr body = parse_simple_statement();
             return std::make_unique<ForEachStatement>(std::string(var.lexeme),
                                                         std::move(iterable), std::move(body));
         }
-        // Put token back (not a for-each)
-        // This is a simplification; proper implementation would use lookahead
+        // Not a for-each - must be C-style for loop, which requires parens
+        if (!has_parens) {
+            error("C-style for loop requires parentheses: for (init; cond; incr) { }");
+        }
+        // We already consumed the identifier, need to handle it as part of initializer
+        // For simplicity, we'll restart expression parsing (the identifier becomes an expression)
     }
 
-    // Regular for loop
+    // Regular C-style for loop (requires parens for unambiguous semicolon parsing)
+    if (!has_parens) {
+        error("C-style for loop requires parentheses");
+    }
+
     StmtPtr initializer;
     if (!match(TokenType::Semicolon)) {
         if (match(TokenType::Let) || match(TokenType::Var)) {

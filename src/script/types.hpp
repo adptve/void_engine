@@ -269,6 +269,7 @@ public:
     [[nodiscard]] Object* as_object();
     [[nodiscard]] const Object* as_object() const;
     [[nodiscard]] Callable* as_callable();
+    [[nodiscard]] Callable* as_callable() const;
 
     // Object storage
     void set_object(std::shared_ptr<Object> obj);
@@ -422,6 +423,9 @@ enum class ScriptError {
     NullReference,
     AssertionFailed,
     Timeout,
+    RuntimeError,
+    TypeError,
+    UserException,
 
     // System errors
     FileNotFound,
@@ -594,6 +598,9 @@ constexpr const char* script_error_name(ScriptError error) {
         case ScriptError::NullReference: return "Null reference";
         case ScriptError::AssertionFailed: return "Assertion failed";
         case ScriptError::Timeout: return "Execution timeout";
+        case ScriptError::RuntimeError: return "Runtime error";
+        case ScriptError::TypeError: return "Type error";
+        case ScriptError::UserException: return "User exception";
         case ScriptError::FileNotFound: return "File not found";
         case ScriptError::ImportError: return "Import error";
         case ScriptError::ModuleNotFound: return "Module not found";

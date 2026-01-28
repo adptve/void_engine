@@ -181,13 +181,13 @@ add_subdirectory(src/scene)
 add_subdirectory(src/graph)
 
 # ============================================================================
-# PHASE 8: SCRIPTING
+# PHASE 8: SCRIPTING (ACTIVE)
 # Modules: script, scripting, cpp, shell
 # ============================================================================
-# add_subdirectory(src/script)
-# add_subdirectory(src/scripting)
-# add_subdirectory(src/cpp)
-# add_subdirectory(src/shell)
+add_subdirectory(src/script)
+add_subdirectory(src/scripting)
+add_subdirectory(src/cpp)
+add_subdirectory(src/shell)
 
 # ============================================================================
 # PHASE 9: GAMEPLAY
@@ -260,10 +260,10 @@ target_link_libraries(void_engine PRIVATE void_physics)        # Phase 6
 target_link_libraries(void_engine PRIVATE void_triggers)       # Phase 6
 target_link_libraries(void_engine PRIVATE void_scene)          # Phase 7
 target_link_libraries(void_engine PRIVATE void_graph)          # Phase 7
-# target_link_libraries(void_engine PRIVATE void_script)        # Phase 8
-# target_link_libraries(void_engine PRIVATE void_scripting)     # Phase 8
-# target_link_libraries(void_engine PRIVATE void_cpp)           # Phase 8
-# target_link_libraries(void_engine PRIVATE void_shell)         # Phase 8
+target_link_libraries(void_engine PRIVATE void_script)         # Phase 8
+target_link_libraries(void_engine PRIVATE void_scripting)      # Phase 8
+target_link_libraries(void_engine PRIVATE void_cpp)            # Phase 8
+target_link_libraries(void_engine PRIVATE void_shell)          # Phase 8
 # target_link_libraries(void_engine PRIVATE void_ai)            # Phase 9
 # target_link_libraries(void_engine PRIVATE void_combat)        # Phase 9
 # target_link_libraries(void_engine PRIVATE void_inventory)     # Phase 9
