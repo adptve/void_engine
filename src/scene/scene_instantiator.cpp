@@ -2,6 +2,8 @@
 /// @brief Scene instantiation implementation
 
 #include <void_engine/scene/scene_instantiator.hpp>
+#include <void_engine/scene/transform_system.hpp>
+#include <void_engine/ecs/hierarchy.hpp>
 
 #include <cmath>
 #include <numbers>
@@ -60,6 +62,7 @@ std::array<std::array<float, 4>, 4> TransformComponent::matrix() const {
 void SceneInstantiator::register_components() {
     if (!m_world) return;
 
+    // Scene-level components
     m_world->register_component<TransformComponent>();
     m_world->register_component<MeshComponent>();
     m_world->register_component<MaterialComponent>();
@@ -69,6 +72,10 @@ void SceneInstantiator::register_components() {
     m_world->register_component<ParticleEmitterComponent>();
     m_world->register_component<PickableComponent>();
     m_world->register_component<SceneTagComponent>();
+
+    // ECS hierarchy components (authoritative transforms)
+    // These are registered by TransformSyncSystem but we ensure they exist
+    TransformSyncSystem::register_components(*m_world);
 }
 
 void_core::Result<SceneInstance> SceneInstantiator::instantiate(
@@ -146,9 +153,19 @@ void_ecs::Entity SceneInstantiator::create_entity(
     tag.set_entity_name(data.name);
     m_world->add_component(entity, tag);
 
-    // Add transform
+    // Add scene transform (for animation and backwards compatibility)
     auto transform = convert_transform(data.transform);
     m_world->add_component(entity, transform);
+
+    // Add ECS authoritative transform (LocalTransform + GlobalTransform)
+    // This makes ECS the single source of truth for world-space transforms
+    void_ecs::LocalTransform local = to_local_transform(transform);
+    m_world->add_component(entity, local);
+    m_world->add_component(entity, void_ecs::GlobalTransform{local.to_matrix()});
+
+    // Add visibility components
+    m_world->add_component(entity, void_ecs::Visible{data.visible});
+    m_world->add_component(entity, void_ecs::InheritedVisibility{data.visible});
 
     // Add mesh component
     MeshComponent mesh;
@@ -577,6 +594,9 @@ void AnimationSystem::update(void_ecs::World& world, float delta_time) {
     void_ecs::QueryState state(std::move(desc));
     world.update_query(state);
 
+    // Collect entities that were animated (for ECS sync)
+    std::vector<void_ecs::Entity> animated_entities;
+
     // Iterate over all matching entities
     void_ecs::QueryIter iter = world.query_iter(state);
 
@@ -589,6 +609,7 @@ void AnimationSystem::update(void_ecs::World& world, float delta_time) {
         }
 
         std::size_t row = iter.row();
+        void_ecs::Entity entity = iter.entity();
 
         // Get component pointers
         TransformComponent* transform = arch->get_component<TransformComponent>(transform_id, row);
@@ -615,9 +636,16 @@ void AnimationSystem::update(void_ecs::World& world, float delta_time) {
                 case AnimationType::None:
                     break;
             }
+
+            animated_entities.push_back(entity);
         }
 
         iter.next();
+    }
+
+    // Sync animated transforms to ECS (keeps ECS authoritative)
+    for (void_ecs::Entity entity : animated_entities) {
+        TransformSyncSystem::sync_entity(world, entity);
     }
 }
 

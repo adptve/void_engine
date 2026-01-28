@@ -41,6 +41,7 @@ Kernel::Kernel(KernelConfig config)
     , m_module_registry(std::make_unique<ModuleRegistry>())
     , m_supervisor_tree(std::make_unique<SupervisorTree>())
     , m_hot_reload(std::make_unique<void_core::HotReloadSystem>())
+    , m_hot_reload_orchestrator(std::make_unique<HotReloadOrchestrator>())
     , m_plugin_registry(std::make_unique<void_core::PluginRegistry>())
     , m_hot_reload_enabled(config.enable_hot_reload) {
 
@@ -54,9 +55,36 @@ Kernel::Kernel(KernelConfig config)
 
     // Initialize stage arrays
     m_stage_dirty.fill(false);
-    for (auto& config : m_stage_configs) {
-        config = StageConfig{true, false};
+    for (auto& cfg : m_stage_configs) {
+        cfg = StageConfig{true, false};
     }
+
+    // Configure hot-reload orchestrator
+    ReloadOrchestratorConfig orch_config;
+    orch_config.enabled = m_config.enable_hot_reload;
+    orch_config.poll_interval = m_config.hot_reload_poll_interval;
+    orch_config.debounce_time = std::chrono::milliseconds(500);
+    orch_config.auto_rollback = true;
+    orch_config.watched_directories.push_back(m_config.module_path);
+    orch_config.watched_directories.push_back(m_config.plugin_path);
+    orch_config.watched_directories.push_back(m_config.asset_path);
+    m_hot_reload_orchestrator->configure(orch_config);
+
+    // Set orchestrator callbacks for Kernel coordination
+    m_hot_reload_orchestrator->set_pre_reload_callback(
+        [this](const std::vector<std::string>& units) {
+            // Pause updates if configured
+            // This allows game state to be frozen during reload
+        }
+    );
+
+    m_hot_reload_orchestrator->set_post_reload_callback(
+        [this](const std::vector<std::string>& units, bool success) {
+            if (success) {
+                m_hot_reload_count.fetch_add(units.size());
+            }
+        }
+    );
 }
 
 Kernel::~Kernel() {
@@ -289,7 +317,19 @@ void_core::Result<void> Kernel::init_core() {
         return void_core::Error{"Failed to create root supervisor: " + result.error().message()};
     }
 
-    // Configure hot-reload
+    // Initialize hot-reload orchestrator (centralized coordination)
+    auto orch_result = m_hot_reload_orchestrator->initialize();
+    if (!orch_result) {
+        return void_core::Error{"Failed to initialize hot-reload orchestrator: " +
+                                 orch_result.error().message()};
+    }
+
+    // Connect orchestrator to event bus if available
+    if (m_event_bus) {
+        m_hot_reload_orchestrator->set_event_bus(m_event_bus);
+    }
+
+    // Configure legacy hot-reload system (for backwards compatibility)
     if (m_config.enable_hot_reload) {
         m_hot_reload->set_poll_interval(m_config.hot_reload_poll_interval);
 
@@ -356,7 +396,10 @@ void Kernel::shutdown_services() {
 }
 
 void Kernel::shutdown_core() {
-    // Stop hot-reload
+    // Shutdown hot-reload orchestrator (cancels pending reloads, unregisters units)
+    m_hot_reload_orchestrator->shutdown();
+
+    // Stop legacy hot-reload watching
     m_hot_reload->stop_watching();
 
     // Clear sandboxes
@@ -371,10 +414,15 @@ void Kernel::update_hot_reload(float dt) {
         return;
     }
 
-    // Poll for file changes
-    m_hot_reload->update();
+    // Primary: Use the orchestrator for centralized hot-reload coordination
+    // The orchestrator handles: file watching, debouncing, dependency ordering,
+    // snapshot/restore lifecycle, and event publishing
+    auto reloaded_units = m_hot_reload_orchestrator->poll_and_process(dt);
 
-    // Check for modified modules
+    // Statistics are tracked via the post-reload callback set in constructor
+
+    // Legacy: Also check for modified modules via module loader
+    // This maintains backwards compatibility for modules not registered with orchestrator
     auto modified = m_module_loader->get_modified_modules();
     for (const auto& id : modified) {
         auto result = m_module_loader->reload_module(id);
@@ -382,6 +430,9 @@ void Kernel::update_hot_reload(float dt) {
             m_hot_reload_count.fetch_add(1);
         }
     }
+
+    // Legacy: Update basic hot-reload system for assets registered there
+    m_hot_reload->update();
 }
 
 void Kernel::update_supervisors(float dt) {
@@ -511,16 +562,65 @@ void Kernel::enable_hot_reload(std::uint32_t poll_ms, std::uint32_t debounce_ms)
     m_hot_reload_poll_ms = poll_ms;
     m_hot_reload_debounce_ms = debounce_ms;
 
+    // Configure legacy system
     if (m_hot_reload) {
         m_hot_reload->set_poll_interval(std::chrono::milliseconds(poll_ms));
+    }
+
+    // Configure orchestrator
+    if (m_hot_reload_orchestrator) {
+        ReloadOrchestratorConfig config = m_hot_reload_orchestrator->config();
+        config.enabled = true;
+        config.poll_interval = std::chrono::milliseconds(poll_ms);
+        config.debounce_time = std::chrono::milliseconds(debounce_ms);
+        m_hot_reload_orchestrator->configure(config);
     }
 }
 
 void Kernel::disable_hot_reload() {
     m_hot_reload_enabled = false;
+
+    // Disable legacy system
     if (m_hot_reload) {
         m_hot_reload->stop_watching();
     }
+
+    // Disable orchestrator
+    if (m_hot_reload_orchestrator) {
+        ReloadOrchestratorConfig config = m_hot_reload_orchestrator->config();
+        config.enabled = false;
+        m_hot_reload_orchestrator->configure(config);
+        m_hot_reload_orchestrator->cancel_all_pending();
+    }
+}
+
+void Kernel::set_event_bus(void_event::EventBus* bus) {
+    m_event_bus = bus;
+
+    // Connect orchestrator to event bus
+    if (m_hot_reload_orchestrator) {
+        m_hot_reload_orchestrator->set_event_bus(bus);
+    }
+}
+
+void_core::Result<void> Kernel::register_reload_unit(ReloadUnit unit) {
+    if (!m_hot_reload_orchestrator) {
+        return void_core::Err("Hot-reload orchestrator not initialized");
+    }
+    return m_hot_reload_orchestrator->register_unit(std::move(unit));
+}
+
+void_core::Result<void> Kernel::register_reloadable(
+    const std::string& name,
+    void_core::HotReloadable* object,
+    ReloadCategory category,
+    ReloadPriority priority,
+    const std::string& source_path) {
+
+    if (!m_hot_reload_orchestrator) {
+        return void_core::Err("Hot-reload orchestrator not initialized");
+    }
+    return m_hot_reload_orchestrator->register_object(name, object, category, priority, source_path);
 }
 
 StageConfig Kernel::get_stage_config(Stage stage) const {

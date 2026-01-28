@@ -28,6 +28,7 @@ struct Version;
 // =============================================================================
 
 struct Id;
+struct EntityId;
 class IdGenerator;
 struct NamedId;
 

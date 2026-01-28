@@ -6,6 +6,7 @@ void_add_module(NAME void_kernel
         supervisor.cpp
         sandbox.cpp
         kernel.cpp
+        hot_reload_orchestrator.cpp
     DEPENDENCIES
         void_core
         void_services

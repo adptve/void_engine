@@ -8,6 +8,7 @@ void_add_module(NAME void_scene
         manifest_parser.cpp
         asset_loader.cpp
         app_manager.cpp
+        transform_system.cpp
     DEPENDENCIES
         void_core
         void_ecs

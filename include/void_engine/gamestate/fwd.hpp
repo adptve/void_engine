@@ -3,10 +3,14 @@
 
 #pragma once
 
+#include <void_engine/core/id.hpp>
 #include <cstdint>
 #include <functional>
 
 namespace void_gamestate {
+
+// Use canonical EntityId from void_core
+using EntityId = void_core::EntityId;
 
 // =============================================================================
 // Handle Types
@@ -52,13 +56,6 @@ struct ObjectiveId {
     explicit operator bool() const { return value != 0; }
 };
 
-/// @brief Entity identifier (from ECS)
-struct EntityId {
-    std::uint64_t value{0};
-    bool operator==(const EntityId&) const = default;
-    bool operator!=(const EntityId&) const = default;
-    explicit operator bool() const { return value != 0; }
-};
 
 // =============================================================================
 // Forward Declarations - Variables
@@ -148,13 +145,6 @@ struct hash<void_gamestate::GamePhaseId> {
 template<>
 struct hash<void_gamestate::ObjectiveId> {
     std::size_t operator()(const void_gamestate::ObjectiveId& id) const noexcept {
-        return std::hash<std::uint64_t>{}(id.value);
-    }
-};
-
-template<>
-struct hash<void_gamestate::EntityId> {
-    std::size_t operator()(const void_gamestate::EntityId& id) const noexcept {
         return std::hash<std::uint64_t>{}(id.value);
     }
 };

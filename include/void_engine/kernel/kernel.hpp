@@ -16,6 +16,7 @@
 #include "module_loader.hpp"
 #include "supervisor.hpp"
 #include "sandbox.hpp"
+#include "hot_reload_orchestrator.hpp"
 
 #include <void_engine/core/error.hpp>
 #include <void_engine/core/hot_reload.hpp>
@@ -92,9 +93,13 @@ public:
     [[nodiscard]] virtual SupervisorTree& supervisors() = 0;
     [[nodiscard]] virtual const SupervisorTree& supervisors() const = 0;
 
-    /// Get hot-reload system
+    /// Get hot-reload system (legacy, prefer orchestrator)
     [[nodiscard]] virtual void_core::HotReloadSystem& hot_reload() = 0;
     [[nodiscard]] virtual const void_core::HotReloadSystem& hot_reload() const = 0;
+
+    /// Get hot-reload orchestrator (centralized reload coordination)
+    [[nodiscard]] virtual HotReloadOrchestrator& hot_reload_orchestrator() = 0;
+    [[nodiscard]] virtual const HotReloadOrchestrator& hot_reload_orchestrator() const = 0;
 
     /// Get plugin registry
     [[nodiscard]] virtual void_core::PluginRegistry& plugins() = 0;
@@ -143,6 +148,9 @@ public:
 
     /// @brief Disable hot-reload
     virtual void disable_hot_reload() = 0;
+
+    /// @brief Set event bus for hot-reload events
+    virtual void set_event_bus(void_event::EventBus* bus) = 0;
 
     /// @brief Get stage configuration
     [[nodiscard]] virtual StageConfig get_stage_config(Stage stage) const = 0;
@@ -201,6 +209,9 @@ public:
     [[nodiscard]] void_core::HotReloadSystem& hot_reload() override { return *m_hot_reload; }
     [[nodiscard]] const void_core::HotReloadSystem& hot_reload() const override { return *m_hot_reload; }
 
+    [[nodiscard]] HotReloadOrchestrator& hot_reload_orchestrator() override { return *m_hot_reload_orchestrator; }
+    [[nodiscard]] const HotReloadOrchestrator& hot_reload_orchestrator() const override { return *m_hot_reload_orchestrator; }
+
     [[nodiscard]] void_core::PluginRegistry& plugins() override { return *m_plugin_registry; }
     [[nodiscard]] const void_core::PluginRegistry& plugins() const override { return *m_plugin_registry; }
 
@@ -216,6 +227,7 @@ public:
     void run_stage(Stage stage, float dt) override;
     void enable_hot_reload(std::uint32_t poll_ms, std::uint32_t debounce_ms) override;
     void disable_hot_reload() override;
+    void set_event_bus(void_event::EventBus* bus) override;
     [[nodiscard]] StageConfig get_stage_config(Stage stage) const override;
     void set_stage_config(Stage stage, const StageConfig& config) override;
 
@@ -246,6 +258,23 @@ public:
     /// Get frame count
     [[nodiscard]] std::uint64_t frame_count() const { return m_frame_count.load(); }
 
+    // =========================================================================
+    // Hot-Reload Unit Registration
+    // =========================================================================
+
+    /// @brief Register a reloadable unit with the orchestrator
+    /// Units can specify dependencies, priorities, and source paths for file watching
+    void_core::Result<void> register_reload_unit(ReloadUnit unit);
+
+    /// @brief Register a HotReloadable object with the orchestrator
+    /// Simplified registration for objects implementing HotReloadable
+    void_core::Result<void> register_reloadable(
+        const std::string& name,
+        void_core::HotReloadable* object,
+        ReloadCategory category = ReloadCategory::Asset,
+        ReloadPriority priority = ReloadPriority::Normal,
+        const std::string& source_path = "");
+
 private:
     // Phase transitions
     void set_phase(KernelPhase new_phase);
@@ -272,12 +301,14 @@ private:
     KernelConfig m_config;
     std::atomic<KernelPhase> m_phase{KernelPhase::PreInit};
     std::atomic<bool> m_shutdown_requested{false};
+    void_event::EventBus* m_event_bus{nullptr};
 
     // Subsystems
     std::unique_ptr<ModuleLoader> m_module_loader;
     std::unique_ptr<ModuleRegistry> m_module_registry;
     std::unique_ptr<SupervisorTree> m_supervisor_tree;
     std::unique_ptr<void_core::HotReloadSystem> m_hot_reload;
+    std::unique_ptr<HotReloadOrchestrator> m_hot_reload_orchestrator;
     std::unique_ptr<void_core::PluginRegistry> m_plugin_registry;
 
     // Sandboxes

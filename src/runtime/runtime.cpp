@@ -5,6 +5,7 @@
 /// It orchestrates the Kernel, manages world lifecycle, and executes the frame loop.
 
 #include <void_engine/runtime/runtime.hpp>
+#include <void_engine/runtime/platform.hpp>
 #include <void_engine/kernel/kernel.hpp>
 #include <void_engine/event/event_bus.hpp>
 #include <void_engine/scene/world.hpp>
@@ -22,11 +23,16 @@ namespace void_runtime {
 // =============================================================================
 
 struct Runtime::PlatformContext {
+    std::unique_ptr<IPlatform> platform;
     bool initialized{false};
-    bool window_should_close{false};
 
-    // Platform integration points - these connect to void_render, void_input, etc.
-    // The actual window/context is managed by those modules; Runtime coordinates them.
+    // Input state tracking
+    double last_mouse_x{0};
+    double last_mouse_y{0};
+
+    // Frame timing
+    double frame_start_time{0};
+    double frame_end_time{0};
 };
 
 // =============================================================================
@@ -127,13 +133,24 @@ int Runtime::run() {
     auto last_time = std::chrono::high_resolution_clock::now();
     m_accumulator = 0.0f;
 
-    while (!m_exit_requested && !m_platform->window_should_close) {
+    auto should_continue = [this]() {
+        if (m_exit_requested) return false;
+        if (m_platform->platform && m_platform->platform->should_quit()) return false;
+        return true;
+    };
+
+    while (should_continue()) {
         auto now = std::chrono::high_resolution_clock::now();
         auto elapsed = std::chrono::duration<float>(now - last_time).count();
         last_time = now;
 
         m_delta_time = (std::min)(elapsed, m_config.max_frame_time);
         m_time += m_delta_time;
+
+        // Begin frame on platform
+        if (m_platform->platform) {
+            m_platform->platform->begin_frame();
+        }
 
         poll_events();
         execute_frame(m_delta_time);
@@ -144,6 +161,7 @@ int Runtime::run() {
 
         m_frame_count++;
 
+        // Frame rate limiting
         if (m_config.target_fps > 0) {
             float target_frame_time = 1.0f / static_cast<float>(m_config.target_fps);
             auto frame_end = std::chrono::high_resolution_clock::now();
@@ -328,27 +346,57 @@ void_core::Result<void> Runtime::init_api_connectivity() {
 void_core::Result<void> Runtime::init_platform() {
     spdlog::info("  [platform] Initializing for mode: {}...", to_string(m_config.mode));
 
-    // Platform initialization registers render/input systems into kernel stages
-    // The actual window/context creation is handled by void_render/void_presenter
-    // Runtime coordinates but doesn't duplicate their functionality
-
-    switch (m_config.mode) {
-        case RuntimeMode::Windowed:
-            spdlog::info("  [platform] Windowed mode - render pipeline active");
-            break;
-        case RuntimeMode::XR:
-            spdlog::info("  [platform] XR mode - OpenXR integration active");
-            break;
-        case RuntimeMode::Editor:
-            spdlog::info("  [platform] Editor mode - tooling UI active");
-            break;
-        case RuntimeMode::Headless:
-            // Should not reach here - headless skips platform init
-            break;
+    // Create platform instance based on mode
+    m_platform->platform = create_platform(m_config);
+    if (!m_platform->platform) {
+        return void_core::Error("Failed to create platform");
     }
 
+    // Configure window
+    PlatformWindowConfig window_config;
+    window_config.title = m_config.window_title;
+    window_config.width = m_config.window_width;
+    window_config.height = m_config.window_height;
+    window_config.fullscreen = m_config.fullscreen;
+    window_config.vsync = m_config.vsync;
+    window_config.resizable = true;
+    window_config.visible = true;
+    window_config.focused = true;
+
+    // Configure GPU
+    PlatformGpuConfig gpu_config;
+    gpu_config.enable_validation = m_config.gpu_validation;
+    gpu_config.enable_debug_markers = m_config.debug_mode;
+
+    // Initialize platform
+    if (auto result = m_platform->platform->initialize(window_config, gpu_config); !result) {
+        m_platform->platform.reset();
+        return void_core::Error("Platform initialization failed: " + result.error().message());
+    }
+
+    // Log platform info
+    const auto& info = m_platform->platform->info();
+    spdlog::info("  [platform] {} - GPU: {} ({})",
+                 info.name,
+                 void_render::gpu_backend_name(info.capabilities.gpu_backend),
+                 info.gpu_device.empty() ? "unknown" : info.gpu_device);
+
+    // Register platform event processing into Input stage
+    m_kernel->register_system(void_kernel::Stage::Input, "platform_events",
+        [this](float) {
+            process_platform_events();
+        }, -100);  // High priority - process events first
+
+    // Register frame presentation into Render stage (end)
+    m_kernel->register_system(void_kernel::Stage::Render, "platform_present",
+        [this](float) {
+            if (m_platform->platform) {
+                m_platform->platform->end_frame();
+            }
+        }, 1000);  // Low priority - present last
+
     m_platform->initialized = true;
-    spdlog::info("  [platform] Initialized");
+    spdlog::info("  [platform] Initialized successfully");
     return void_core::Ok();
 }
 
@@ -397,6 +445,10 @@ void_ecs::World* Runtime::ecs_world() const {
     return m_world ? &m_world->ecs() : nullptr;
 }
 
+IPlatform* Runtime::platform() const {
+    return m_platform ? m_platform->platform.get() : nullptr;
+}
+
 // =============================================================================
 // Frame Execution
 // =============================================================================
@@ -427,8 +479,79 @@ void Runtime::execute_frame(float dt) {
 }
 
 void Runtime::poll_events() {
-    // Platform event polling integrates with void_input and window system
-    // Window close events set m_platform->window_should_close
+    // Platform events are now processed via the platform_events system
+    // registered in init_platform(). This method is kept for compatibility
+    // but the actual polling happens in process_platform_events().
+}
+
+void Runtime::process_platform_events() {
+    if (!m_platform->platform) return;
+
+    m_platform->platform->poll_events([this](const PlatformEvent& evt) {
+        handle_platform_event(evt);
+    });
+}
+
+void Runtime::handle_platform_event(const PlatformEvent& evt) {
+    switch (evt.type) {
+        case PlatformEventType::Quit:
+        case PlatformEventType::WindowClose:
+            request_exit(0);
+            break;
+
+        case PlatformEventType::WindowResize:
+            spdlog::debug("Window resized: {}x{}", evt.data.resize.width, evt.data.resize.height);
+            // Publish resize event
+            if (m_event_bus) {
+                // Could publish a WindowResizedEvent here
+            }
+            break;
+
+        case PlatformEventType::WindowFocus:
+            spdlog::debug("Window focused");
+            break;
+
+        case PlatformEventType::WindowBlur:
+            spdlog::debug("Window unfocused");
+            break;
+
+        case PlatformEventType::KeyDown:
+        case PlatformEventType::KeyUp:
+        case PlatformEventType::KeyRepeat:
+            // Forward to input system via event bus
+            if (m_event_bus) {
+                // Could publish KeyEvent here
+            }
+            break;
+
+        case PlatformEventType::MouseMove:
+            m_platform->last_mouse_x = evt.data.mouse_move.x;
+            m_platform->last_mouse_y = evt.data.mouse_move.y;
+            break;
+
+        case PlatformEventType::MouseButton:
+        case PlatformEventType::MouseScroll:
+            // Forward to input system
+            break;
+
+        case PlatformEventType::GamepadConnect:
+            spdlog::info("Gamepad {} connected", evt.data.gamepad_button.gamepad_id);
+            break;
+
+        case PlatformEventType::GamepadDisconnect:
+            spdlog::info("Gamepad {} disconnected", evt.data.gamepad_button.gamepad_id);
+            break;
+
+        case PlatformEventType::WindowDrop:
+            spdlog::info("Files dropped: {}", evt.dropped_files.size());
+            for (const auto& file : evt.dropped_files) {
+                spdlog::info("  - {}", file);
+            }
+            break;
+
+        default:
+            break;
+    }
 }
 
 // =============================================================================
@@ -457,6 +580,17 @@ void Runtime::shutdown_io() {
 
 void Runtime::shutdown_platform() {
     spdlog::info("  [platform] Shutting down...");
+
+    // Unregister platform systems
+    m_kernel->unregister_system(void_kernel::Stage::Input, "platform_events");
+    m_kernel->unregister_system(void_kernel::Stage::Render, "platform_present");
+
+    // Shutdown platform
+    if (m_platform->platform) {
+        m_platform->platform->shutdown();
+        m_platform->platform.reset();
+    }
+
     m_platform->initialized = false;
     spdlog::info("  [platform] Shutdown complete");
 }

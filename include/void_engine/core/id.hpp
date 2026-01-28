@@ -293,6 +293,97 @@ bool verify_fnv1a_implementation();
 
 } // namespace hash
 
+// =============================================================================
+// EntityId (Canonical Entity Identifier)
+// =============================================================================
+
+/// Canonical entity identifier used across all modules
+///
+/// This is the single authoritative EntityId type. All modules should use
+/// this type instead of defining their own. It is bit-compatible with
+/// void_ecs::Entity via to_bits()/from_bits().
+///
+/// Usage:
+/// - Use EntityId for passing entity references between modules
+/// - Use void_ecs::Entity within ECS-specific code
+/// - Convert with to_ecs_entity() and from_ecs_entity()
+struct EntityId {
+    std::uint64_t value{UINT64_MAX};  // Null by default (matches Entity::null())
+
+    /// Default constructor (null EntityId)
+    constexpr EntityId() noexcept = default;
+
+    /// Construct from raw bits (e.g., from Entity::to_bits())
+    constexpr explicit EntityId(std::uint64_t raw) noexcept : value(raw) {}
+
+    /// Construct from index and generation (matches Entity layout)
+    [[nodiscard]] static constexpr EntityId create(std::uint32_t index, std::uint32_t generation) noexcept {
+        return EntityId((static_cast<std::uint64_t>(generation) << 32) | static_cast<std::uint64_t>(index));
+    }
+
+    /// Create null EntityId
+    [[nodiscard]] static constexpr EntityId null() noexcept {
+        return EntityId{UINT64_MAX};
+    }
+
+    /// Check if null (matches Entity::is_null())
+    [[nodiscard]] constexpr bool is_null() const noexcept {
+        return value == UINT64_MAX;
+    }
+
+    /// Check if valid (not null)
+    [[nodiscard]] constexpr bool is_valid() const noexcept {
+        return value != UINT64_MAX;
+    }
+
+    /// Get index component (matches Entity::index)
+    [[nodiscard]] constexpr std::uint32_t index() const noexcept {
+        return static_cast<std::uint32_t>(value & 0xFFFFFFFF);
+    }
+
+    /// Get generation component (matches Entity::generation)
+    [[nodiscard]] constexpr std::uint32_t generation() const noexcept {
+        return static_cast<std::uint32_t>(value >> 32);
+    }
+
+    /// Get raw bits (for conversion to/from Entity)
+    [[nodiscard]] constexpr std::uint64_t to_bits() const noexcept {
+        return value;
+    }
+
+    /// Create from raw bits
+    [[nodiscard]] static constexpr EntityId from_bits(std::uint64_t raw) noexcept {
+        return EntityId(raw);
+    }
+
+    /// Convert to void_core::Id
+    [[nodiscard]] constexpr Id to_id() const noexcept {
+        return Id(value);
+    }
+
+    /// Create from void_core::Id
+    [[nodiscard]] static constexpr EntityId from_id(Id id) noexcept {
+        return EntityId(id.to_bits());
+    }
+
+    /// Comparison operators
+    constexpr auto operator<=>(const EntityId&) const noexcept = default;
+    constexpr bool operator==(const EntityId&) const noexcept = default;
+
+    /// Explicit bool conversion
+    explicit constexpr operator bool() const noexcept {
+        return is_valid();
+    }
+};
+
+/// Output stream operator
+inline std::ostream& operator<<(std::ostream& os, const EntityId& id) {
+    if (id.is_null()) {
+        return os << "EntityId(null)";
+    }
+    return os << "EntityId(" << id.index() << "v" << id.generation() << ")";
+}
+
 } // namespace void_core
 
 /// Hash specializations
@@ -307,5 +398,12 @@ template<>
 struct std::hash<void_core::NamedId> {
     std::size_t operator()(const void_core::NamedId& id) const noexcept {
         return static_cast<std::size_t>(id.hash);
+    }
+};
+
+template<>
+struct std::hash<void_core::EntityId> {
+    std::size_t operator()(const void_core::EntityId& id) const noexcept {
+        return std::hash<std::uint64_t>{}(id.value);
     }
 };

@@ -3,14 +3,35 @@
 void_add_module(NAME void_runtime
     SOURCES
         runtime.cpp
+        platform.cpp
+        mode_selector.cpp
     DEPENDENCIES
         void_core
         void_event
         void_kernel
         void_ecs
         void_scene
+        void_render
         spdlog::spdlog
 )
+
+# Platform-specific libraries for void_runtime
+if(WIN32)
+    target_link_libraries(void_runtime PRIVATE
+        opengl32
+        dwmapi
+        shell32
+        xinput
+    )
+elseif(UNIX AND NOT APPLE)
+    find_package(X11 REQUIRED)
+    target_link_libraries(void_runtime PRIVATE
+        ${X11_LIBRARIES}
+        GL
+        pthread
+        dl
+    )
+endif()
 
 # Legacy runtime components (preserved for compatibility/reference)
 # These support the bootstrap harness and may be migrated to new Runtime

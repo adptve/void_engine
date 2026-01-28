@@ -11,6 +11,7 @@
 #include "component.hpp"
 #include "world.hpp"
 #include "query.hpp"
+#include "system.hpp"
 
 #include <vector>
 #include <algorithm>

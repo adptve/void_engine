@@ -33,6 +33,7 @@
 #pragma once
 
 #include "runtime_config.hpp"
+#include "platform.hpp"
 
 #include <void_engine/core/error.hpp>
 
@@ -243,6 +244,9 @@ public:
     /// @brief Get the current world
     [[nodiscard]] void_scene::World* world() const { return m_world.get(); }
 
+    /// @brief Get the platform interface
+    [[nodiscard]] IPlatform* platform() const;
+
     // -------------------------------------------------------------------------
     // Configuration
     // -------------------------------------------------------------------------
@@ -279,6 +283,8 @@ private:
     // Frame execution
     void execute_frame(float dt);
     void poll_events();
+    void process_platform_events();
+    void handle_platform_event(const PlatformEvent& evt);
 
     // Shutdown phases
     void shutdown_simulation();

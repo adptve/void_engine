@@ -3,22 +3,18 @@
 
 #pragma once
 
+#include <void_engine/core/id.hpp>
 #include <cstdint>
 #include <functional>
 
 namespace void_plugin_api {
 
 // =============================================================================
-// Handle Types (reuse from gamestate where appropriate)
+// Handle Types
 // =============================================================================
 
-/// @brief Entity identifier
-struct EntityId {
-    std::uint64_t value{0};
-    bool operator==(const EntityId&) const = default;
-    bool operator!=(const EntityId&) const = default;
-    explicit operator bool() const { return value != 0; }
-};
+// Use canonical EntityId from void_core
+using EntityId = void_core::EntityId;
 
 /// @brief Command identifier for tracking
 struct CommandId {
@@ -82,12 +78,6 @@ class CommandProcessor;
 
 namespace std {
 
-template<>
-struct hash<void_plugin_api::EntityId> {
-    std::size_t operator()(const void_plugin_api::EntityId& id) const noexcept {
-        return std::hash<std::uint64_t>{}(id.value);
-    }
-};
 
 template<>
 struct hash<void_plugin_api::CommandId> {

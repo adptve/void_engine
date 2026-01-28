@@ -61,6 +61,7 @@
 
 #include "fwd.hpp"
 #include "entity.hpp"
+#include "entity_id.hpp"
 #include "component.hpp"
 #include "archetype.hpp"
 #include "query.hpp"

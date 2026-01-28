@@ -150,6 +150,52 @@ struct SandboxViolationEvent;
 struct KernelPhaseEvent;
 
 // =============================================================================
+// Hot-Reload Orchestration
+// =============================================================================
+
+/// Reload phase (lifecycle stages)
+enum class ReloadPhase : std::uint8_t;
+
+/// Reload category (module, plugin, shader, asset, etc.)
+enum class ReloadCategory : std::uint8_t;
+
+/// Reload priority (order within a reload cycle)
+enum class ReloadPriority : std::uint8_t;
+
+/// Reload unit state
+enum class ReloadUnitState : std::uint8_t;
+
+/// Reload unit registration entry
+struct ReloadUnit;
+
+/// Reload orchestrator configuration
+struct ReloadOrchestratorConfig;
+
+/// Hot-reload orchestrator (centralized coordination)
+class HotReloadOrchestrator;
+
+/// Hot-reload orchestrator builder
+class HotReloadOrchestratorBuilder;
+
+/// Reload cycle started event
+struct ReloadCycleStartedEvent;
+
+/// Reload phase changed event
+struct ReloadPhaseChangedEvent;
+
+/// Unit snapshot taken event
+struct UnitSnapshotTakenEvent;
+
+/// Unit reloaded event
+struct UnitReloadedEvent;
+
+/// Reload cycle completed event
+struct ReloadCycleCompletedEvent;
+
+/// Reload rollback event
+struct ReloadRollbackEvent;
+
+// =============================================================================
 // Smart Pointer Aliases
 // =============================================================================
 

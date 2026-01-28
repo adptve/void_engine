@@ -3,10 +3,14 @@
 
 #pragma once
 
+#include <void_engine/core/id.hpp>
 #include <cstdint>
 #include <memory>
 
 namespace void_combat {
+
+// Use canonical EntityId from void_core
+using EntityId = void_core::EntityId;
 
 // =============================================================================
 // Handle Types
@@ -44,13 +48,6 @@ struct ProjectileId {
     auto operator<=>(const ProjectileId&) const = default;
 };
 
-/// @brief Entity ID type (from ECS)
-struct EntityId {
-    std::uint64_t value{0};
-    explicit operator bool() const { return value != 0; }
-    bool operator==(const EntityId&) const = default;
-    auto operator<=>(const EntityId&) const = default;
-};
 
 // =============================================================================
 // Forward Declarations - Health
