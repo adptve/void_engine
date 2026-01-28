@@ -1,7 +1,7 @@
 #pragma once
 
 /// @file manifest_parser.hpp
-/// @brief Package manifest (manifest.toml) parsing
+/// @brief Package manifest (manifest.json) parsing
 
 #include <void_engine/core/error.hpp>
 
@@ -117,7 +117,7 @@ struct ManifestData {
 // Manifest Parser
 // =============================================================================
 
-/// Parses manifest.toml files
+/// Parses manifest.json files
 class ManifestParser {
 public:
     ManifestParser() = default;
@@ -128,23 +128,13 @@ public:
     /// Parse manifest from string
     [[nodiscard]] void_core::Result<ManifestData> parse_string(
         const std::string& content,
-        const std::string& source_name = "manifest.toml");
+        const std::string& source_name = "manifest.json");
 
     /// Get last error
     [[nodiscard]] const std::string& last_error() const noexcept { return m_last_error; }
 
 private:
     std::string m_last_error;
-
-    void parse_package(const void* tbl, PackageInfo& pkg);
-    void parse_app(const void* tbl, AppConfig& app);
-    void parse_layers(const void* arr, std::vector<LayerConfig>& layers);
-    void parse_permissions(const void* tbl, Permissions& perms);
-    void parse_resources(const void* tbl, ResourceLimits& limits);
-    void parse_lod(const void* tbl, LodConfig& lod);
-    void parse_streaming(const void* tbl, StreamingConfig& streaming);
-    void parse_assets(const void* tbl, AssetConfig& assets);
-    void parse_platform(const void* tbl, PlatformRequirements& platform);
 };
 
 // =============================================================================

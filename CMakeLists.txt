@@ -175,15 +175,8 @@ add_subdirectory(src/triggers)
 # ============================================================================
 # PHASE 7: SCENE (ACTIVE)
 # Modules: scene, graph
-# Dependencies: tomlplusplus
+# Dependencies: nlohmann_json (already fetched in Phase 0)
 # ============================================================================
-FetchContent_Declare(tomlplusplus
-    GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
-    GIT_TAG        v3.4.0
-    GIT_SHALLOW    TRUE
-)
-FetchContent_MakeAvailable(tomlplusplus)
-
 add_subdirectory(src/scene)
 add_subdirectory(src/graph)
 

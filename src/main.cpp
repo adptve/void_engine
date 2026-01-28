@@ -204,7 +204,7 @@ void print_usage(const char* program_name) {
     std::cerr << "Usage: " << program_name << " [OPTIONS] [PROJECT_PATH]\n"
               << "\n"
               << "Arguments:\n"
-              << "  PROJECT_PATH    Path to project directory or manifest.toml\n"
+              << "  PROJECT_PATH    Path to project directory or manifest.json\n"
               << "\n"
               << "Options:\n"
               << "  --help, -h      Show this help message\n"
@@ -1746,97 +1746,76 @@ int main(int argc, char** argv) {
     // PHASE 7: SCENE (ACTIVE) - Scene Loading & Visual Scripting Graph
     // =========================================================================
     // Production-grade scene management with:
-    // - TOML-based scene definitions (cameras, lights, entities, materials)
+    // - JSON-based scene definitions (cameras, lights, entities, materials)
     // - Scene parser/serializer with hot-reload support
     // - Visual scripting graph system (Blueprint-style)
     // - SACRED hot-reload patterns preserved
     spdlog::info("Phase 7: Scene");
 
     // -------------------------------------------------------------------------
-    // SCENE DATA - Parse scene definitions
+    // SCENE DATA - Load from JSON file
     // -------------------------------------------------------------------------
     spdlog::info("  [scene-data]");
 
-    // Create scene data programmatically (normally loaded from TOML)
+    // Resolve scene path from manifest
+    fs::path scene_path = config.project_dir / config.scene_file;
+    spdlog::info("    Loading scene: {}", scene_path.string());
+
+    // Parse scene using the real parser
+    void_scene::SceneParser scene_parser;
+    auto scene_result = scene_parser.parse(scene_path);
+
+    if (!scene_result) {
+        spdlog::error("    Failed to parse scene: {}", scene_parser.last_error());
+        // Create minimal fallback scene for validation
+        spdlog::warn("    Using fallback scene for validation");
+    }
+
+    // Get scene data (either parsed or fallback)
     void_scene::SceneData test_scene;
-    test_scene.metadata.name = "Test Scene";
-    test_scene.metadata.description = "Phase 7 integration test";
-    test_scene.metadata.version = "1.0.0";
+    if (scene_result) {
+        test_scene = std::move(scene_result).value();
+    } else {
+        // Minimal fallback for testing
+        test_scene.metadata.name = "Fallback Scene";
+        test_scene.metadata.version = "1.0.0";
+    }
 
-    // Add a perspective camera
-    void_scene::CameraData main_camera;
-    main_camera.name = "main_camera";
-    main_camera.active = true;
-    main_camera.type = void_scene::CameraType::Perspective;
-    main_camera.control_mode = void_scene::CameraControlMode::Orbit;
-    main_camera.transform.position = {0.0f, 5.0f, 10.0f};
-    main_camera.transform.target = {0.0f, 0.0f, 0.0f};
-    main_camera.perspective.fov = 60.0f;
-    main_camera.perspective.near_plane = 0.1f;
-    main_camera.perspective.far_plane = 1000.0f;
-    test_scene.cameras.push_back(main_camera);
-
-    // Add directional light (sun)
-    void_scene::LightData sun_light;
-    sun_light.name = "sun";
-    sun_light.type = void_scene::LightType::Directional;
-    sun_light.enabled = true;
-    sun_light.directional.direction = {-0.5f, -1.0f, -0.3f};
-    sun_light.directional.color = {1.0f, 0.95f, 0.9f};
-    sun_light.directional.intensity = 1.0f;
-    sun_light.directional.cast_shadows = true;
-    test_scene.lights.push_back(sun_light);
-
-    // Add point light
-    void_scene::LightData point_light;
-    point_light.name = "fill_light";
-    point_light.type = void_scene::LightType::Point;
-    point_light.enabled = true;
-    point_light.point.position = {5.0f, 3.0f, 5.0f};
-    point_light.point.color = {0.8f, 0.9f, 1.0f};
-    point_light.point.intensity = 0.5f;
-    point_light.point.range = 15.0f;
-    test_scene.lights.push_back(point_light);
-
-    // Add environment settings
-    void_scene::EnvironmentData environment;
-    environment.ambient_intensity = 0.1f;
-    environment.sky.zenith_color = {0.1f, 0.3f, 0.6f};
-    environment.sky.horizon_color = {0.5f, 0.7f, 0.9f};
-    environment.sky.sun_intensity = 50.0f;
-    test_scene.environment = environment;
-
-    // Add a test entity
-    void_scene::EntityData cube_entity;
-    cube_entity.name = "test_cube";
-    cube_entity.mesh = "cube";
-    cube_entity.layer = "world";
-    cube_entity.visible = true;
-    cube_entity.transform.position = {0.0f, 1.0f, 0.0f};
-    cube_entity.transform.rotation = {0.0f, 45.0f, 0.0f};
-    cube_entity.transform.scale = 1.0f;
-
-    // Set up material
-    void_scene::MaterialData cube_material;
-    cube_material.albedo.color = {0.8f, 0.2f, 0.2f, 1.0f};  // Red
-    cube_material.metallic.value = 0.0f;
-    cube_material.roughness.value = 0.5f;
-    cube_entity.material = cube_material;
-
-    // Add rotation animation
-    void_scene::AnimationData cube_anim;
-    cube_anim.type = void_scene::AnimationType::Rotate;
-    cube_anim.axis = {0.0f, 1.0f, 0.0f};
-    cube_anim.speed = 45.0f;  // degrees per second
-    cube_entity.animation = cube_anim;
-
-    test_scene.entities.push_back(cube_entity);
-
+    // Log scene summary
     spdlog::info("    SceneData: '{}' v{}", test_scene.metadata.name, test_scene.metadata.version);
     spdlog::info("    Cameras: {} (active={})", test_scene.cameras.size(),
                  test_scene.active_camera() ? test_scene.active_camera()->name : "none");
-    spdlog::info("    Lights: {} (sun + fill)", test_scene.lights.size());
+    spdlog::info("    Lights: {}", test_scene.lights.size());
+    for (const auto& light : test_scene.lights) {
+        const char* type_name = "unknown";
+        switch (light.type) {
+            case void_scene::LightType::Directional: type_name = "directional"; break;
+            case void_scene::LightType::Point: type_name = "point"; break;
+            case void_scene::LightType::Spot: type_name = "spot"; break;
+        }
+        spdlog::info("      - {} ({})", light.name, type_name);
+    }
     spdlog::info("    Entities: {}", test_scene.entities.size());
+    for (const auto& entity : test_scene.entities) {
+        spdlog::info("      - {} (mesh={})", entity.name, entity.mesh);
+    }
+    if (!test_scene.particle_emitters.empty()) {
+        spdlog::info("    Particle Emitters: {}", test_scene.particle_emitters.size());
+    }
+    if (!test_scene.textures.empty()) {
+        spdlog::info("    Textures: {}", test_scene.textures.size());
+    }
+
+    // Log environment
+    if (test_scene.environment.has_value()) {
+        spdlog::info("    Environment: ambient={:.2f}", test_scene.environment->ambient_intensity);
+    }
+
+    // Log shadows
+    if (test_scene.shadows.has_value() && test_scene.shadows->enabled) {
+        spdlog::info("    Shadows: {} cascades, atlas={}",
+                     test_scene.shadows->cascades.count, test_scene.shadows->atlas_size);
+    }
 
     // -------------------------------------------------------------------------
     // SCENE INSTANTIATOR - Create ECS entities from scene data
@@ -1846,7 +1825,7 @@ int main(int argc, char** argv) {
     void_scene::SceneInstantiator scene_instantiator(&ecs_world);
     scene_instantiator.register_components();  // Register scene component types
 
-    auto instance_result = scene_instantiator.instantiate(test_scene, "test_scene.toml");
+    auto instance_result = scene_instantiator.instantiate(test_scene, scene_path.string());
     if (instance_result) {
         auto& instance = instance_result.value();
         spdlog::info("    SceneInstance: {} entities created", instance.entities().size());
@@ -1858,6 +1837,28 @@ int main(int argc, char** argv) {
     } else {
         spdlog::warn("    SceneInstantiator: failed to instantiate - {}",
                      instance_result.error().message());
+    }
+
+    // -------------------------------------------------------------------------
+    // LIVE SCENE MANAGER - Hot-reload support
+    // -------------------------------------------------------------------------
+    spdlog::info("  [live-scene-manager]");
+
+    void_scene::LiveSceneManager live_scene_manager;
+    live_scene_manager.set_world(&ecs_world);
+    auto lsm_init = live_scene_manager.initialize();
+    if (lsm_init) {
+        spdlog::info("    LiveSceneManager: initialized");
+        spdlog::info("    Hot-reload: ENABLED (file watcher active)");
+
+        // Set up scene change callback
+        live_scene_manager.on_scene_changed([](const fs::path& path, const void_scene::SceneData& data) {
+            spdlog::info("    [hot-reload] Scene changed: {}", path.string());
+            spdlog::info("      Entities: {}, Cameras: {}, Lights: {}",
+                         data.entities.size(), data.cameras.size(), data.lights.size());
+        });
+    } else {
+        spdlog::warn("    LiveSceneManager: failed to initialize");
     }
 
     // -------------------------------------------------------------------------

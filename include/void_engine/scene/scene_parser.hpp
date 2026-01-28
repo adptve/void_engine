@@ -1,7 +1,7 @@
 #pragma once
 
 /// @file scene_parser.hpp
-/// @brief Scene parser for TOML scene files
+/// @brief Scene parser for JSON scene files
 
 #include "scene_data.hpp"
 #include <void_engine/core/error.hpp>
@@ -18,7 +18,7 @@ namespace void_scene {
 // SceneParser
 // =============================================================================
 
-/// Parser for scene.toml files
+/// Parser for scene.json files
 class SceneParser {
 public:
     SceneParser() = default;

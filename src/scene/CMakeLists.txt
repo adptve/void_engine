@@ -11,6 +11,6 @@ void_add_module(NAME void_scene
         void_core
         void_ecs
         void_render
-        tomlplusplus::tomlplusplus
+        nlohmann_json::nlohmann_json
         spdlog::spdlog
 )

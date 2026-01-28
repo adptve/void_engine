@@ -1,14 +1,201 @@
 /// @file manifest_parser.cpp
-/// @brief Package manifest (manifest.toml) parsing implementation
+/// @brief Package manifest (manifest.json) parsing implementation
 
 #include <void_engine/scene/manifest_parser.hpp>
 
-#include <toml++/toml.hpp>
+#include <nlohmann/json.hpp>
 
 #include <fstream>
 #include <sstream>
 
 namespace void_scene {
+
+using json = nlohmann::json;
+
+// =============================================================================
+// Helper Functions (internal)
+// =============================================================================
+
+namespace {
+
+void parse_package(const json& obj, PackageInfo& pkg) {
+    if (obj.contains("name") && obj["name"].is_string()) {
+        pkg.name = obj["name"].get<std::string>();
+    }
+    if (obj.contains("display_name") && obj["display_name"].is_string()) {
+        pkg.display_name = obj["display_name"].get<std::string>();
+    }
+    if (obj.contains("version") && obj["version"].is_string()) {
+        pkg.version = obj["version"].get<std::string>();
+    }
+    if (obj.contains("description") && obj["description"].is_string()) {
+        pkg.description = obj["description"].get<std::string>();
+    }
+    if (obj.contains("author") && obj["author"].is_string()) {
+        pkg.author = obj["author"].get<std::string>();
+    }
+    if (obj.contains("license") && obj["license"].is_string()) {
+        pkg.license = obj["license"].get<std::string>();
+    }
+
+    if (obj.contains("keywords") && obj["keywords"].is_array()) {
+        for (const auto& kw : obj["keywords"]) {
+            if (kw.is_string()) {
+                pkg.keywords.push_back(kw.get<std::string>());
+            }
+        }
+    }
+
+    if (obj.contains("categories") && obj["categories"].is_array()) {
+        for (const auto& cat : obj["categories"]) {
+            if (cat.is_string()) {
+                pkg.categories.push_back(cat.get<std::string>());
+            }
+        }
+    }
+}
+
+void parse_layers(const json& arr, std::vector<LayerConfig>& layers) {
+    for (const auto& layer_obj : arr) {
+        if (!layer_obj.is_object()) continue;
+
+        LayerConfig layer;
+
+        if (layer_obj.contains("name") && layer_obj["name"].is_string()) {
+            layer.name = layer_obj["name"].get<std::string>();
+        }
+        if (layer_obj.contains("type") && layer_obj["type"].is_string()) {
+            layer.type = layer_obj["type"].get<std::string>();
+        }
+        layer.priority = layer_obj.value("priority", 0);
+        if (layer_obj.contains("blend") && layer_obj["blend"].is_string()) {
+            layer.blend = layer_obj["blend"].get<std::string>();
+        }
+        layer.enabled = layer_obj.value("enabled", true);
+
+        layers.push_back(layer);
+    }
+}
+
+void parse_permissions(const json& obj, Permissions& perms) {
+    perms.scripts = obj.value("scripts", true);
+    perms.network = obj.value("network", false);
+    perms.file_system = obj.value("file_system", false);
+    perms.audio = obj.value("audio", true);
+    perms.input = obj.value("input", true);
+    perms.clipboard = obj.value("clipboard", false);
+}
+
+void parse_resources(const json& obj, ResourceLimits& limits) {
+    limits.max_entities = obj.value("max_entities", 10000u);
+    limits.max_memory = obj.value("max_memory", 536870912ull);
+    limits.max_layers = obj.value("max_layers", 16u);
+    limits.max_textures = obj.value("max_textures", 1000u);
+    limits.max_meshes = obj.value("max_meshes", 1000u);
+}
+
+void parse_lod(const json& obj, LodConfig& lod) {
+    lod.enabled = obj.value("enabled", true);
+    lod.bias = obj.value("bias", 0.0f);
+
+    if (obj.contains("distances") && obj["distances"].is_array()) {
+        lod.distances.clear();
+        for (const auto& d : obj["distances"]) {
+            if (d.is_number()) {
+                lod.distances.push_back(d.get<float>());
+            }
+        }
+    }
+}
+
+void parse_streaming(const json& obj, StreamingConfig& streaming) {
+    streaming.enabled = obj.value("enabled", false);
+    streaming.load_distance = obj.value("load_distance", 100.0f);
+    streaming.unload_distance = obj.value("unload_distance", 150.0f);
+    streaming.max_concurrent_loads = obj.value("max_concurrent_loads", 4u);
+}
+
+void parse_app(const json& obj, AppConfig& app) {
+    if (obj.contains("app_type") && obj["app_type"].is_string()) {
+        app.app_type = obj["app_type"].get<std::string>();
+    }
+    if (obj.contains("scene") && obj["scene"].is_string()) {
+        app.scene = obj["scene"].get<std::string>();
+    }
+
+    // Parse "layers" array
+    if (obj.contains("layers") && obj["layers"].is_array()) {
+        parse_layers(obj["layers"], app.layers);
+    }
+
+    // Parse "permissions" object
+    if (obj.contains("permissions") && obj["permissions"].is_object()) {
+        parse_permissions(obj["permissions"], app.permissions);
+    }
+
+    // Parse "resources" object
+    if (obj.contains("resources") && obj["resources"].is_object()) {
+        parse_resources(obj["resources"], app.resources);
+    }
+
+    // Parse "lod" object
+    if (obj.contains("lod") && obj["lod"].is_object()) {
+        parse_lod(obj["lod"], app.lod);
+    }
+
+    // Parse "streaming" object
+    if (obj.contains("streaming") && obj["streaming"].is_object()) {
+        parse_streaming(obj["streaming"], app.streaming);
+    }
+}
+
+void parse_assets(const json& obj, AssetConfig& assets) {
+    if (obj.contains("include") && obj["include"].is_array()) {
+        for (const auto& inc : obj["include"]) {
+            if (inc.is_string()) {
+                assets.include.push_back(inc.get<std::string>());
+            }
+        }
+    }
+
+    if (obj.contains("exclude") && obj["exclude"].is_array()) {
+        for (const auto& exc : obj["exclude"]) {
+            if (exc.is_string()) {
+                assets.exclude.push_back(exc.get<std::string>());
+            }
+        }
+    }
+
+    if (obj.contains("base_path") && obj["base_path"].is_string()) {
+        assets.base_path = obj["base_path"].get<std::string>();
+    }
+
+    assets.hot_reload = obj.value("hot_reload", true);
+}
+
+void parse_platform(const json& obj, PlatformRequirements& platform) {
+    if (obj.contains("min_version") && obj["min_version"].is_string()) {
+        platform.min_version = obj["min_version"].get<std::string>();
+    }
+
+    if (obj.contains("required_features") && obj["required_features"].is_array()) {
+        for (const auto& feat : obj["required_features"]) {
+            if (feat.is_string()) {
+                platform.required_features.push_back(feat.get<std::string>());
+            }
+        }
+    }
+
+    if (obj.contains("optional_features") && obj["optional_features"].is_array()) {
+        for (const auto& feat : obj["optional_features"]) {
+            if (feat.is_string()) {
+                platform.optional_features.push_back(feat.get<std::string>());
+            }
+        }
+    }
+}
+
+} // anonymous namespace
 
 // =============================================================================
 // ManifestParser Implementation
@@ -34,230 +221,38 @@ void_core::Result<ManifestData> ManifestParser::parse_string(
     ManifestData manifest;
 
     try {
-        toml::table tbl = toml::parse(content, source_name);
+        json root = json::parse(content);
 
-        // Parse [package] section
-        if (auto pkg = tbl["package"].as_table()) {
-            parse_package(pkg, manifest.package);
+        // Parse "package" section
+        if (root.contains("package") && root["package"].is_object()) {
+            parse_package(root["package"], manifest.package);
         }
 
-        // Parse [app] section
-        if (auto app = tbl["app"].as_table()) {
-            parse_app(app, manifest.app);
+        // Parse "app" section
+        if (root.contains("app") && root["app"].is_object()) {
+            parse_app(root["app"], manifest.app);
         }
 
-        // Parse [assets] section
-        if (auto assets = tbl["assets"].as_table()) {
-            parse_assets(assets, manifest.assets);
+        // Parse "assets" section
+        if (root.contains("assets") && root["assets"].is_object()) {
+            parse_assets(root["assets"], manifest.assets);
         }
 
-        // Parse [platform] section
-        if (auto platform = tbl["platform"].as_table()) {
-            parse_platform(platform, manifest.platform);
+        // Parse "platform" section
+        if (root.contains("platform") && root["platform"].is_object()) {
+            parse_platform(root["platform"], manifest.platform);
         }
 
-    } catch (const toml::parse_error& err) {
-        m_last_error = "TOML parse error: " + std::string(err.what());
+    } catch (const json::parse_error& err) {
+        m_last_error = "JSON parse error: " + std::string(err.what());
+        return void_core::Err<ManifestData>(void_core::Error(m_last_error));
+    } catch (const json::type_error& err) {
+        m_last_error = "JSON type error: " + std::string(err.what());
         return void_core::Err<ManifestData>(void_core::Error(m_last_error));
     }
 
     m_last_error.clear();
     return manifest;
-}
-
-void ManifestParser::parse_package(const void* tbl_ptr, PackageInfo& pkg) {
-    const auto& tbl = *static_cast<const toml::table*>(tbl_ptr);
-
-    if (auto name = tbl["name"].value<std::string>()) {
-        pkg.name = *name;
-    }
-    if (auto display = tbl["display_name"].value<std::string>()) {
-        pkg.display_name = *display;
-    }
-    if (auto ver = tbl["version"].value<std::string>()) {
-        pkg.version = *ver;
-    }
-    if (auto desc = tbl["description"].value<std::string>()) {
-        pkg.description = *desc;
-    }
-    if (auto author = tbl["author"].value<std::string>()) {
-        pkg.author = *author;
-    }
-    if (auto license = tbl["license"].value<std::string>()) {
-        pkg.license = *license;
-    }
-
-    if (auto keywords = tbl["keywords"].as_array()) {
-        for (const auto& kw : *keywords) {
-            if (auto str = kw.value<std::string>()) {
-                pkg.keywords.push_back(*str);
-            }
-        }
-    }
-
-    if (auto categories = tbl["categories"].as_array()) {
-        for (const auto& cat : *categories) {
-            if (auto str = cat.value<std::string>()) {
-                pkg.categories.push_back(*str);
-            }
-        }
-    }
-}
-
-void ManifestParser::parse_app(const void* tbl_ptr, AppConfig& app) {
-    const auto& tbl = *static_cast<const toml::table*>(tbl_ptr);
-
-    if (auto app_type = tbl["app_type"].value<std::string>()) {
-        app.app_type = *app_type;
-    }
-    if (auto scene = tbl["scene"].value<std::string>()) {
-        app.scene = *scene;
-    }
-
-    // Parse [[app.layers]]
-    if (auto layers = tbl["layers"].as_array()) {
-        parse_layers(layers, app.layers);
-    }
-
-    // Parse [app.permissions]
-    if (auto perms = tbl["permissions"].as_table()) {
-        parse_permissions(perms, app.permissions);
-    }
-
-    // Parse [app.resources]
-    if (auto resources = tbl["resources"].as_table()) {
-        parse_resources(resources, app.resources);
-    }
-
-    // Parse [app.lod]
-    if (auto lod = tbl["lod"].as_table()) {
-        parse_lod(lod, app.lod);
-    }
-
-    // Parse [app.streaming]
-    if (auto streaming = tbl["streaming"].as_table()) {
-        parse_streaming(streaming, app.streaming);
-    }
-}
-
-void ManifestParser::parse_layers(const void* arr_ptr, std::vector<LayerConfig>& layers) {
-    const auto& arr = *static_cast<const toml::array*>(arr_ptr);
-
-    for (const auto& layer_node : arr) {
-        if (auto layer_tbl = layer_node.as_table()) {
-            LayerConfig layer;
-
-            if (auto name = (*layer_tbl)["name"].value<std::string>()) {
-                layer.name = *name;
-            }
-            if (auto type = (*layer_tbl)["type"].value<std::string>()) {
-                layer.type = *type;
-            }
-            layer.priority = (*layer_tbl)["priority"].value_or(0);
-            if (auto blend = (*layer_tbl)["blend"].value<std::string>()) {
-                layer.blend = *blend;
-            }
-            layer.enabled = (*layer_tbl)["enabled"].value_or(true);
-
-            layers.push_back(layer);
-        }
-    }
-}
-
-void ManifestParser::parse_permissions(const void* tbl_ptr, Permissions& perms) {
-    const auto& tbl = *static_cast<const toml::table*>(tbl_ptr);
-
-    perms.scripts = tbl["scripts"].value_or(true);
-    perms.network = tbl["network"].value_or(false);
-    perms.file_system = tbl["file_system"].value_or(false);
-    perms.audio = tbl["audio"].value_or(true);
-    perms.input = tbl["input"].value_or(true);
-    perms.clipboard = tbl["clipboard"].value_or(false);
-}
-
-void ManifestParser::parse_resources(const void* tbl_ptr, ResourceLimits& limits) {
-    const auto& tbl = *static_cast<const toml::table*>(tbl_ptr);
-
-    limits.max_entities = static_cast<std::uint32_t>(tbl["max_entities"].value_or(10000));
-    limits.max_memory = static_cast<std::uint64_t>(tbl["max_memory"].value_or(536870912));
-    limits.max_layers = static_cast<std::uint32_t>(tbl["max_layers"].value_or(16));
-    limits.max_textures = static_cast<std::uint32_t>(tbl["max_textures"].value_or(1000));
-    limits.max_meshes = static_cast<std::uint32_t>(tbl["max_meshes"].value_or(1000));
-}
-
-void ManifestParser::parse_lod(const void* tbl_ptr, LodConfig& lod) {
-    const auto& tbl = *static_cast<const toml::table*>(tbl_ptr);
-
-    lod.enabled = tbl["enabled"].value_or(true);
-    lod.bias = tbl["bias"].value_or(0.0f);
-
-    if (auto distances = tbl["distances"].as_array()) {
-        lod.distances.clear();
-        for (const auto& d : *distances) {
-            if (auto val = d.value<double>()) {
-                lod.distances.push_back(static_cast<float>(*val));
-            }
-        }
-    }
-}
-
-void ManifestParser::parse_streaming(const void* tbl_ptr, StreamingConfig& streaming) {
-    const auto& tbl = *static_cast<const toml::table*>(tbl_ptr);
-
-    streaming.enabled = tbl["enabled"].value_or(false);
-    streaming.load_distance = tbl["load_distance"].value_or(100.0f);
-    streaming.unload_distance = tbl["unload_distance"].value_or(150.0f);
-    streaming.max_concurrent_loads = static_cast<std::uint32_t>(tbl["max_concurrent_loads"].value_or(4));
-}
-
-void ManifestParser::parse_assets(const void* tbl_ptr, AssetConfig& assets) {
-    const auto& tbl = *static_cast<const toml::table*>(tbl_ptr);
-
-    if (auto include = tbl["include"].as_array()) {
-        for (const auto& inc : *include) {
-            if (auto str = inc.value<std::string>()) {
-                assets.include.push_back(*str);
-            }
-        }
-    }
-
-    if (auto exclude = tbl["exclude"].as_array()) {
-        for (const auto& exc : *exclude) {
-            if (auto str = exc.value<std::string>()) {
-                assets.exclude.push_back(*str);
-            }
-        }
-    }
-
-    if (auto base = tbl["base_path"].value<std::string>()) {
-        assets.base_path = *base;
-    }
-
-    assets.hot_reload = tbl["hot_reload"].value_or(true);
-}
-
-void ManifestParser::parse_platform(const void* tbl_ptr, PlatformRequirements& platform) {
-    const auto& tbl = *static_cast<const toml::table*>(tbl_ptr);
-
-    if (auto ver = tbl["min_version"].value<std::string>()) {
-        platform.min_version = *ver;
-    }
-
-    if (auto required = tbl["required_features"].as_array()) {
-        for (const auto& feat : *required) {
-            if (auto str = feat.value<std::string>()) {
-                platform.required_features.push_back(*str);
-            }
-        }
-    }
-
-    if (auto optional = tbl["optional_features"].as_array()) {
-        for (const auto& feat : *optional) {
-            if (auto str = feat.value<std::string>()) {
-                platform.optional_features.push_back(*str);
-            }
-        }
-    }
 }
 
 // =============================================================================
