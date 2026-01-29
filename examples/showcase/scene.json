@@ -1,0 +1,513 @@
+{
+  "scene": {
+    "name": "Void Engine Showcase",
+    "description": "Comprehensive demonstration of void_engine PBR rendering, materials, lighting, shadows, and animations",
+    "version": "1.0.0"
+  },
+
+  "environment": {
+    "type": "hdri",
+    "hdri_path": "assets/environments/royal_esplanade_1k.hdr",
+    "intensity": 1.0,
+    "rotation": 0.0,
+    "ambient": {
+      "color": [0.15, 0.18, 0.22],
+      "intensity": 0.3
+    }
+  },
+
+  "cameras": [
+    {
+      "name": "main_camera",
+      "active": true,
+      "type": "perspective",
+      "transform": {
+        "position": [0.0, 4.0, 12.0],
+        "target": [0.0, 1.0, 0.0],
+        "up": [0.0, 1.0, 0.0]
+      },
+      "perspective": {
+        "fov": 50.0,
+        "near": 0.1,
+        "far": 500.0
+      }
+    }
+  ],
+
+  "lights": [
+    {
+      "name": "sun",
+      "type": "directional",
+      "enabled": true,
+      "directional": {
+        "direction": [-0.4, -0.8, -0.4],
+        "color": [1.0, 0.98, 0.95],
+        "intensity": 3.5,
+        "cast_shadows": true
+      }
+    },
+    {
+      "name": "sky_fill",
+      "type": "directional",
+      "enabled": true,
+      "directional": {
+        "direction": [0.3, -0.2, 0.5],
+        "color": [0.5, 0.6, 0.8],
+        "intensity": 0.8,
+        "cast_shadows": false
+      }
+    },
+    {
+      "name": "warm_accent",
+      "type": "point",
+      "enabled": true,
+      "point": {
+        "position": [-5.0, 3.0, 3.0],
+        "color": [1.0, 0.7, 0.4],
+        "intensity": 60.0,
+        "range": 12.0,
+        "cast_shadows": false
+      }
+    },
+    {
+      "name": "cool_accent",
+      "type": "point",
+      "enabled": true,
+      "point": {
+        "position": [5.0, 3.0, -3.0],
+        "color": [0.4, 0.6, 1.0],
+        "intensity": 60.0,
+        "range": 12.0,
+        "cast_shadows": false
+      }
+    },
+    {
+      "name": "center_spot",
+      "type": "spot",
+      "enabled": true,
+      "spot": {
+        "position": [0.0, 8.0, 0.0],
+        "direction": [0.0, -1.0, 0.0],
+        "color": [1.0, 1.0, 0.95],
+        "intensity": 150.0,
+        "range": 15.0,
+        "inner_angle": 15.0,
+        "outer_angle": 35.0,
+        "cast_shadows": true
+      }
+    }
+  ],
+
+  "shadows": {
+    "enabled": true,
+    "type": "cascade",
+    "quality": "high",
+    "resolution": 2048,
+    "cascades": [
+      { "distance": 10.0, "resolution": 2048 },
+      { "distance": 30.0, "resolution": 1024 }
+    ],
+    "filter": "pcf_soft",
+    "bias": 0.0005,
+    "normal_bias": 0.01
+  },
+
+  "entities": [
+    {
+      "name": "hero_sphere",
+      "mesh": "sphere",
+      "layer": "world",
+      "visible": true,
+      "transform": {
+        "position": [0.0, 2.5, 0.0],
+        "scale": 1.8
+      },
+      "material": {
+        "albedo": [1.0, 0.85, 0.57],
+        "metallic": 1.0,
+        "roughness": 0.15,
+        "ao": 1.0,
+        "emissive": [0.0, 0.0, 0.0],
+        "emissive_strength": 0.0
+      },
+      "animation": {
+        "type": "rotate",
+        "axis": [0.0, 1.0, 0.0],
+        "speed": 15.0,
+        "loop": true
+      }
+    },
+
+    {
+      "name": "chrome_torus",
+      "mesh": "torus",
+      "layer": "world",
+      "visible": true,
+      "transform": {
+        "position": [0.0, 2.5, 0.0],
+        "rotation": [90.0, 0.0, 0.0],
+        "scale": 2.8
+      },
+      "material": {
+        "albedo": [0.95, 0.95, 0.97],
+        "metallic": 1.0,
+        "roughness": 0.05,
+        "ao": 1.0
+      },
+      "animation": {
+        "type": "rotate",
+        "axis": [0.0, 0.0, 1.0],
+        "speed": -25.0,
+        "loop": true
+      }
+    },
+
+    {
+      "name": "copper_sphere",
+      "mesh": "sphere",
+      "layer": "world",
+      "visible": true,
+      "transform": {
+        "position": [-4.0, 1.2, 0.0],
+        "scale": 1.0
+      },
+      "material": {
+        "albedo": [0.95, 0.64, 0.54],
+        "metallic": 1.0,
+        "roughness": 0.35,
+        "ao": 1.0
+      },
+      "animation": {
+        "type": "oscillate",
+        "axis": [0.0, 1.0, 0.0],
+        "amplitude": 0.4,
+        "frequency": 0.8
+      }
+    },
+
+    {
+      "name": "iron_sphere",
+      "mesh": "sphere",
+      "layer": "world",
+      "visible": true,
+      "transform": {
+        "position": [4.0, 1.2, 0.0],
+        "scale": 1.0
+      },
+      "material": {
+        "albedo": [0.56, 0.57, 0.58],
+        "metallic": 1.0,
+        "roughness": 0.45,
+        "ao": 1.0
+      },
+      "animation": {
+        "type": "oscillate",
+        "axis": [0.0, 1.0, 0.0],
+        "amplitude": 0.4,
+        "frequency": 0.8,
+        "phase": 180.0
+      }
+    },
+
+    {
+      "name": "red_plastic",
+      "mesh": "sphere",
+      "layer": "world",
+      "visible": true,
+      "transform": {
+        "position": [-2.5, 1.0, 3.0],
+        "scale": 0.8
+      },
+      "material": {
+        "albedo": [0.9, 0.15, 0.15],
+        "metallic": 0.0,
+        "roughness": 0.4,
+        "ao": 1.0
+      }
+    },
+
+    {
+      "name": "green_plastic",
+      "mesh": "sphere",
+      "layer": "world",
+      "visible": true,
+      "transform": {
+        "position": [0.0, 1.0, 4.0],
+        "scale": 0.8
+      },
+      "material": {
+        "albedo": [0.15, 0.8, 0.25],
+        "metallic": 0.0,
+        "roughness": 0.5,
+        "ao": 1.0
+      }
+    },
+
+    {
+      "name": "blue_plastic",
+      "mesh": "sphere",
+      "layer": "world",
+      "visible": true,
+      "transform": {
+        "position": [2.5, 1.0, 3.0],
+        "scale": 0.8
+      },
+      "material": {
+        "albedo": [0.15, 0.3, 0.9],
+        "metallic": 0.0,
+        "roughness": 0.35,
+        "ao": 1.0
+      }
+    },
+
+    {
+      "name": "white_ceramic",
+      "mesh": "sphere",
+      "layer": "world",
+      "visible": true,
+      "transform": {
+        "position": [-2.5, 1.0, -3.0],
+        "scale": 0.8
+      },
+      "material": {
+        "albedo": [0.98, 0.98, 0.98],
+        "metallic": 0.0,
+        "roughness": 0.08,
+        "ao": 1.0
+      }
+    },
+
+    {
+      "name": "black_marble",
+      "mesh": "sphere",
+      "layer": "world",
+      "visible": true,
+      "transform": {
+        "position": [0.0, 1.0, -4.0],
+        "scale": 0.8
+      },
+      "material": {
+        "albedo": [0.02, 0.02, 0.02],
+        "metallic": 0.0,
+        "roughness": 0.15,
+        "ao": 1.0
+      }
+    },
+
+    {
+      "name": "purple_glass",
+      "mesh": "sphere",
+      "layer": "world",
+      "visible": true,
+      "transform": {
+        "position": [2.5, 1.0, -3.0],
+        "scale": 0.8
+      },
+      "material": {
+        "albedo": [0.6, 0.2, 0.8],
+        "metallic": 0.0,
+        "roughness": 0.02,
+        "ao": 1.0
+      }
+    },
+
+    {
+      "name": "orbiting_diamond",
+      "mesh": "diamond",
+      "layer": "world",
+      "visible": true,
+      "transform": {
+        "position": [0.0, 4.5, 0.0],
+        "scale": 0.5
+      },
+      "material": {
+        "albedo": [0.8, 0.9, 1.0],
+        "metallic": 0.0,
+        "roughness": 0.0,
+        "ao": 1.0,
+        "emissive": [0.3, 0.5, 1.0],
+        "emissive_strength": 2.0
+      },
+      "animation": {
+        "type": "orbit",
+        "center": [0.0, 4.5, 0.0],
+        "radius": 3.0,
+        "speed": 40.0,
+        "axis": [0.0, 1.0, 0.0]
+      }
+    },
+
+    {
+      "name": "floating_cube_1",
+      "mesh": "cube",
+      "layer": "world",
+      "visible": true,
+      "transform": {
+        "position": [-5.5, 2.0, -2.0],
+        "rotation": [45.0, 45.0, 0.0],
+        "scale": 0.6
+      },
+      "material": {
+        "albedo": [0.85, 0.75, 0.65],
+        "metallic": 0.8,
+        "roughness": 0.25,
+        "ao": 1.0
+      },
+      "animation": {
+        "type": "rotate",
+        "axis": [1.0, 1.0, 0.0],
+        "speed": 30.0,
+        "loop": true
+      }
+    },
+
+    {
+      "name": "floating_cube_2",
+      "mesh": "cube",
+      "layer": "world",
+      "visible": true,
+      "transform": {
+        "position": [5.5, 2.0, 2.0],
+        "rotation": [30.0, 60.0, 0.0],
+        "scale": 0.6
+      },
+      "material": {
+        "albedo": [0.65, 0.75, 0.85],
+        "metallic": 0.8,
+        "roughness": 0.25,
+        "ao": 1.0
+      },
+      "animation": {
+        "type": "rotate",
+        "axis": [1.0, -1.0, 0.0],
+        "speed": -30.0,
+        "loop": true
+      }
+    },
+
+    {
+      "name": "ground_plane",
+      "mesh": "plane",
+      "layer": "world",
+      "visible": true,
+      "transform": {
+        "position": [0.0, 0.0, 0.0],
+        "scale": [15.0, 1.0, 15.0]
+      },
+      "material": {
+        "albedo": { "texture": "assets/textures/wood_diff.jpg" },
+        "normal_map": "assets/textures/wood_nor.jpg",
+        "roughness": { "texture": "assets/textures/wood_rough.jpg" },
+        "metallic": 0.0,
+        "ao": 1.0,
+        "uv_scale": [6.0, 6.0]
+      }
+    },
+
+    {
+      "name": "center_pedestal",
+      "mesh": "cylinder",
+      "layer": "world",
+      "visible": true,
+      "transform": {
+        "position": [0.0, 0.4, 0.0],
+        "scale": [1.5, 0.8, 1.5]
+      },
+      "material": {
+        "albedo": [0.08, 0.08, 0.1],
+        "metallic": 0.95,
+        "roughness": 0.2,
+        "ao": 1.0
+      }
+    },
+
+    {
+      "name": "pedestal_left",
+      "mesh": "cylinder",
+      "layer": "world",
+      "visible": true,
+      "transform": {
+        "position": [-4.0, 0.3, 0.0],
+        "scale": [0.8, 0.6, 0.8]
+      },
+      "material": {
+        "albedo": [0.1, 0.1, 0.12],
+        "metallic": 0.9,
+        "roughness": 0.3,
+        "ao": 1.0
+      }
+    },
+
+    {
+      "name": "pedestal_right",
+      "mesh": "cylinder",
+      "layer": "world",
+      "visible": true,
+      "transform": {
+        "position": [4.0, 0.3, 0.0],
+        "scale": [0.8, 0.6, 0.8]
+      },
+      "material": {
+        "albedo": [0.1, 0.1, 0.12],
+        "metallic": 0.9,
+        "roughness": 0.3,
+        "ao": 1.0
+      }
+    },
+
+    {
+      "name": "emissive_ring",
+      "mesh": "torus",
+      "layer": "world",
+      "visible": true,
+      "transform": {
+        "position": [0.0, 0.1, 0.0],
+        "rotation": [90.0, 0.0, 0.0],
+        "scale": [6.0, 6.0, 0.3]
+      },
+      "material": {
+        "albedo": [0.05, 0.05, 0.05],
+        "metallic": 0.9,
+        "roughness": 0.5,
+        "ao": 1.0,
+        "emissive": [0.2, 0.5, 1.0],
+        "emissive_strength": 0.8
+      },
+      "animation": {
+        "type": "pulse",
+        "property": "emissive_strength",
+        "min": 0.3,
+        "max": 1.5,
+        "frequency": 0.5
+      }
+    }
+  ],
+
+  "input": {
+    "bindings": {
+      "camera_orbit": "mouse_drag_right",
+      "camera_pan": "mouse_drag_middle",
+      "camera_zoom": "mouse_scroll",
+      "reset_view": "R",
+      "toggle_animation": "Space",
+      "toggle_wireframe": "F",
+      "toggle_stats": "F2",
+      "quit": "Escape"
+    }
+  },
+
+  "debug": {
+    "enabled": false,
+    "stats": {
+      "enabled": true,
+      "position": "top_left",
+      "display": {
+        "fps": true,
+        "frame_time": true,
+        "draw_calls": true,
+        "triangles": true,
+        "entities_visible": true
+      }
+    }
+  }
+}

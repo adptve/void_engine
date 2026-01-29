@@ -336,8 +336,8 @@ const RenderTransformData* RenderSceneGraph::get_transform(void_ecs::Entity enti
 
 std::vector<std::size_t> RenderSceneGraph::cull_by_frustum(
     const void_ecs::Mat4& view_projection,
-    float near_plane,
-    float far_plane) const {
+    [[maybe_unused]] float near_plane,
+    [[maybe_unused]] float far_plane) const {
 
     std::vector<std::size_t> visible_indices;
     visible_indices.reserve(m_visible_count);

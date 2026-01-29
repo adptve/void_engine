@@ -289,7 +289,7 @@ void GraphSystem::continue_execution(ExecutionId id) {
     executor_.resume(id);
 }
 
-std::vector<NodeId> GraphSystem::get_call_stack(ExecutionId id) const {
+std::vector<NodeId> GraphSystem::get_call_stack([[maybe_unused]] ExecutionId id) const {
     // Would need access to executor internals
     return {};
 }

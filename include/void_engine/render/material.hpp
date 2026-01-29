@@ -426,7 +426,7 @@ public:
     /// Ensure default material exists at index 0
     void ensure_default() {
         if (m_materials.empty()) {
-            add(GpuMaterial::pbr_default());
+            (void)add(GpuMaterial::pbr_default());
         }
     }
 

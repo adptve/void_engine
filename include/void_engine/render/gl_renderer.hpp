@@ -47,8 +47,12 @@ struct GpuMesh {
     GLsizei vertex_count = 0;
     bool has_indices = false;
 
+    // Bounding box
+    std::array<float, 3> min_bounds = {0, 0, 0};
+    std::array<float, 3> max_bounds = {0, 0, 0};
+
     void destroy();
-    bool is_valid() const { return vao != 0; }
+    [[nodiscard]] bool is_valid() const noexcept { return vao != 0; }
 };
 
 // =============================================================================

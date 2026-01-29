@@ -56,7 +56,7 @@ const NodeTemplate* NodeRegistry::find_template(const std::string& name) const {
     return get_template(it->second);
 }
 
-std::unique_ptr<INode> NodeRegistry::create_node(NodeTypeId type_id, NodeId node_id) const {
+std::unique_ptr<INode> NodeRegistry::create_node(NodeTypeId type_id, [[maybe_unused]] NodeId node_id) const {
     const NodeTemplate* tmpl = get_template(type_id);
     if (!tmpl || !tmpl->create) return nullptr;
 
@@ -104,14 +104,17 @@ std::vector<const NodeTemplate*> NodeRegistry::search(const std::string& query) 
     std::vector<const NodeTemplate*> result;
 
     std::string lower_query = query;
-    std::transform(lower_query.begin(), lower_query.end(), lower_query.begin(), ::tolower);
+    std::transform(lower_query.begin(), lower_query.end(), lower_query.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
     for (const auto& [id, tmpl] : templates_) {
         std::string lower_name = tmpl.name;
-        std::transform(lower_name.begin(), lower_name.end(), lower_name.begin(), ::tolower);
+        std::transform(lower_name.begin(), lower_name.end(), lower_name.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
         std::string lower_keywords = tmpl.keywords;
-        std::transform(lower_keywords.begin(), lower_keywords.end(), lower_keywords.begin(), ::tolower);
+        std::transform(lower_keywords.begin(), lower_keywords.end(), lower_keywords.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
         if (lower_name.find(lower_query) != std::string::npos ||
             lower_keywords.find(lower_query) != std::string::npos) {
@@ -1584,7 +1587,7 @@ void GraphLibrary::load_directory(const std::filesystem::path& directory) {
 
     for (const auto& entry : std::filesystem::directory_iterator(directory)) {
         if (entry.path().extension() == ".vgraph") {
-            load_graph(entry.path());
+            (void)load_graph(entry.path());
         }
     }
 }

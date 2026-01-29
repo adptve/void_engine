@@ -3,6 +3,7 @@ void_add_module(NAME void_asset
     SOURCES
         # Core asset system
         asset.cpp
+        asset_registry.cpp  # Hot-reloadable registry with generational handles
         cache.cpp
         handle.cpp
         loader.cpp

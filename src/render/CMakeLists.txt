@@ -34,18 +34,23 @@ void_add_module(NAME void_render
         spatial.cpp
         animation.cpp
         texture.cpp
-        gltf_loader.cpp
+        gltf_loader.cpp      # glTF model loading (implements header pimpl)
         shadow_renderer.cpp
         debug_renderer.cpp
         lod.cpp
         temporal_effects.cpp
         instancing.cpp
         post_process.cpp
+        # ECS render integration
+        components.cpp       # ECS render components
+        render_assets.cpp    # Hot-reloadable asset manager (integrates GltfLoader)
+        render_systems.cpp   # ECS render systems
     DEPENDENCIES
         void_core
         void_ir
         void_shader
         void_asset
+        void_ecs
 )
 
 # Add include paths

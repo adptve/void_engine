@@ -59,6 +59,94 @@ is_compatible()      // Compatibility checking
 - JSON enables: schema validation, API consumption, better tooling
 - NEVER use TOML, YAML, or other formats for configuration
 
+## MANDATORY: Production-Ready Code Standards
+
+**This is a PRODUCTION ENGINE. Every line of code must be production-ready.**
+
+### Code Quality Requirements
+
+1. **ALWAYS use advanced, complete implementations**
+   - Use modern C++20/23 features appropriately (concepts, ranges, coroutines where beneficial)
+   - Implement proper RAII for all resource management
+   - Use strong typing (no raw pointers without ownership semantics, prefer `std::unique_ptr`/`std::shared_ptr`)
+   - Include complete error handling with `Result<T>` types or exceptions where appropriate
+
+2. **NEVER take shortcuts**
+   - No `// TODO: implement later` without immediately implementing
+   - No placeholder return values (`return {};` or `return nullptr;` as a cop-out)
+   - No skipping edge cases - handle ALL cases
+   - No "happy path only" code - handle errors, nulls, empty collections, boundary conditions
+
+3. **NEVER use bandaid fixes**
+   - Don't add workarounds for symptoms - fix root causes
+   - Don't add special-case code that masks underlying issues
+   - Don't disable features to avoid bugs - fix the bugs
+   - Don't add defensive code that hides logic errors - fix the logic
+
+4. **ALWAYS implement complete functionality**
+   - If a function is declared, implement it fully
+   - If an interface is defined, implement all methods with real logic
+   - If a class is created, make it production-complete (constructors, destructors, move semantics, etc.)
+   - If error handling is needed, implement proper recovery or propagation
+
+### Implementation Patterns Required
+
+```cpp
+// WRONG: Stub/placeholder
+Result<void> load_package(const std::string& path) {
+    return Ok(); // TODO: implement
+}
+
+// CORRECT: Full implementation
+Result<void> load_package(const std::string& path) {
+    if (path.empty()) {
+        return Error("Package path cannot be empty");
+    }
+
+    auto manifest_result = PackageManifest::load(path);
+    if (!manifest_result) {
+        return Error("Failed to load manifest: " + manifest_result.error());
+    }
+
+    auto& manifest = *manifest_result;
+
+    // Validate dependencies
+    for (const auto& dep : manifest.dependencies()) {
+        if (!is_available(dep.name)) {
+            return Error("Missing dependency: " + dep.name);
+        }
+    }
+
+    // Actually load the package content
+    // ... complete implementation ...
+
+    m_loaded_packages[manifest.name()] = std::move(manifest);
+    return Ok();
+}
+```
+
+### Before Writing ANY Code
+
+1. **Read existing code** - Understand the patterns already in use
+2. **Check the headers** - Know the actual types and APIs
+3. **Plan the implementation** - Think through edge cases BEFORE coding
+4. **Consider thread safety** - Is this code accessed from multiple threads?
+5. **Consider hot-reload** - Will this survive a reload? Does state need preservation?
+
+### Code Review Checklist (Self-Apply)
+
+Before considering any implementation complete:
+- [ ] All code paths return meaningful values (no empty returns)
+- [ ] All errors are handled or propagated (no silent failures)
+- [ ] All resources are properly managed (RAII, no leaks)
+- [ ] All edge cases are handled (empty, null, boundary, overflow)
+- [ ] All public APIs have clear contracts (preconditions documented)
+- [ ] Thread safety is considered (locks, atomics, or documented as single-threaded)
+- [ ] Hot-reload compatibility is preserved (state can snapshot/restore)
+- [ ] No magic numbers (use named constants)
+- [ ] No copy-paste code (factor into functions)
+- [ ] Naming is clear and consistent with codebase conventions
+
 ## Build Commands
 
 ```bash
@@ -116,3 +204,19 @@ Reference these skill guides in `.claude/skills/` for domain expertise:
 | Unit Testing | `unit-test.md` | Catch2, mocking, TDD |
 
 **Orchestrator:** `.claude/agents/orchestrator.md` - Coordinates skills for complex tasks
+
+## Key Documentation
+
+Before implementing major features, READ these documents:
+
+| Document | Path | Purpose |
+|----------|------|---------|
+| ECS Architecture | `doc/ecs/ECS_COMPREHENSIVE_ARCHITECTURE.md` | Complete ECS system reference |
+| Package System | `doc/ecs/PACKAGE_SYSTEM.md` | Package types, dependencies, contracts |
+| Package Migration | `doc/ecs/PACKAGE_SYSTEM_MIGRATION.md` | Implementation plan, phases, checklist |
+
+**When implementing package system features:**
+- Follow the phase structure in PACKAGE_SYSTEM_MIGRATION.md
+- Use the exact JSON schemas defined in PACKAGE_SYSTEM.md
+- Respect dependency rules (core → engine → gameplay → feature → mod)
+- Implement complete loaders, not stubs

@@ -173,6 +173,13 @@ add_subdirectory(src/physics)
 add_subdirectory(src/triggers)
 
 # ============================================================================
+# PHASE 6b: PACKAGE SYSTEM (ACTIVE)
+# Modules: package
+# Dependencies: void_core, void_ecs, nlohmann_json
+# ============================================================================
+add_subdirectory(src/package)
+
+# ============================================================================
 # PHASE 7: SCENE (ACTIVE)
 # Modules: scene, graph
 # Dependencies: nlohmann_json (already fetched in Phase 0)
@@ -272,6 +279,7 @@ target_link_libraries(void_engine PRIVATE void_input)          # Phase 5
 target_link_libraries(void_engine PRIVATE void_ecs)            # Phase 6
 target_link_libraries(void_engine PRIVATE void_physics)        # Phase 6
 target_link_libraries(void_engine PRIVATE void_triggers)       # Phase 6
+target_link_libraries(void_engine PRIVATE void_package)        # Phase 6b
 target_link_libraries(void_engine PRIVATE void_scene)          # Phase 7
 target_link_libraries(void_engine PRIVATE void_graph)          # Phase 7
 target_link_libraries(void_engine PRIVATE void_script)         # Phase 8
@@ -312,6 +320,7 @@ target_link_libraries(void_engine_bootstrap PRIVATE
     void_ecs
     void_physics
     void_triggers
+    void_package
     void_scene
     void_graph
     void_script

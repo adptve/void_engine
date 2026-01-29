@@ -1,0 +1,132 @@
+{
+  "plugin": {
+    "name": "camera_controller",
+    "version": "1.0.0",
+    "description": "Orbit camera controller with keyboard and mouse input",
+    "author": "Void Engine Team",
+    "hot_reload": true
+  },
+
+  "dependencies": [],
+
+  "config": {
+    "mode": "orbit",
+    "target": [0.0, 1.5, 0.0],
+    "distance": {
+      "initial": 12.0,
+      "min": 2.0,
+      "max": 50.0
+    },
+    "rotation": {
+      "yaw": 0.0,
+      "pitch": 25.0,
+      "min_pitch": -85.0,
+      "max_pitch": 85.0
+    },
+    "speed": {
+      "orbit": 0.3,
+      "pan": 0.01,
+      "zoom": 1.5,
+      "keyboard_move": 5.0
+    },
+    "smoothing": {
+      "enabled": true,
+      "factor": 0.15
+    },
+    "auto_rotate": {
+      "enabled": false,
+      "speed": 10.0
+    }
+  },
+
+  "input_bindings": {
+    "orbit": {
+      "type": "mouse_drag",
+      "button": "right",
+      "modifiers": []
+    },
+    "pan": {
+      "type": "mouse_drag",
+      "button": "middle",
+      "modifiers": []
+    },
+    "zoom": {
+      "type": "mouse_scroll",
+      "axis": "y",
+      "invert": false
+    },
+    "move_forward": {
+      "type": "key_hold",
+      "key": "W"
+    },
+    "move_back": {
+      "type": "key_hold",
+      "key": "S"
+    },
+    "move_left": {
+      "type": "key_hold",
+      "key": "A"
+    },
+    "move_right": {
+      "type": "key_hold",
+      "key": "D"
+    },
+    "move_up": {
+      "type": "key_hold",
+      "key": "E"
+    },
+    "move_down": {
+      "type": "key_hold",
+      "key": "Q"
+    },
+    "reset": {
+      "type": "key_press",
+      "key": "R"
+    },
+    "toggle_auto_rotate": {
+      "type": "key_press",
+      "key": "T"
+    }
+  },
+
+  "systems": [
+    {
+      "name": "camera_input",
+      "stage": "Input",
+      "priority": 10,
+      "description": "Process camera input events"
+    },
+    {
+      "name": "camera_update",
+      "stage": "Update",
+      "priority": -10,
+      "description": "Update camera position and orientation"
+    }
+  ],
+
+  "state": {
+    "current_yaw": 0.0,
+    "current_pitch": 25.0,
+    "current_distance": 12.0,
+    "target_yaw": 0.0,
+    "target_pitch": 25.0,
+    "target_distance": 12.0,
+    "velocity": [0.0, 0.0, 0.0],
+    "is_orbiting": false,
+    "is_panning": false
+  },
+
+  "events": {
+    "publishes": [
+      "camera.moved",
+      "camera.zoom_changed",
+      "camera.target_changed"
+    ],
+    "subscribes": [
+      "input.mouse_move",
+      "input.mouse_button",
+      "input.mouse_scroll",
+      "input.key"
+    ]
+  }
+}

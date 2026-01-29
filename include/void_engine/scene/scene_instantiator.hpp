@@ -42,13 +42,21 @@ struct MeshComponent {
     bool visible = true;
 
     void set_mesh_name(const std::string& n) {
+#ifdef _MSC_VER
+        strncpy_s(mesh_name, sizeof(mesh_name), n.c_str(), _TRUNCATE);
+#else
         std::strncpy(mesh_name, n.c_str(), sizeof(mesh_name) - 1);
         mesh_name[sizeof(mesh_name) - 1] = '\0';
+#endif
     }
 
     void set_layer(const std::string& l) {
+#ifdef _MSC_VER
+        strncpy_s(layer, sizeof(layer), l.c_str(), _TRUNCATE);
+#else
         std::strncpy(layer, l.c_str(), sizeof(layer) - 1);
         layer[sizeof(layer) - 1] = '\0';
+#endif
     }
 };
 
@@ -112,8 +120,12 @@ struct CameraComponent {
     bool is_perspective = true;
 
     void set_name(const std::string& n) {
+#ifdef _MSC_VER
+        strncpy_s(name, sizeof(name), n.c_str(), _TRUNCATE);
+#else
         std::strncpy(name, n.c_str(), sizeof(name) - 1);
         name[sizeof(name) - 1] = '\0';
+#endif
     }
 };
 
@@ -129,8 +141,12 @@ struct LightComponent {
     void_render::GpuSpotLight spot;
 
     void set_name(const std::string& n) {
+#ifdef _MSC_VER
+        strncpy_s(name, sizeof(name), n.c_str(), _TRUNCATE);
+#else
         std::strncpy(name, n.c_str(), sizeof(name) - 1);
         name[sizeof(name) - 1] = '\0';
+#endif
     }
 };
 
@@ -146,8 +162,12 @@ struct ParticleEmitterComponent {
     float emit_accumulator = 0.0f;
 
     void set_name(const std::string& n) {
+#ifdef _MSC_VER
+        strncpy_s(name, sizeof(name), n.c_str(), _TRUNCATE);
+#else
         std::strncpy(name, n.c_str(), sizeof(name) - 1);
         name[sizeof(name) - 1] = '\0';
+#endif
     }
 };
 
@@ -159,8 +179,12 @@ struct PickableComponent {
     bool highlight_on_hover = false;
 
     void set_bounds(const std::string& b) {
+#ifdef _MSC_VER
+        strncpy_s(bounds, sizeof(bounds), b.c_str(), _TRUNCATE);
+#else
         std::strncpy(bounds, b.c_str(), sizeof(bounds) - 1);
         bounds[sizeof(bounds) - 1] = '\0';
+#endif
     }
 };
 
@@ -170,13 +194,21 @@ struct SceneTagComponent {
     char entity_name[64] = {};
 
     void set_scene_path(const std::filesystem::path& p) {
+#ifdef _MSC_VER
+        strncpy_s(scene_path, sizeof(scene_path), p.string().c_str(), _TRUNCATE);
+#else
         std::strncpy(scene_path, p.string().c_str(), sizeof(scene_path) - 1);
         scene_path[sizeof(scene_path) - 1] = '\0';
+#endif
     }
 
     void set_entity_name(const std::string& n) {
+#ifdef _MSC_VER
+        strncpy_s(entity_name, sizeof(entity_name), n.c_str(), _TRUNCATE);
+#else
         std::strncpy(entity_name, n.c_str(), sizeof(entity_name) - 1);
         entity_name[sizeof(entity_name) - 1] = '\0';
+#endif
     }
 };
 

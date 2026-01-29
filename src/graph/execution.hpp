@@ -26,10 +26,10 @@ public:
     virtual PinId execute(INode& node, ExecutionContext& ctx) = 0;
 
     /// @brief Pre-execution hook
-    virtual void pre_execute(INode& node, ExecutionContext& ctx) {}
+    virtual void pre_execute([[maybe_unused]] INode& node, [[maybe_unused]] ExecutionContext& ctx) {}
 
     /// @brief Post-execution hook
-    virtual void post_execute(INode& node, ExecutionContext& ctx) {}
+    virtual void post_execute([[maybe_unused]] INode& node, [[maybe_unused]] ExecutionContext& ctx) {}
 };
 
 /// @brief Default node executor

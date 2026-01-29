@@ -1,0 +1,142 @@
+{
+  "package": {
+    "name": "void-showcase",
+    "display_name": "Void Engine Showcase",
+    "version": "1.0.0",
+    "description": "Comprehensive showcase demonstrating all void_engine features: PBR rendering, glTF models, HDR environments, shadows, input handling, plugins, widgets, triggers, and game state",
+    "author": "Void Engine Team",
+    "license": "MIT",
+    "keywords": ["showcase", "demo", "pbr", "gltf", "hdr", "shadows", "input", "plugins", "widgets"],
+    "categories": ["demo", "showcase"]
+  },
+  "app": {
+    "app_type": "game",
+    "scene": "scene.json",
+    "layers": [
+      { "name": "skybox", "type": "background", "priority": -100, "blend": "replace" },
+      { "name": "shadow", "type": "shadow", "priority": -50, "blend": "multiply" },
+      { "name": "world", "type": "content", "priority": 0, "blend": "normal" },
+      { "name": "effects", "type": "overlay", "priority": 50, "blend": "additive" },
+      { "name": "ui", "type": "overlay", "priority": 100, "blend": "normal" },
+      { "name": "debug", "type": "overlay", "priority": 200, "blend": "normal" }
+    ],
+    "plugins": [
+      {
+        "name": "camera_controller",
+        "enabled": true,
+        "config": {
+          "mode": "orbit",
+          "speed": 5.0,
+          "sensitivity": 0.3,
+          "zoom_speed": 2.0,
+          "min_distance": 1.0,
+          "max_distance": 50.0
+        }
+      },
+      {
+        "name": "object_picker",
+        "enabled": true,
+        "config": {
+          "highlight_color": [1.0, 0.8, 0.2, 1.0],
+          "outline_width": 2.0
+        }
+      },
+      {
+        "name": "trigger_system",
+        "enabled": true
+      }
+    ],
+    "widgets": [
+      {
+        "name": "fps_counter",
+        "type": "stats",
+        "position": "top_left",
+        "visible": true
+      },
+      {
+        "name": "help_panel",
+        "type": "panel",
+        "position": "bottom_left",
+        "visible": true,
+        "content": {
+          "title": "Controls",
+          "items": [
+            "WASD - Move camera",
+            "Mouse - Look around",
+            "Scroll - Zoom",
+            "Space - Jump/Interact",
+            "E - Pick object",
+            "R - Reset camera",
+            "F1 - Toggle help",
+            "F2 - Toggle stats",
+            "F3 - Toggle debug",
+            "Esc - Quit"
+          ]
+        }
+      },
+      {
+        "name": "object_info",
+        "type": "panel",
+        "position": "top_right",
+        "visible": false,
+        "auto_show_on_pick": true
+      }
+    ],
+    "permissions": {
+      "scripts": false,
+      "network": false,
+      "file_system": false,
+      "audio": true,
+      "input": true
+    },
+    "resources": {
+      "max_entities": 500,
+      "max_memory": 536870912,
+      "max_layers": 8,
+      "max_lights": 32,
+      "max_shadow_casters": 4
+    }
+  },
+  "window": {
+    "width": 1920,
+    "height": 1080,
+    "title": "Void Engine Showcase",
+    "fullscreen": false,
+    "vsync": true,
+    "resizable": true
+  },
+  "render": {
+    "backend": "opengl",
+    "msaa": 4,
+    "hdr": true,
+    "bloom": true,
+    "ssao": false,
+    "shadows": {
+      "enabled": true,
+      "resolution": 2048,
+      "cascades": 3,
+      "soft_shadows": true
+    },
+    "environment": {
+      "enabled": true,
+      "ibl": true,
+      "skybox": true
+    }
+  },
+  "input": {
+    "mouse_capture": false,
+    "raw_mouse": false,
+    "gamepad_enabled": true
+  },
+  "audio": {
+    "enabled": true,
+    "master_volume": 0.8,
+    "music_volume": 0.5,
+    "sfx_volume": 1.0
+  },
+  "assets": {
+    "base_path": "assets/",
+    "include": ["textures/", "models/", "environments/", "audio/"],
+    "hot_reload": true
+  }
+}

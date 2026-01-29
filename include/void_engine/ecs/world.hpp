@@ -11,12 +11,14 @@
 #include "component.hpp"
 #include "archetype.hpp"
 #include "query.hpp"
+#include "system.hpp"
 
 #include <unordered_map>
 #include <typeindex>
-#include <any>
 #include <memory>
 #include <algorithm>
+#include <new>      // For placement new
+#include <utility>  // For std::forward, std::move
 
 namespace void_ecs {
 
@@ -24,16 +26,73 @@ namespace void_ecs {
 // Resources
 // =============================================================================
 
+/// Type-erased resource entry that supports move-only types
+/// Unlike std::any, this uses manual type erasure to allow unique_ptr and other move-only resources
+struct ResourceEntry {
+    void* data = nullptr;
+    void (*deleter)(void*) = nullptr;
+    void (*mover)(void* src, void* dst) = nullptr;  // For move construction
+
+    ResourceEntry() = default;
+
+    template<typename R>
+    explicit ResourceEntry(R&& resource) {
+        using DecayedR = std::decay_t<R>;
+        data = new DecayedR(std::forward<R>(resource));
+        deleter = [](void* p) { delete static_cast<DecayedR*>(p); };
+        mover = [](void* src, void* dst) {
+            new (dst) DecayedR(std::move(*static_cast<DecayedR*>(src)));
+        };
+    }
+
+    ~ResourceEntry() {
+        if (data && deleter) {
+            deleter(data);
+        }
+    }
+
+    // Move only
+    ResourceEntry(ResourceEntry&& other) noexcept
+        : data(other.data)
+        , deleter(other.deleter)
+        , mover(other.mover) {
+        other.data = nullptr;
+        other.deleter = nullptr;
+        other.mover = nullptr;
+    }
+
+    ResourceEntry& operator=(ResourceEntry&& other) noexcept {
+        if (this != &other) {
+            if (data && deleter) {
+                deleter(data);
+            }
+            data = other.data;
+            deleter = other.deleter;
+            mover = other.mover;
+            other.data = nullptr;
+            other.deleter = nullptr;
+            other.mover = nullptr;
+        }
+        return *this;
+    }
+
+    // Non-copyable
+    ResourceEntry(const ResourceEntry&) = delete;
+    ResourceEntry& operator=(const ResourceEntry&) = delete;
+};
+
 /// Global resource storage (singletons)
+/// Supports both copyable and move-only types like std::unique_ptr
 class Resources {
 private:
-    std::unordered_map<std::type_index, std::any> resources_;
+    std::unordered_map<std::type_index, ResourceEntry> resources_;
 
 public:
-    /// Insert or replace a resource
+    /// Insert or replace a resource (supports move-only types via perfect forwarding)
     template<typename R>
-    void insert(R resource) {
-        resources_[std::type_index(typeid(R))] = std::move(resource);
+    void insert(R&& resource) {
+        using DecayedR = std::decay_t<R>;
+        resources_[std::type_index(typeid(DecayedR))] = ResourceEntry(std::forward<R>(resource));
     }
 
     /// Remove and return a resource
@@ -44,7 +103,7 @@ public:
         if (it == resources_.end()) {
             return std::nullopt;
         }
-        R value = std::any_cast<R>(std::move(it->second));
+        R value = std::move(*static_cast<R*>(it->second.data));
         resources_.erase(it);
         return value;
     }
@@ -57,7 +116,7 @@ public:
         if (it == resources_.end()) {
             return nullptr;
         }
-        return std::any_cast<R>(&it->second);
+        return static_cast<const R*>(it->second.data);
     }
 
     /// Get mutable resource reference
@@ -68,7 +127,7 @@ public:
         if (it == resources_.end()) {
             return nullptr;
         }
-        return std::any_cast<R>(&it->second);
+        return static_cast<R*>(it->second.data);
     }
 
     /// Check if resource exists
@@ -100,6 +159,7 @@ private:
     ComponentRegistry components_;
     Archetypes archetypes_;
     Resources resources_;
+    SystemScheduler systems_;
 
 public:
     // =========================================================================
@@ -363,10 +423,10 @@ public:
     // Resources
     // =========================================================================
 
-    /// Insert a resource
+    /// Insert a resource (supports move-only types via perfect forwarding)
     template<typename R>
-    void insert_resource(R resource) {
-        resources_.insert(std::move(resource));
+    void insert_resource(R&& resource) {
+        resources_.insert(std::forward<R>(resource));
     }
 
     /// Remove a resource
@@ -404,6 +464,26 @@ public:
         return state;
     }
 
+    /// Create a type-safe query for components (with write access)
+    /// Usage: auto query = world.query_with<Transform, Velocity>();
+    template<typename... Ts>
+    [[nodiscard]] QueryState query_with() {
+        QueryDescriptor desc;
+        (desc.write(register_component<Ts>()), ...);
+        desc.build();
+        return query(desc);
+    }
+
+    /// Create a type-safe query for components (with read access)
+    /// Usage: auto query = world.query_read<Transform, Velocity>();
+    template<typename... Ts>
+    [[nodiscard]] QueryState query_read() {
+        QueryDescriptor desc;
+        (desc.read(register_component<Ts>()), ...);
+        desc.build();
+        return query(desc);
+    }
+
     /// Update a query state (call when archetypes may have changed)
     void update_query(QueryState& state) {
         state.update(archetypes_);
@@ -411,7 +491,48 @@ public:
 
     /// Create a query iterator
     [[nodiscard]] QueryIter query_iter(const QueryState& state) const {
-        return QueryIter(&archetypes_, &state);
+        return QueryIter(&archetypes_, &state, &components_);
+    }
+
+    // =========================================================================
+    // System Management
+    // =========================================================================
+
+    /// Add a system to the world
+    void add_system(std::unique_ptr<System> system) {
+        systems_.add_system(std::move(system));
+    }
+
+    /// Add a function system
+    template<typename F>
+    void add_system(SystemDescriptor desc, F&& func) {
+        systems_.add_system(std::move(desc), std::forward<F>(func));
+    }
+
+    /// Add a simple named system
+    template<typename F>
+    void add_system(const std::string& name, F&& func) {
+        systems_.add_system(name, std::forward<F>(func));
+    }
+
+    /// Run all systems
+    void run_systems() {
+        systems_.run(*this);
+    }
+
+    /// Run systems in a specific stage
+    void run_stage(SystemStage stage) {
+        systems_.run_stage(*this, stage);
+    }
+
+    /// Get the system scheduler
+    [[nodiscard]] SystemScheduler& scheduler() noexcept {
+        return systems_;
+    }
+
+    /// Get the system scheduler (const)
+    [[nodiscard]] const SystemScheduler& scheduler() const noexcept {
+        return systems_;
     }
 
     // =========================================================================
@@ -522,7 +643,7 @@ public:
 private:
     /// Move entity to new archetype with raw component data
     bool move_entity_add_component_raw(Entity entity, EntityLocation old_loc,
-                                        ComponentId new_comp_id, const void* data, std::size_t size) {
+                                        ComponentId new_comp_id, const void* data, [[maybe_unused]] std::size_t size) {
         Archetype* old_arch = archetypes_.get(old_loc.archetype_id);
         if (!old_arch) return false;
 

@@ -276,9 +276,9 @@ public:
     // IRehydratable
     [[nodiscard]] RehydrationState dehydrate() const override {
         RehydrationState state;
-        state.with_uint("frame_number", m_frame_number);
-        state.with_uint("width", m_config.width);
-        state.with_uint("height", m_config.height);
+        (void)state.with_uint("frame_number", m_frame_number);
+        (void)state.with_uint("width", m_config.width);
+        (void)state.with_uint("height", m_config.height);
         return state;
     }
 

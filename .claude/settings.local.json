@@ -130,7 +130,9 @@
       "Bash(do if [ -d \"$dir\" ])",
       "Bash(for dir in \"C:\\\\Users\\\\ShaneRobinson\\\\Documents\\\\GitHub\\\\void_engine\\\\include\\\\void_engine\"/*)",
       "WebSearch",
-      "WebFetch(domain:www.gameenginebook.com)"
+      "WebFetch(domain:www.gameenginebook.com)",
+      "Bash(curl:*)",
+      "Bash(\"/c/Program Files/CMake/bin/cmake.exe\" --build build)"
     ]
   }
 }

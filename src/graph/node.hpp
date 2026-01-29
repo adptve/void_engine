@@ -45,21 +45,21 @@ public:
     virtual PinId execute(ExecutionContext& ctx) = 0;
 
     /// @brief Resume a suspended latent node
-    virtual PinId resume(ExecutionContext& ctx) { return PinId{}; }
+    virtual PinId resume([[maybe_unused]] ExecutionContext& ctx) { return PinId{}; }
 
     /// @brief Called when a connection is made/broken
-    virtual void on_connection_changed(PinId pin, bool connected) {}
+    virtual void on_connection_changed([[maybe_unused]] PinId pin, [[maybe_unused]] bool connected) {}
 
     /// @brief Called when an input pin value changes
-    virtual void on_input_changed(PinId pin) {}
+    virtual void on_input_changed([[maybe_unused]] PinId pin) {}
 
     // Lifecycle
     virtual void initialize() {}
     virtual void shutdown() {}
 
     // Serialization
-    virtual void serialize(std::ostream& out) const {}
-    virtual void deserialize(std::istream& in) {}
+    virtual void serialize([[maybe_unused]] std::ostream& out) const {}
+    virtual void deserialize([[maybe_unused]] std::istream& in) {}
 
     // Visual
     [[nodiscard]] virtual float x() const = 0;
@@ -464,7 +464,7 @@ public:
 
     [[nodiscard]] NodeCategory category() const override { return NodeCategory::Comment; }
 
-    PinId execute(ExecutionContext& ctx) override { return PinId{}; }
+    PinId execute([[maybe_unused]] ExecutionContext& ctx) override { return PinId{}; }
 
     [[nodiscard]] const std::string& text() const { return text_; }
     void set_text(const std::string& text) { text_ = text; }

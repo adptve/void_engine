@@ -334,13 +334,16 @@ public:
 
 private:
     const Archetypes* archetypes_;
+    const ComponentRegistry* components_;
     const std::vector<ArchetypeId>* matched_;
     size_type archetype_index_{0};
     size_type row_{0};
 
 public:
-    QueryIter(const Archetypes* archetypes, const QueryState* state)
+    QueryIter(const Archetypes* archetypes, const QueryState* state,
+              const ComponentRegistry* components = nullptr)
         : archetypes_(archetypes)
+        , components_(components)
         , matched_(&state->matched_archetypes())
     {
         // Skip empty archetypes
@@ -374,6 +377,34 @@ public:
         const Archetype* arch = archetype();
         if (!arch) return Entity::null();
         return arch->entity_at(row_);
+    }
+
+    /// Get component by type (requires ComponentRegistry to be set)
+    /// @return Mutable pointer to component, or nullptr if not found
+    template<typename T>
+    [[nodiscard]] T* get() {
+        if (!components_) return nullptr;
+        auto comp_id_opt = components_->get_id<T>();
+        if (!comp_id_opt) return nullptr;
+
+        // Need non-const access for mutable components
+        Archetype* arch = const_cast<Archetype*>(archetype());
+        if (!arch) return nullptr;
+
+        return arch->template get_component<T>(*comp_id_opt, row_);
+    }
+
+    /// Get component by type (const version)
+    template<typename T>
+    [[nodiscard]] const T* get() const {
+        if (!components_) return nullptr;
+        auto comp_id_opt = components_->get_id<T>();
+        if (!comp_id_opt) return nullptr;
+
+        const Archetype* arch = archetype();
+        if (!arch) return nullptr;
+
+        return arch->template get_component<T>(*comp_id_opt, row_);
     }
 
     /// Advance to next entity

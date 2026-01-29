@@ -1,9 +1,12 @@
 /// @file gltf_loader.cpp
-/// @brief glTF 2.0 model loading using tinygltf
+/// @brief glTF 2.0 model loading using tinygltf - implements pimpl from header
 
-#include "void_engine/render/mesh.hpp"
-#include "void_engine/render/material.hpp"
-#include "void_engine/render/texture.hpp"
+#include <void_engine/render/gltf_loader.hpp>
+#include <void_engine/render/mesh.hpp>
+#include <void_engine/render/material.hpp>
+#include <void_engine/render/texture.hpp>
+
+#include <spdlog/spdlog.h>
 
 #include <string>
 #include <vector>
@@ -26,193 +29,59 @@
 namespace void_render {
 
 // =============================================================================
-// Forward declarations
+// GltfTransform Implementation
 // =============================================================================
 
-struct GltfScene;
-struct GltfNode;
-struct GltfPrimitive;
+std::array<float, 16> GltfTransform::to_matrix() const noexcept {
+    // Quaternion to rotation matrix
+    float x = rotation[0], y = rotation[1], z = rotation[2], w = rotation[3];
+    float x2 = x + x, y2 = y + y, z2 = z + z;
+    float xx = x * x2, xy = x * y2, xz = x * z2;
+    float yy = y * y2, yz = y * z2, zz = z * z2;
+    float wx = w * x2, wy = w * y2, wz = w * z2;
 
-// =============================================================================
-// Transform
-// =============================================================================
+    float sx = scale[0], sy = scale[1], sz = scale[2];
+    float tx = translation[0], ty = translation[1], tz = translation[2];
 
-struct Transform {
-    std::array<float, 3> translation = {0, 0, 0};
-    std::array<float, 4> rotation = {0, 0, 0, 1};  // quaternion (x, y, z, w)
-    std::array<float, 3> scale = {1, 1, 1};
-
-    /// Get 4x4 transformation matrix (column-major)
-    [[nodiscard]] std::array<float, 16> to_matrix() const noexcept {
-        // Quaternion to rotation matrix
-        float x = rotation[0], y = rotation[1], z = rotation[2], w = rotation[3];
-        float x2 = x + x, y2 = y + y, z2 = z + z;
-        float xx = x * x2, xy = x * y2, xz = x * z2;
-        float yy = y * y2, yz = y * z2, zz = z * z2;
-        float wx = w * x2, wy = w * y2, wz = w * z2;
-
-        float sx = scale[0], sy = scale[1], sz = scale[2];
-        float tx = translation[0], ty = translation[1], tz = translation[2];
-
-        return {{
-            (1 - (yy + zz)) * sx,  (xy + wz) * sx,         (xz - wy) * sx,         0,
-            (xy - wz) * sy,         (1 - (xx + zz)) * sy,  (yz + wx) * sy,         0,
-            (xz + wy) * sz,         (yz - wx) * sz,         (1 - (xx + yy)) * sz,  0,
-            tx,                      ty,                      tz,                      1
-        }};
-    }
-
-    /// Multiply two 4x4 matrices (column-major)
-    [[nodiscard]] static std::array<float, 16> multiply(
-        const std::array<float, 16>& a,
-        const std::array<float, 16>& b) noexcept {
-        std::array<float, 16> result = {};
-        for (int col = 0; col < 4; ++col) {
-            for (int row = 0; row < 4; ++row) {
-                result[col * 4 + row] =
-                    a[0 * 4 + row] * b[col * 4 + 0] +
-                    a[1 * 4 + row] * b[col * 4 + 1] +
-                    a[2 * 4 + row] * b[col * 4 + 2] +
-                    a[3 * 4 + row] * b[col * 4 + 3];
-            }
-        }
-        return result;
-    }
-};
-
-// =============================================================================
-// GltfPrimitive - Single drawable within a mesh
-// =============================================================================
-
-struct GltfPrimitive {
-    MeshData mesh_data;
-    std::int32_t material_index = -1;  // -1 = default material
-
-    // Bounding box
-    std::array<float, 3> min_bounds = {0, 0, 0};
-    std::array<float, 3> max_bounds = {0, 0, 0};
-};
-
-// =============================================================================
-// GltfMesh - Collection of primitives
-// =============================================================================
-
-struct GltfMesh {
-    std::string name;
-    std::vector<GltfPrimitive> primitives;
-};
-
-// =============================================================================
-// GltfNode - Scene graph node
-// =============================================================================
-
-struct GltfNode {
-    std::string name;
-    Transform local_transform;
-    std::array<float, 16> world_matrix = {{
-        1, 0, 0, 0,
-        0, 1, 0, 0,
-        0, 0, 1, 0,
-        0, 0, 0, 1
+    return {{
+        (1 - (yy + zz)) * sx,  (xy + wz) * sx,         (xz - wy) * sx,         0,
+        (xy - wz) * sy,         (1 - (xx + zz)) * sy,  (yz + wx) * sy,         0,
+        (xz + wy) * sz,         (yz - wx) * sz,         (1 - (xx + yy)) * sz,  0,
+        tx,                      ty,                      tz,                      1
     }};
+}
 
-    std::int32_t mesh_index = -1;
-    std::int32_t skin_index = -1;  // For skeletal animation
-    std::int32_t camera_index = -1;
-    std::int32_t light_index = -1;  // KHR_lights_punctual
-
-    std::vector<std::int32_t> children;
-    std::int32_t parent = -1;
-};
-
-// =============================================================================
-// GltfMaterial - Loaded material data
-// =============================================================================
-
-struct GltfMaterial {
-    GpuMaterial gpu_material;
-    std::string name;
-
-    // Texture paths for hot-reload
-    std::string base_color_texture;
-    std::string normal_texture;
-    std::string metallic_roughness_texture;
-    std::string occlusion_texture;
-    std::string emissive_texture;
-};
+std::array<float, 16> GltfTransform::multiply(
+    const std::array<float, 16>& a,
+    const std::array<float, 16>& b) noexcept {
+    std::array<float, 16> result = {};
+    for (int col = 0; col < 4; ++col) {
+        for (int row = 0; row < 4; ++row) {
+            result[col * 4 + row] =
+                a[0 * 4 + row] * b[col * 4 + 0] +
+                a[1 * 4 + row] * b[col * 4 + 1] +
+                a[2 * 4 + row] * b[col * 4 + 2] +
+                a[3 * 4 + row] * b[col * 4 + 3];
+        }
+    }
+    return result;
+}
 
 // =============================================================================
-// GltfTexture - Loaded texture data
+// GltfLoader::Impl
 // =============================================================================
 
-struct GltfTexture {
-    std::string name;
-    std::string uri;  // Original URI from glTF
-    TextureData data;
-
-    // Sampler settings
-    std::uint32_t min_filter = 0x2601;  // GL_LINEAR
-    std::uint32_t mag_filter = 0x2601;
-    std::uint32_t wrap_s = 0x2901;      // GL_REPEAT
-    std::uint32_t wrap_t = 0x2901;
-};
-
-// =============================================================================
-// GltfScene - Complete loaded scene
-// =============================================================================
-
-struct GltfScene {
-    std::string name;
-    std::string source_path;
-
-    std::vector<GltfNode> nodes;
-    std::vector<GltfMesh> meshes;
-    std::vector<GltfMaterial> materials;
-    std::vector<GltfTexture> textures;
-
-    std::vector<std::int32_t> root_nodes;  // Scene root node indices
-
-    // Bounding box of entire scene
-    std::array<float, 3> min_bounds = {0, 0, 0};
-    std::array<float, 3> max_bounds = {0, 0, 0};
-
-    // Statistics
-    std::size_t total_vertices = 0;
-    std::size_t total_triangles = 0;
-    std::size_t total_draw_calls = 0;  // Number of primitives
-};
-
-// =============================================================================
-// GltfLoader - Main loader class
-// =============================================================================
-
-class GltfLoader {
+class GltfLoader::Impl {
 public:
-    struct LoadOptions {
-        bool load_textures = true;
-        bool generate_tangents = true;
-        bool flip_uvs = false;          // Flip V coordinate
-        bool merge_primitives = false;  // Merge all primitives with same material
-        float scale = 1.0f;             // Global scale factor
+    LoadOptions m_options;
+    std::string m_base_path;
+    std::string m_last_error;
 
-        LoadOptions() = default;
-    };
+    // -------------------------------------------------------------------------
+    // Main Load Function
+    // -------------------------------------------------------------------------
 
-    /// Default load options
-    [[nodiscard]] static LoadOptions default_options() {
-        return LoadOptions{};
-    }
-
-    /// Load glTF file (gltf or glb)
-    [[nodiscard]] std::optional<GltfScene> load(const std::string& path) {
-        return load(path, default_options());
-    }
-
-    /// Load glTF file (gltf or glb) with options
-    [[nodiscard]] std::optional<GltfScene> load(
-        const std::string& path,
-        const LoadOptions& options) {
-
+    std::optional<GltfScene> load(const std::string& path, const LoadOptions& options) {
         m_options = options;
         m_base_path = std::filesystem::path(path).parent_path().string();
 
@@ -230,10 +99,12 @@ public:
         }
 
         if (!warn.empty()) {
-            // Log warning (would use proper logging in production)
+            spdlog::warn("glTF warning [{}]: {}", path, warn);
         }
 
         if (!ret || !err.empty()) {
+            m_last_error = err.empty() ? "Failed to load glTF file" : err;
+            spdlog::error("glTF error [{}]: {}", path, m_last_error);
             return std::nullopt;
         }
 
@@ -277,18 +148,12 @@ public:
         // Compute scene bounds
         compute_scene_bounds(scene);
 
+        spdlog::info("Loaded glTF: {} ({} meshes, {} materials, {} nodes, {} verts, {} tris)",
+                     path, scene.meshes.size(), scene.materials.size(), scene.nodes.size(),
+                     scene.total_vertices, scene.total_triangles);
+
         return scene;
     }
-
-    /// Get last error message
-    [[nodiscard]] const std::string& last_error() const noexcept {
-        return m_last_error;
-    }
-
-private:
-    LoadOptions m_options;
-    std::string m_base_path;
-    std::string m_last_error;
 
     // -------------------------------------------------------------------------
     // Texture loading
@@ -896,7 +761,7 @@ private:
 
         auto& node = scene.nodes[node_idx];
         auto local = node.local_transform.to_matrix();
-        node.world_matrix = Transform::multiply(parent_matrix, local);
+        node.world_matrix = GltfTransform::multiply(parent_matrix, local);
 
         for (int child : node.children) {
             compute_world_transforms(scene, child, node.world_matrix);
@@ -951,112 +816,152 @@ private:
 };
 
 // =============================================================================
-// GltfSceneManager - Hot-reloadable scene manager
+// GltfLoader Public Interface
 // =============================================================================
 
-class GltfSceneManager {
+GltfLoader::GltfLoader() : m_impl(std::make_unique<Impl>()) {}
+GltfLoader::~GltfLoader() = default;
+
+GltfLoader::GltfLoader(GltfLoader&&) noexcept = default;
+GltfLoader& GltfLoader::operator=(GltfLoader&&) noexcept = default;
+
+GltfLoader::LoadOptions GltfLoader::default_options() {
+    return LoadOptions{};
+}
+
+std::optional<GltfScene> GltfLoader::load(const std::string& path) {
+    return m_impl->load(path, default_options());
+}
+
+std::optional<GltfScene> GltfLoader::load(const std::string& path, const LoadOptions& options) {
+    return m_impl->load(path, options);
+}
+
+const std::string& GltfLoader::last_error() const noexcept {
+    return m_impl->m_last_error;
+}
+
+// =============================================================================
+// GltfSceneManager::Impl
+// =============================================================================
+
+class GltfSceneManager::Impl {
 public:
-    struct SceneEntry {
-        std::string path;
-        GltfScene scene;
-        std::filesystem::file_time_type last_modified;
-        bool dirty = false;
-    };
-
-    /// Load scene from file
-    [[nodiscard]] std::optional<std::size_t> load(
-        const std::string& path,
-        const GltfLoader::LoadOptions& options = {}) {
-
-        GltfLoader loader;
-        auto scene = loader.load(path, options);
-        if (!scene) {
-            return std::nullopt;
-        }
-
-        // Check for existing scene
-        for (std::size_t i = 0; i < m_scenes.size(); ++i) {
-            if (m_scenes[i].path == path) {
-                m_scenes[i].scene = std::move(*scene);
-                m_scenes[i].last_modified = std::filesystem::last_write_time(path);
-                m_scenes[i].dirty = false;
-                return i;
-            }
-        }
-
-        // Add new scene
-        SceneEntry entry;
-        entry.path = path;
-        entry.scene = std::move(*scene);
-        if (std::filesystem::exists(path)) {
-            entry.last_modified = std::filesystem::last_write_time(path);
-        }
-
-        std::size_t index = m_scenes.size();
-        m_scenes.push_back(std::move(entry));
-        return index;
-    }
-
-    /// Get scene by index
-    [[nodiscard]] GltfScene* get(std::size_t index) {
-        if (index >= m_scenes.size()) return nullptr;
-        return &m_scenes[index].scene;
-    }
-
-    [[nodiscard]] const GltfScene* get(std::size_t index) const {
-        if (index >= m_scenes.size()) return nullptr;
-        return &m_scenes[index].scene;
-    }
-
-    /// Check for file changes and reload if needed
-    void check_hot_reload(const GltfLoader::LoadOptions& options = {}) {
-        for (auto& entry : m_scenes) {
-            if (!std::filesystem::exists(entry.path)) continue;
-
-            auto current_time = std::filesystem::last_write_time(entry.path);
-            if (current_time != entry.last_modified) {
-                GltfLoader loader;
-                if (auto scene = loader.load(entry.path, options)) {
-                    entry.scene = std::move(*scene);
-                    entry.last_modified = current_time;
-                    entry.dirty = true;
-                }
-            }
-        }
-    }
-
-    /// Check if scene was recently reloaded
-    [[nodiscard]] bool is_dirty(std::size_t index) const {
-        if (index >= m_scenes.size()) return false;
-        return m_scenes[index].dirty;
-    }
-
-    /// Clear dirty flag
-    void clear_dirty(std::size_t index) {
-        if (index < m_scenes.size()) {
-            m_scenes[index].dirty = false;
-        }
-    }
-
-    /// Get scene count
-    [[nodiscard]] std::size_t count() const noexcept {
-        return m_scenes.size();
-    }
-
-    /// Remove scene
-    void remove(std::size_t index) {
-        if (index < m_scenes.size()) {
-            m_scenes.erase(m_scenes.begin() + static_cast<std::ptrdiff_t>(index));
-        }
-    }
-
-    /// Clear all scenes
-    void clear() {
-        m_scenes.clear();
-    }
-
-private:
     std::vector<SceneEntry> m_scenes;
 };
+
+// =============================================================================
+// GltfSceneManager Public Interface
+// =============================================================================
+
+GltfSceneManager::GltfSceneManager() : m_impl(std::make_unique<Impl>()) {}
+GltfSceneManager::~GltfSceneManager() = default;
+
+GltfSceneManager::GltfSceneManager(GltfSceneManager&&) noexcept = default;
+GltfSceneManager& GltfSceneManager::operator=(GltfSceneManager&&) noexcept = default;
+
+std::optional<std::size_t> GltfSceneManager::load(
+    const std::string& path,
+    const GltfLoader::LoadOptions& options) {
+
+    GltfLoader loader;
+    auto scene = loader.load(path, options);
+    if (!scene) {
+        return std::nullopt;
+    }
+
+    // Check for existing scene
+    for (std::size_t i = 0; i < m_impl->m_scenes.size(); ++i) {
+        if (m_impl->m_scenes[i].path == path) {
+            m_impl->m_scenes[i].scene = std::move(*scene);
+            std::error_code ec;
+            m_impl->m_scenes[i].last_modified = std::filesystem::last_write_time(path, ec);
+            m_impl->m_scenes[i].dirty = false;
+            return i;
+        }
+    }
+
+    // Add new scene
+    SceneEntry entry;
+    entry.path = path;
+    entry.scene = std::move(*scene);
+    if (std::filesystem::exists(path)) {
+        std::error_code ec;
+        entry.last_modified = std::filesystem::last_write_time(path, ec);
+    }
+
+    std::size_t index = m_impl->m_scenes.size();
+    m_impl->m_scenes.push_back(std::move(entry));
+    return index;
+}
+
+GltfScene* GltfSceneManager::get(std::size_t index) {
+    if (index >= m_impl->m_scenes.size()) return nullptr;
+    return &m_impl->m_scenes[index].scene;
+}
+
+const GltfScene* GltfSceneManager::get(std::size_t index) const {
+    if (index >= m_impl->m_scenes.size()) return nullptr;
+    return &m_impl->m_scenes[index].scene;
+}
+
+void GltfSceneManager::check_hot_reload(const GltfLoader::LoadOptions& options) {
+    for (auto& entry : m_impl->m_scenes) {
+        if (!std::filesystem::exists(entry.path)) continue;
+
+        std::error_code ec;
+        auto current_time = std::filesystem::last_write_time(entry.path, ec);
+        if (ec) continue;
+
+        if (current_time != entry.last_modified) {
+            GltfLoader loader;
+            if (auto scene = loader.load(entry.path, options)) {
+                entry.scene = std::move(*scene);
+                entry.last_modified = current_time;
+                entry.dirty = true;
+                spdlog::info("Hot-reloaded glTF: {}", entry.path);
+            }
+        }
+    }
+}
+
+bool GltfSceneManager::is_dirty(std::size_t index) const {
+    if (index >= m_impl->m_scenes.size()) return false;
+    return m_impl->m_scenes[index].dirty;
+}
+
+void GltfSceneManager::clear_dirty(std::size_t index) {
+    if (index < m_impl->m_scenes.size()) {
+        m_impl->m_scenes[index].dirty = false;
+    }
+}
+
+std::size_t GltfSceneManager::count() const noexcept {
+    return m_impl->m_scenes.size();
+}
+
+void GltfSceneManager::remove(std::size_t index) {
+    if (index < m_impl->m_scenes.size()) {
+        m_impl->m_scenes.erase(m_impl->m_scenes.begin() + static_cast<std::ptrdiff_t>(index));
+    }
+}
+
+void GltfSceneManager::clear() {
+    m_impl->m_scenes.clear();
+}
+
+// =============================================================================
+// Utility Functions
+// =============================================================================
+
+bool is_model_path(const std::string& mesh_name) {
+    // Check if the string looks like a file path rather than a built-in mesh name
+    return mesh_name.find('/') != std::string::npos ||
+           mesh_name.find('\\') != std::string::npos ||
+           mesh_name.find(".gltf") != std::string::npos ||
+           mesh_name.find(".glb") != std::string::npos ||
+           mesh_name.find(".obj") != std::string::npos ||
+           mesh_name.find(".fbx") != std::string::npos;
+}
 
 } // namespace void_render

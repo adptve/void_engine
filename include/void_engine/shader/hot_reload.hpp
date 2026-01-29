@@ -135,7 +135,7 @@ public:
                     return void_core::Err("Failed to iterate directory: " + ec.message());
                 }
                 if (entry.is_regular_file() && is_shader_file(entry.path().string())) {
-                    m_watcher->watch(entry.path().string());
+                    (void)m_watcher->watch(entry.path().string());
                 }
             }
         } else {
@@ -144,7 +144,7 @@ public:
                     return void_core::Err("Failed to iterate directory: " + ec.message());
                 }
                 if (entry.is_regular_file() && is_shader_file(entry.path().string())) {
-                    m_watcher->watch(entry.path().string());
+                    (void)m_watcher->watch(entry.path().string());
                 }
             }
         }

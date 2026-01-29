@@ -207,7 +207,7 @@ SequenceNode::SequenceNode(NodeId id, NodeTypeId type_id, std::size_t output_cou
     }
 }
 
-PinId SequenceNode::execute(ExecutionContext& ctx) {
+PinId SequenceNode::execute([[maybe_unused]] ExecutionContext& ctx) {
     if (current_output_ < output_pins_.size()) {
         return output_pins_[current_output_++].id;
     }
@@ -615,7 +615,7 @@ PinId MathNode::execute(ExecutionContext& ctx) {
             result = a + (b - a) * t;
             break;
         }
-        case Operation::Sign: result = (get_float(0) > 0.0f) - (get_float(0) < 0.0f); break;
+        case Operation::Sign: result = static_cast<float>((get_float(0) > 0.0f) - (get_float(0) < 0.0f)); break;
         case Operation::Frac: {
             float v = get_float(0);
             result = v - std::floor(v);
@@ -764,7 +764,7 @@ SubgraphNode::SubgraphNode(NodeId id, NodeTypeId type_id, SubgraphId subgraph_id
     title_color_ = 0xFF0066AA;
 }
 
-PinId SubgraphNode::execute(ExecutionContext& ctx) {
+PinId SubgraphNode::execute([[maybe_unused]] ExecutionContext& ctx) {
     // Subgraph execution is handled by the executor
     return first_exec_output();
 }
@@ -805,7 +805,7 @@ NodeBuilder& NodeBuilder::name(const std::string& n) {
     return *this;
 }
 
-NodeBuilder& NodeBuilder::title(const std::string& t) {
+NodeBuilder& NodeBuilder::title([[maybe_unused]] const std::string& t) {
     // Title is stored in name for templates
     return *this;
 }

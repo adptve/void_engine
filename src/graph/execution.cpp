@@ -209,7 +209,7 @@ PinId GraphExecutor::execute_node(ExecutionData& data, INode& node) {
     executor->pre_execute(node, data.instance->context());
 
     // Pull input values for non-exec pins
-    const Graph& graph = data.instance->graph();
+    [[maybe_unused]] const Graph& graph = data.instance->graph();
     for (const auto& pin : node.input_pins()) {
         if (pin.type != PinType::Exec && pin.is_connected) {
             PinValue value = compute_input_value(data.instance->context(), pin);
@@ -233,7 +233,7 @@ PinId GraphExecutor::execute_node(ExecutionData& data, INode& node) {
     return result;
 }
 
-PinValue GraphExecutor::compute_input_value(ExecutionContext& ctx, const Pin& input_pin) {
+PinValue GraphExecutor::compute_input_value([[maybe_unused]] ExecutionContext& ctx, const Pin& input_pin) {
     // This would need access to the graph to find connected output
     // For now, return default value
     return input_pin.default_value.value;
@@ -396,7 +396,7 @@ GraphResult<CompiledGraph> GraphCompiler::compile(const Graph& graph) {
 }
 
 GraphResult<CompiledGraph> GraphCompiler::compile(const Graph& graph,
-                                                    std::span<const std::string> events) {
+                                                    [[maybe_unused]] std::span<const std::string> events) {
     errors_.clear();
     warnings_.clear();
     next_register_ = 0;
@@ -425,7 +425,7 @@ GraphResult<CompiledGraph> GraphCompiler::compile(const Graph& graph,
     return GraphResult<CompiledGraph>(std::move(output));
 }
 
-void GraphCompiler::compile_node(const Graph& graph, INode& node, CompiledGraph& output) {
+void GraphCompiler::compile_node([[maybe_unused]] const Graph& graph, INode& node, CompiledGraph& output) {
     node_addresses_[node.id()] = output.instructions_.size();
 
     CompiledInstruction instr;
@@ -459,12 +459,12 @@ void GraphCompiler::optimize(CompiledGraph& output) {
     }
 }
 
-void GraphCompiler::fold_constants(CompiledGraph& output) {
+void GraphCompiler::fold_constants([[maybe_unused]] CompiledGraph& output) {
     // Identify sequences of constant operations and fold them
     // This is a placeholder for the actual implementation
 }
 
-void GraphCompiler::eliminate_dead_code(CompiledGraph& output) {
+void GraphCompiler::eliminate_dead_code([[maybe_unused]] CompiledGraph& output) {
     // Remove unreachable instructions
     // This is a placeholder for the actual implementation
 }
@@ -522,7 +522,7 @@ void CompiledGraphExecutor::update(float delta_time) {
 }
 
 bool CompiledGraphExecutor::execute_instruction(const CompiledInstruction& instr,
-                                                  ExecutionContext& ctx,
+                                                  [[maybe_unused]] ExecutionContext& ctx,
                                                   std::size_t& ip) {
     switch (instr.op) {
         case CompiledInstruction::OpCode::Nop:
