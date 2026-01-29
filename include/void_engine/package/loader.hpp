@@ -284,4 +284,13 @@ private:
 /// Create a plugin package loader (Phase 3)
 [[nodiscard]] std::unique_ptr<PackageLoader> create_plugin_package_loader();
 
+/// Create a widget package loader (Phase 4)
+[[nodiscard]] std::unique_ptr<PackageLoader> create_widget_package_loader();
+
+/// Create a layer package loader (Phase 5)
+[[nodiscard]] std::unique_ptr<PackageLoader> create_layer_package_loader();
+
+/// Create a world package loader (Phase 6)
+[[nodiscard]] std::unique_ptr<PackageLoader> create_world_package_loader();
+
 } // namespace void_package

@@ -345,6 +345,7 @@ if(VOID_BUILD_TESTS)
     )
     FetchContent_MakeAvailable(Catch2)
     enable_testing()
+    include(Testing)
     add_subdirectory(tests)
 endif()
 

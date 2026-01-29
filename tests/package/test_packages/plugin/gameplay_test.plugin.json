@@ -1,0 +1,30 @@
+{
+  "package": {
+    "name": "gameplay.test",
+    "type": "plugin",
+    "version": "1.0.0"
+  },
+  "dependencies": {
+    "plugins": [
+      { "name": "core.test", "version": ">=1.0.0" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Combat",
+      "fields": {
+        "damage": { "type": "f32", "default": 10 },
+        "attack_speed": { "type": "f32", "default": 1 }
+      }
+    }
+  ],
+  "tags": ["Attacker"],
+  "systems": [
+    {
+      "name": "CombatSystem",
+      "stage": "update",
+      "query": ["Combat", "Health"],
+      "priority": 100
+    }
+  ]
+}

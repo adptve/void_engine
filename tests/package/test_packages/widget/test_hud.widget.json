@@ -1,0 +1,41 @@
+{
+  "package": {
+    "name": "widget.test_hud",
+    "type": "widget",
+    "version": "1.0.0"
+  },
+  "dependencies": {
+    "plugins": [
+      { "name": "core.test", "version": ">=1.0.0" }
+    ]
+  },
+  "widgets": [
+    {
+      "id": "health_bar",
+      "type": "custom",
+      "enabled_in_builds": ["debug", "development", "release"],
+      "toggle_key": "H",
+      "config": {
+        "position": [10, 10],
+        "size": [200, 30]
+      }
+    },
+    {
+      "id": "debug_overlay",
+      "type": "debug_hud",
+      "enabled_in_builds": ["debug", "development"],
+      "toggle_key": "F3",
+      "config": {
+        "show_fps": true,
+        "show_entities": true
+      }
+    }
+  ],
+  "bindings": [
+    {
+      "widget_id": "health_bar",
+      "data_source": "Health",
+      "binding_type": "query"
+    }
+  ]
+}

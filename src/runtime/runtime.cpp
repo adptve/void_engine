@@ -14,6 +14,9 @@
 #include <void_engine/render/gl_renderer.hpp>
 #include <void_engine/ecs/world.hpp>
 
+// Package system
+#include <void_engine/package/package.hpp>
+
 #include <spdlog/spdlog.h>
 #include <nlohmann/json.hpp>
 
@@ -53,13 +56,30 @@ struct Runtime::RenderContext {
 };
 
 // =============================================================================
+// Package Context
+// =============================================================================
+
+struct Runtime::PackageContext {
+    std::unique_ptr<void_package::PackageRegistry> registry;
+    std::unique_ptr<void_package::LoadContext> load_context;
+    std::unique_ptr<void_package::WorldComposer> composer;
+    std::unique_ptr<void_package::PrefabRegistry> prefab_registry;
+    std::unique_ptr<void_package::ComponentSchemaRegistry> schema_registry;
+    std::unique_ptr<void_package::DefinitionRegistry> definition_registry;
+    std::unique_ptr<void_package::WidgetManager> widget_manager;
+    std::unique_ptr<void_package::LayerApplier> layer_applier;
+    bool initialized{false};
+};
+
+// =============================================================================
 // Constructor / Destructor
 // =============================================================================
 
 Runtime::Runtime(const RuntimeConfig& config)
     : m_config(config)
     , m_platform(std::make_unique<PlatformContext>())
-    , m_render(std::make_unique<RenderContext>()) {
+    , m_render(std::make_unique<RenderContext>())
+    , m_packages(std::make_unique<PackageContext>()) {
 }
 
 Runtime::~Runtime() {
@@ -92,6 +112,11 @@ void_core::Result<void> Runtime::initialize() {
     }
 
     if (auto result = init_infrastructure(); !result) {
+        m_state = RuntimeState::Uninitialized;
+        return result;
+    }
+
+    if (auto result = init_packages(); !result) {
         m_state = RuntimeState::Uninitialized;
         return result;
     }
@@ -222,6 +247,7 @@ void Runtime::shutdown() {
         shutdown_platform();
     }
 
+    shutdown_packages();
     shutdown_infrastructure();
     shutdown_kernel();
 
@@ -242,17 +268,34 @@ void Runtime::request_exit(int exit_code) {
 void_core::Result<void> Runtime::load_world(const std::string& world_id) {
     spdlog::info("Loading world: {}", world_id);
 
+    // Package system is required - no legacy fallback
+    if (!m_packages || !m_packages->composer) {
+        return void_core::Error("Package system not initialized - cannot load world '" + world_id + "'");
+    }
+
+    if (!m_packages->registry) {
+        return void_core::Error("PackageRegistry not available - cannot load world '" + world_id + "'");
+    }
+
+    // Check if world package exists
+    if (!m_packages->registry->is_available(world_id)) {
+        return void_core::Error("World package not found: '" + world_id + "'. "
+            "Ensure the package is in the content_path and has a valid .world.json manifest.");
+    }
+
     if (has_world()) {
         unload_world(false);
     }
 
-    // Create new world instance
-    m_world = std::make_unique<void_scene::World>(world_id);
+    // Load world through package system
+    void_package::WorldLoadOptions options;
+    options.spawn_player = true;
+    options.apply_layers = true;
+    options.emit_events = true;
 
-    // Initialize the world with event bus
-    if (auto result = m_world->initialize(m_event_bus.get()); !result) {
-        m_world.reset();
-        return void_core::Error("Failed to initialize world: " + result.error().message());
+    if (auto result = m_packages->composer->load_world(world_id, options); !result) {
+        spdlog::error("Failed to load world '{}': {}", world_id, result.error().message());
+        return result;
     }
 
     m_current_world = world_id;
@@ -272,18 +315,21 @@ void Runtime::unload_world(bool snapshot) {
 
     spdlog::info("Unloading world: {}", m_current_world);
 
-    if (snapshot && m_world) {
-        spdlog::info("  Creating state snapshot for world: {}", m_current_world);
-        // Snapshot would be stored for potential restore during world switch
-        // ECS snapshot capability exists in void_ecs::World
-    }
-
     std::string old_world = m_current_world;
 
-    // Clear the world (deactivates layers, plugins, widgets, clears ECS)
-    if (m_world) {
-        m_world->clear();
-        m_world.reset();
+    // Unload through package system
+    if (m_packages && m_packages->composer && m_packages->composer->has_world()) {
+        void_package::WorldUnloadOptions options;
+        options.preserve_player = snapshot;
+        options.emit_events = true;
+
+        if (snapshot) {
+            spdlog::info("  Creating state snapshot for world: {}", m_current_world);
+        }
+
+        if (auto result = m_packages->composer->unload_world(options); !result) {
+            spdlog::error("Failed to unload world: {}", result.error().message());
+        }
     }
 
     m_current_world.clear();
@@ -305,8 +351,29 @@ void_core::Result<void> Runtime::switch_world(const std::string& world_id, bool 
                  m_current_world.empty() ? "(none)" : m_current_world,
                  world_id, transfer_state);
 
-    unload_world(transfer_state);
-    return load_world(world_id);
+    // Package system is required
+    if (!m_packages || !m_packages->composer) {
+        return void_core::Error("Package system not initialized - cannot switch to world '" + world_id + "'");
+    }
+
+    // Use WorldComposer's atomic switch
+    void_package::WorldSwitchOptions options;
+    options.transfer_player = transfer_state;
+    options.emit_events = true;
+
+    auto result = m_packages->composer->switch_world(world_id, options);
+    if (!result) {
+        return result;
+    }
+
+    m_current_world = world_id;
+
+    if (m_on_world_loaded) {
+        m_on_world_loaded(world_id);
+    }
+
+    spdlog::info("World switched to: {}", world_id);
+    return void_core::Ok();
 }
 
 // =============================================================================
@@ -354,6 +421,72 @@ void_core::Result<void> Runtime::init_infrastructure() {
     void_kernel::set_global_kernel(m_kernel.get());
 
     spdlog::info("  [infrastructure] Initialized (event bus, global kernel set)");
+    return void_core::Ok();
+}
+
+void_core::Result<void> Runtime::init_packages() {
+    spdlog::info("  [packages] Initializing...");
+
+    // Create package system components
+    m_packages->registry = std::make_unique<void_package::PackageRegistry>();
+    m_packages->load_context = std::make_unique<void_package::LoadContext>();
+    m_packages->composer = void_package::create_world_composer();
+    m_packages->prefab_registry = std::make_unique<void_package::PrefabRegistry>();
+    m_packages->schema_registry = std::make_unique<void_package::ComponentSchemaRegistry>();
+    m_packages->definition_registry = std::make_unique<void_package::DefinitionRegistry>();
+    m_packages->widget_manager = std::make_unique<void_package::WidgetManager>();
+    m_packages->layer_applier = std::make_unique<void_package::LayerApplier>();
+
+    // Configure LoadContext with ECS world and event bus
+    // Note: ECS world will be set when a world is loaded
+    m_packages->load_context->set_event_bus(m_event_bus.get());
+
+    // Register package loaders into LoadContext
+    m_packages->load_context->register_loader(void_package::create_plugin_package_loader());
+    m_packages->load_context->register_loader(void_package::create_widget_package_loader());
+    m_packages->load_context->register_loader(void_package::create_layer_package_loader());
+    m_packages->load_context->register_loader(void_package::create_world_package_loader());
+
+    // Configure WorldComposer with all components
+    m_packages->composer->set_package_registry(m_packages->registry.get());
+    m_packages->composer->set_load_context(m_packages->load_context.get());
+    m_packages->composer->set_prefab_registry(m_packages->prefab_registry.get());
+    m_packages->composer->set_schema_registry(m_packages->schema_registry.get());
+    m_packages->composer->set_definition_registry(m_packages->definition_registry.get());
+    m_packages->composer->set_widget_manager(m_packages->widget_manager.get());
+    m_packages->composer->set_event_bus(m_event_bus.get());
+    m_packages->composer->set_layer_applier(m_packages->layer_applier.get());
+
+    // Scan for packages if content path is specified
+    if (!m_config.content_path.empty()) {
+        std::filesystem::path content_dir(m_config.content_path);
+        if (std::filesystem::exists(content_dir)) {
+            auto scan_result = m_packages->registry->scan_directory(content_dir, true);
+            if (scan_result) {
+                spdlog::info("  [packages] Discovered {} packages in {}",
+                             *scan_result, m_config.content_path);
+            } else {
+                spdlog::warn("  [packages] Failed to scan content directory: {}",
+                             scan_result.error().message());
+            }
+        }
+    }
+
+    // Also scan manifest directory if available
+    if (!m_config.manifest_path.empty()) {
+        std::filesystem::path manifest_dir = std::filesystem::path(m_config.manifest_path).parent_path();
+        if (std::filesystem::exists(manifest_dir)) {
+            auto scan_result = m_packages->registry->scan_directory(manifest_dir, true);
+            if (scan_result) {
+                spdlog::info("  [packages] Discovered {} packages in manifest directory",
+                             *scan_result);
+            }
+        }
+    }
+
+    m_packages->initialized = true;
+    spdlog::info("  [packages] Initialized ({} packages available)",
+                 m_packages->registry->available_count());
     return void_core::Ok();
 }
 
@@ -525,17 +658,17 @@ void_core::Result<void> Runtime::init_io() {
 void_core::Result<void> Runtime::init_simulation() {
     spdlog::info("  [simulation] Initializing...");
 
-    // World (with ECS) is created when a world is loaded via load_world()
+    // ECS world is created when a world is loaded via the package system
     // Register ECS update into the Update stage
     m_kernel->register_system(void_kernel::Stage::Update, "ecs_progress",
         [this](float dt) {
-            // ECS world progresses - systems registered with ECS execute here
-            if (m_world) {
-                m_world->update(dt);
+            // ECS world progresses through WorldComposer
+            if (m_packages && m_packages->composer) {
+                m_packages->composer->update(dt);
             }
         }, 100);
 
-    spdlog::info("  [simulation] Initialized (world loading ready)");
+    spdlog::info("  [simulation] Initialized (package-based world loading ready)");
     return void_core::Ok();
 }
 
@@ -544,7 +677,22 @@ void_core::Result<void> Runtime::init_simulation() {
 // =============================================================================
 
 void_ecs::World* Runtime::ecs_world() const {
-    return m_world ? &m_world->ecs() : nullptr;
+    if (m_packages && m_packages->composer) {
+        return m_packages->composer->ecs_world();
+    }
+    return nullptr;
+}
+
+void_package::WorldComposer* Runtime::world_composer() const {
+    return m_packages ? m_packages->composer.get() : nullptr;
+}
+
+void_package::PackageRegistry* Runtime::package_registry() const {
+    return m_packages ? m_packages->registry.get() : nullptr;
+}
+
+void_package::PrefabRegistry* Runtime::prefab_registry() const {
+    return m_packages ? m_packages->prefab_registry.get() : nullptr;
 }
 
 IPlatform* Runtime::platform() const {
@@ -670,8 +818,7 @@ void Runtime::shutdown_simulation() {
     // Unregister ECS system from kernel
     m_kernel->unregister_system(void_kernel::Stage::Update, "ecs_progress");
 
-    // World is already unloaded via unload_world() in shutdown sequence
-    m_world.reset();
+    // World is unloaded via package system in shutdown sequence
     spdlog::info("  [simulation] Shutdown complete");
 }
 
@@ -717,6 +864,34 @@ void Runtime::shutdown_platform() {
 
     m_platform->initialized = false;
     spdlog::info("  [platform] Shutdown complete");
+}
+
+void Runtime::shutdown_packages() {
+    spdlog::info("  [packages] Shutting down...");
+
+    if (m_packages && m_packages->initialized) {
+        // Unload all packages
+        if (m_packages->registry && m_packages->load_context) {
+            auto result = m_packages->registry->unload_all(*m_packages->load_context);
+            if (!result) {
+                spdlog::warn("  [packages] Error unloading packages: {}", result.error().message());
+            }
+        }
+
+        // Clear all components in reverse order
+        m_packages->layer_applier.reset();
+        m_packages->widget_manager.reset();
+        m_packages->definition_registry.reset();
+        m_packages->schema_registry.reset();
+        m_packages->prefab_registry.reset();
+        m_packages->composer.reset();
+        m_packages->load_context.reset();
+        m_packages->registry.reset();
+
+        m_packages->initialized = false;
+    }
+
+    spdlog::info("  [packages] Shutdown complete");
 }
 
 void Runtime::shutdown_infrastructure() {

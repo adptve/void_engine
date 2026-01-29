@@ -1,0 +1,63 @@
+{
+  "package": {
+    "name": "test.basic_assets",
+    "type": "asset",
+    "version": "1.0.0"
+  },
+  "meshes": [
+    { "id": "test_cube", "path": "models/cube.gltf" }
+  ],
+  "textures": [
+    { "id": "test_texture", "path": "textures/test.png", "format": "rgba8" }
+  ],
+  "materials": [
+    {
+      "id": "test_material",
+      "shader": "shaders/pbr_standard",
+      "textures": {
+        "albedo": "test_texture"
+      },
+      "parameters": {
+        "metallic": 0.0,
+        "roughness": 0.5
+      }
+    }
+  ],
+  "prefabs": [
+    {
+      "id": "test_prefab",
+      "components": {
+        "Transform": {
+          "position": [0, 0, 0],
+          "rotation": [0, 0, 0, 1],
+          "scale": [1, 1, 1]
+        },
+        "MeshRenderer": {
+          "mesh": "test_cube",
+          "material": "test_material"
+        }
+      },
+      "tags": ["test", "static"]
+    },
+    {
+      "id": "enemy_prefab",
+      "components": {
+        "Transform": {},
+        "Health": { "current": 100, "max": 100 }
+      },
+      "tags": ["enemy", "dynamic"]
+    }
+  ],
+  "definitions": {
+    "test_registry": [
+      {
+        "registry_type": "test_items",
+        "data": {
+          "id": "test_item_1",
+          "name": "Test Item",
+          "value": 100
+        }
+      }
+    ]
+  }
+}

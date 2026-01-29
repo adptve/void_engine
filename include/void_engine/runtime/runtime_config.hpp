@@ -67,6 +67,9 @@ struct RuntimeConfig {
     /// Path to manifest file (JSON/YAML describing world, plugins, assets)
     std::string manifest_path;
 
+    /// Root content path for package discovery
+    std::string content_path;
+
     /// Initial world to load (name or path)
     std::string initial_world;
 

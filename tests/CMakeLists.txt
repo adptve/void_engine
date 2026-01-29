@@ -1,6 +1,8 @@
 # void_engine tests
 # Uses Catch2 for unit testing
 
+# Add Catch2's cmake module path for catch_discover_tests
+list(APPEND CMAKE_MODULE_PATH ${Catch2_SOURCE_DIR}/extras)
 include(Catch)
 
 # ============================================================================
@@ -142,6 +144,19 @@ void_add_test(NAME test_ui
 )
 
 # ============================================================================
+# Package System Tests
+# ============================================================================
+void_add_test(NAME test_package
+    SOURCES
+        package/test_package.cpp
+        package/test_integration.cpp
+    DEPENDENCIES
+        void_package
+        void_core
+        void_ecs
+)
+
+# ============================================================================
 # Integration Tests
 # ============================================================================
 void_add_test(NAME test_integration
@@ -149,5 +164,8 @@ void_add_test(NAME test_integration
         integration/test_hot_reload.cpp
         integration/test_ecs_render.cpp
     DEPENDENCIES
-        void_engine
+        void_runtime
+        void_ecs
+        void_render
+        void_core
 )

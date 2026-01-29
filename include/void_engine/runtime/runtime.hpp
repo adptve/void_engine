@@ -48,6 +48,16 @@ namespace void_event { class EventBus; }
 namespace void_ecs { class World; }
 namespace void_scene { class World; struct SceneData; }
 namespace void_render { class SceneRenderer; }
+namespace void_package {
+    class PackageRegistry;
+    class LoadContext;
+    class WorldComposer;
+    class PrefabRegistry;
+    class ComponentSchemaRegistry;
+    class DefinitionRegistry;
+    class WidgetManager;
+    class LayerApplier;
+}
 
 namespace void_runtime {
 
@@ -240,10 +250,18 @@ public:
     [[nodiscard]] void_event::EventBus* event_bus() const { return m_event_bus.get(); }
 
     /// @brief Get the ECS world (current world's ECS)
+    /// Returns the ECS world from the active WorldComposer
     [[nodiscard]] void_ecs::World* ecs_world() const;
 
-    /// @brief Get the current world
-    [[nodiscard]] void_scene::World* world() const { return m_world.get(); }
+    /// @brief Get the WorldComposer
+    /// The WorldComposer manages world lifecycle through the package system
+    [[nodiscard]] void_package::WorldComposer* world_composer() const;
+
+    /// @brief Get the PackageRegistry
+    [[nodiscard]] void_package::PackageRegistry* package_registry() const;
+
+    /// @brief Get the PrefabRegistry
+    [[nodiscard]] void_package::PrefabRegistry* prefab_registry() const;
 
     /// @brief Get the platform interface
     [[nodiscard]] IPlatform* platform() const;
@@ -279,6 +297,7 @@ private:
     void_core::Result<void> init_kernel();
     void_core::Result<void> init_foundation();
     void_core::Result<void> init_infrastructure();
+    void_core::Result<void> init_packages();
     void_core::Result<void> init_api_connectivity();
     void_core::Result<void> init_platform();
     void_core::Result<void> init_render();
@@ -296,6 +315,7 @@ private:
     void shutdown_io();
     void shutdown_render();
     void shutdown_platform();
+    void shutdown_packages();
     void shutdown_infrastructure();
     void shutdown_kernel();
 
@@ -310,7 +330,10 @@ private:
     // Core subsystems (owned)
     std::unique_ptr<void_kernel::Kernel> m_kernel;
     std::unique_ptr<void_event::EventBus> m_event_bus;
-    std::unique_ptr<void_scene::World> m_world;
+
+    // Package system (owns world lifecycle)
+    struct PackageContext;
+    std::unique_ptr<PackageContext> m_packages;
 
     // Platform handle (opaque, mode-dependent)
     struct PlatformContext;

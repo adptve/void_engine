@@ -1,0 +1,74 @@
+{
+  "package": {
+    "name": "world.test_arena",
+    "type": "world",
+    "version": "1.0.0"
+  },
+  "dependencies": {
+    "plugins": [
+      { "name": "core.test", "version": ">=1.0.0" },
+      { "name": "gameplay.test", "version": ">=1.0.0" }
+    ],
+    "widgets": [
+      { "name": "widget.test_hud", "version": ">=1.0.0" }
+    ],
+    "layers": [
+      { "name": "layer.test_night", "version": ">=1.0.0", "optional": true }
+    ],
+    "assets": [
+      { "name": "test.basic_assets", "version": ">=1.0.0" }
+    ]
+  },
+  "root_scene": {
+    "path": "scenes/test_arena.scene.json",
+    "spawn_points": ["spawn_a", "spawn_b", "spawn_c"],
+    "world_bounds": {
+      "min": [-100, -10, -100],
+      "max": [100, 50, 100]
+    }
+  },
+  "player_spawn": {
+    "prefab": "prefabs/test_player.prefab.json",
+    "spawn_selection": "round_robin",
+    "initial_stats": {
+      "health": 100,
+      "armor": 0
+    }
+  },
+  "environment": {
+    "time_of_day": 12.0,
+    "skybox": "skyboxes/test_sky",
+    "ambient_color": [0.1, 0.1, 0.1],
+    "ambient_intensity": 0.3
+  },
+  "gameplay": {
+    "difficulty": "normal",
+    "match_length_seconds": 300,
+    "score_limit": 10,
+    "friendly_fire": false,
+    "respawn_delay_seconds": 3,
+    "ruleset_flags": {
+      "test_mode": true
+    }
+  },
+  "ecs_resources": {
+    "GameConfig": {
+      "test_value": 42
+    }
+  },
+  "world_logic": {
+    "win_conditions": [
+      { "type": "score_limit", "config": { "target": 10 } }
+    ],
+    "lose_conditions": [
+      { "type": "team_eliminated", "config": {} }
+    ],
+    "round_flow": {
+      "warmup_duration": 10,
+      "round_duration": 120,
+      "intermission_duration": 5
+    }
+  },
+  "layers": ["layer.test_night"],
+  "widgets": ["widget.test_hud"]
+}

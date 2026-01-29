@@ -18,6 +18,17 @@ void_add_module(NAME void_package
         plugin_package.cpp
         dynamic_library.cpp
         plugin_package_loader.cpp
+        # Phase 4 - Widget packages
+        widget_package.cpp
+        widget_manager.cpp
+        widget_package_loader.cpp
+        # Phase 5 - Layer packages
+        layer_package.cpp
+        layer_package_loader.cpp
+        # Phase 6 - World packages
+        world_package.cpp
+        world_package_loader.cpp
+        world_composer.cpp
     DEPENDENCIES
         void_core
         void_ecs

@@ -1,0 +1,49 @@
+{
+  "package": {
+    "name": "layer.test_night",
+    "type": "layer",
+    "version": "1.0.0"
+  },
+  "dependencies": {
+    "plugins": [
+      { "name": "core.test", "version": ">=1.0.0" }
+    ]
+  },
+  "priority": 100,
+  "additive_scenes": [
+    {
+      "path": "scenes/night_props.scene.json",
+      "spawn_mode": "immediate"
+    }
+  ],
+  "spawners": [
+    {
+      "id": "test_spawner",
+      "volume": {
+        "type": "sphere",
+        "center": [0, 0, 0],
+        "radius": 50
+      },
+      "prefab": "prefabs/enemy.prefab.json",
+      "spawn_rate": 0.5,
+      "max_active": 5
+    }
+  ],
+  "lighting": {
+    "sun": {
+      "direction": [-0.5, -0.8, -0.3],
+      "color": [0.2, 0.2, 0.4],
+      "intensity": 0.3
+    },
+    "ambient": {
+      "color": [0.05, 0.05, 0.1],
+      "intensity": 0.2
+    }
+  },
+  "modifiers": [
+    {
+      "path": "gameplay.damage_multiplier",
+      "value": 1.5
+    }
+  ]
+}

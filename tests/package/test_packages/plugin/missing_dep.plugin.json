@@ -1,0 +1,13 @@
+{
+  "package": {
+    "name": "test.missing_dep",
+    "type": "plugin",
+    "version": "1.0.0"
+  },
+  "dependencies": {
+    "plugins": [
+      { "name": "nonexistent.package", "version": ">=1.0.0" }
+    ]
+  },
+  "components": []
+}

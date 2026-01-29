@@ -1,0 +1,13 @@
+{
+  "package": {
+    "name": "core.layer_violation",
+    "type": "plugin",
+    "version": "1.0.0"
+  },
+  "dependencies": {
+    "plugins": [
+      { "name": "gameplay.test", "version": ">=1.0.0" }
+    ]
+  },
+  "components": []
+}

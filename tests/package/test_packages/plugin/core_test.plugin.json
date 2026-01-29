@@ -1,0 +1,39 @@
+{
+  "package": {
+    "name": "core.test",
+    "type": "plugin",
+    "version": "1.0.0"
+  },
+  "components": [
+    {
+      "name": "TestComponent",
+      "fields": {
+        "value": { "type": "i32", "default": 0 },
+        "name": { "type": "string", "default": "" }
+      }
+    },
+    {
+      "name": "Health",
+      "fields": {
+        "current": { "type": "f32", "default": 100 },
+        "max": { "type": "f32", "default": 100 },
+        "regeneration_rate": { "type": "f32", "default": 0 }
+      }
+    },
+    {
+      "name": "TestTag",
+      "is_tag": true
+    },
+    {
+      "name": "Damageable",
+      "is_tag": true
+    }
+  ],
+  "systems": [
+    {
+      "name": "TestSystem",
+      "stage": "update",
+      "query": ["TestComponent"]
+    }
+  ]
+}

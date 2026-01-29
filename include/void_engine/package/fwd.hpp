@@ -103,6 +103,76 @@ class DynamicLibrary;
 class DynamicLibraryCache;
 
 // =============================================================================
+// Widget Package Types (Phase 4)
+// =============================================================================
+
+enum class BuildType : std::uint8_t;
+enum class BindingType : std::uint8_t;
+struct WidgetDeclaration;
+struct WidgetBinding;
+struct WidgetLibraryDeclaration;
+struct WidgetPackageManifest;
+struct WidgetHandle;
+struct WidgetInstance;
+class Widget;
+class WidgetContext;
+class WidgetManager;
+class WidgetTypeRegistry;
+
+// =============================================================================
+// Layer Package Types (Phase 5)
+// =============================================================================
+
+enum class SpawnMode : std::uint8_t;
+struct AdditiveSceneEntry;
+struct SpawnerVolume;
+struct SpawnerEntry;
+struct LightEntry;
+struct SunOverride;
+struct AmbientOverride;
+struct LightingOverride;
+struct FogConfig;
+struct PrecipitationConfig;
+struct WindZone;
+struct WeatherOverride;
+struct ObjectiveEntry;
+struct ModifierEntry;
+struct LayerPackageManifest;
+struct SpawnerState;
+struct ModifierOriginalValue;
+struct LightingOriginalState;
+struct StagedLayer;
+struct AppliedLayerState;
+class LayerApplier;
+
+// =============================================================================
+// World Package Types (Phase 6)
+// =============================================================================
+
+enum class SpawnSelection : std::uint8_t;
+enum class WorldState : std::uint8_t;
+struct RootSceneConfig;
+struct PlayerSpawnConfig;
+struct WeatherConfig;
+struct PostProcessConfig;
+struct EnvironmentConfig;
+struct WinCondition;
+struct LoseCondition;
+struct RoundFlowConfig;
+struct GameplayConfig;
+struct WorldLogicConfig;
+struct WorldPackageManifest;
+struct LoadedWorldInfo;
+struct WorldLoadOptions;
+struct WorldUnloadOptions;
+struct WorldSwitchOptions;
+struct WorldLoadedEvent;
+struct WorldUnloadingEvent;
+struct WorldUnloadedEvent;
+struct WorldSwitchEvent;
+class WorldComposer;
+
+// =============================================================================
 // Utility Functions
 // =============================================================================
 

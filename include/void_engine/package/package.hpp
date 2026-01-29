@@ -77,3 +77,26 @@
 #include "resolver.hpp"
 #include "loader.hpp"
 #include "registry.hpp"
+
+// Phase 2: Asset bundles
+#include "asset_bundle.hpp"
+#include "prefab_registry.hpp"
+#include "definition_registry.hpp"
+#include "component_schema.hpp"
+
+// Phase 3: Plugins
+#include "plugin_package.hpp"
+#include "dynamic_library.hpp"
+
+// Phase 4: Widgets
+#include "widget_package.hpp"
+#include "widget_manager.hpp"
+#include "widget.hpp"
+
+// Phase 5: Layers
+#include "layer_package.hpp"
+#include "layer_applier.hpp"
+
+// Phase 6: Worlds
+#include "world_package.hpp"
+#include "world_composer.hpp"
