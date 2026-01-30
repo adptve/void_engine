@@ -18,6 +18,7 @@
 // Forward declarations for engine systems
 namespace void_ecs { class World; }
 namespace void_event { class EventBus; }
+namespace void_kernel { class Kernel; }
 
 namespace void_package {
 
@@ -281,14 +282,33 @@ private:
 // Loader Factory Functions
 // =============================================================================
 
-/// Create a plugin package loader (Phase 3)
+/// Create a plugin package loader with internal schema registry (Phase 3)
 [[nodiscard]] std::unique_ptr<PackageLoader> create_plugin_package_loader();
+
+/// Create a plugin package loader with external schema registry (Phase 3)
+/// Using an external registry allows sharing component schemas across the package system.
+/// The registry MUST outlive the loader.
+[[nodiscard]] std::unique_ptr<PackageLoader> create_plugin_package_loader(
+    ComponentSchemaRegistry* schema_registry);
+
+/// Create a plugin package loader with external schema registry and kernel (Phase 3)
+/// Full-featured factory for IPlugin support with system registration.
+/// Both registry and kernel MUST outlive the loader.
+[[nodiscard]] std::unique_ptr<PackageLoader> create_plugin_package_loader(
+    ComponentSchemaRegistry* schema_registry,
+    void_kernel::Kernel* kernel);
 
 /// Create a widget package loader (Phase 4)
 [[nodiscard]] std::unique_ptr<PackageLoader> create_widget_package_loader();
 
-/// Create a layer package loader (Phase 5)
+/// Create a layer package loader with internal applier (Phase 5)
 [[nodiscard]] std::unique_ptr<PackageLoader> create_layer_package_loader();
+
+/// Create a layer package loader with external applier (Phase 5)
+/// Using an external applier allows sharing layer state with WorldComposer.
+/// The applier MUST outlive the loader.
+[[nodiscard]] std::unique_ptr<PackageLoader> create_layer_package_loader(
+    LayerApplier* layer_applier);
 
 /// Create a world package loader (Phase 6)
 [[nodiscard]] std::unique_ptr<PackageLoader> create_world_package_loader();

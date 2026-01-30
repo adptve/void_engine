@@ -1,5 +1,6 @@
 # Example AI Plugin - Demonstrates hot-swappable gameplay plugin
-# This builds as a shared library (.dll/.so/.dylib) that can be loaded at runtime
+# This uses the legacy GameplayPlugin pattern (not IPlugin)
+# Kept for reference and backward compatibility
 
 add_library(example_ai SHARED
     example_ai_plugin.cpp
@@ -33,8 +34,12 @@ endif()
 
 # Copy to source plugins directory for development
 add_custom_command(TARGET example_ai POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        ${CMAKE_SOURCE_DIR}/plugins/bin
     COMMAND ${CMAKE_COMMAND} -E copy
         $<TARGET_FILE:example_ai>
-        ${CMAKE_SOURCE_DIR}/plugins/$<TARGET_FILE_NAME:example_ai>
-    COMMENT "Copying example_ai plugin to source plugins directory"
+        ${CMAKE_SOURCE_DIR}/plugins/bin/$<TARGET_FILE_NAME:example_ai>
+    COMMENT "Copying example_ai plugin to plugins/bin/"
 )
+
+message(STATUS "  Plugin: example_ai (legacy GameplayPlugin)")

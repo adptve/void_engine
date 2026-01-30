@@ -1,0 +1,157 @@
+{
+  "name": "Demo Arena",
+  "camera": {
+    "name": "main_camera",
+    "components": {
+      "Transform": {
+        "position": [0, 15, 30],
+        "rotation": [0, 0, 0, 1]
+      },
+      "Camera": {
+        "fov": 60.0,
+        "near_plane": 0.1,
+        "far_plane": 1000.0,
+        "active": true,
+        "projection": "perspective",
+        "clear_color": [0.1, 0.1, 0.15, 1.0]
+      }
+    }
+  },
+  "entities": [
+    {
+      "name": "floor",
+      "prefab": "floor_tile",
+      "transform": {
+        "position": [0, 0, 0],
+        "scale": [10, 1, 10]
+      }
+    },
+    {
+      "name": "wall_north",
+      "prefab": "wall_segment",
+      "transform": {
+        "position": [0, 1.5, -50],
+        "rotation": [0, 0, 0, 1]
+      }
+    },
+    {
+      "name": "wall_south",
+      "prefab": "wall_segment",
+      "transform": {
+        "position": [0, 1.5, 50],
+        "rotation": [0, 1, 0, 0]
+      }
+    },
+    {
+      "name": "wall_east",
+      "prefab": "wall_segment",
+      "transform": {
+        "position": [50, 1.5, 0],
+        "rotation": [0, 0.707, 0, 0.707]
+      }
+    },
+    {
+      "name": "wall_west",
+      "prefab": "wall_segment",
+      "transform": {
+        "position": [-50, 1.5, 0],
+        "rotation": [0, -0.707, 0, 0.707]
+      }
+    },
+    {
+      "name": "cover_1",
+      "prefab": "cover_crate",
+      "transform": {
+        "position": [15, 0.5, 10]
+      }
+    },
+    {
+      "name": "cover_2",
+      "prefab": "cover_crate",
+      "transform": {
+        "position": [-15, 0.5, -10]
+      }
+    },
+    {
+      "name": "cover_3",
+      "prefab": "cover_crate",
+      "transform": {
+        "position": [0, 0.5, 25]
+      }
+    },
+    {
+      "name": "enemy_1",
+      "prefab": "enemy_prefab",
+      "transform": {
+        "position": [20, 1, -20]
+      }
+    },
+    {
+      "name": "enemy_2",
+      "prefab": "enemy_prefab",
+      "transform": {
+        "position": [-20, 1, 20]
+      }
+    },
+    {
+      "name": "enemy_3",
+      "prefab": "enemy_prefab",
+      "transform": {
+        "position": [25, 1, 25]
+      }
+    }
+  ],
+  "spawn_points": {
+    "spawn_north": { "position": [0, 1, -40], "rotation": [0, 0, 0, 1] },
+    "spawn_south": { "position": [0, 1, 40], "rotation": [0, 1, 0, 0] },
+    "spawn_east": { "position": [40, 1, 0], "rotation": [0, -0.707, 0, 0.707] },
+    "spawn_west": { "position": [-40, 1, 0], "rotation": [0, 0.707, 0, 0.707] }
+  },
+  "lights": [
+    {
+      "name": "sun",
+      "components": {
+        "Transform": {
+          "position": [0, 50, 0],
+          "rotation": [-0.383, 0, 0, 0.924]
+        },
+        "Light": {
+          "type": "directional",
+          "color": [1.0, 0.95, 0.9],
+          "intensity": 1.2,
+          "cast_shadows": true
+        }
+      }
+    },
+    {
+      "name": "arena_light_1",
+      "components": {
+        "Transform": {
+          "position": [20, 10, 20]
+        },
+        "Light": {
+          "type": "point",
+          "color": [1.0, 0.9, 0.8],
+          "intensity": 50,
+          "range": 30,
+          "cast_shadows": false
+        }
+      }
+    },
+    {
+      "name": "arena_light_2",
+      "components": {
+        "Transform": {
+          "position": [-20, 10, -20]
+        },
+        "Light": {
+          "type": "point",
+          "color": [1.0, 0.9, 0.8],
+          "intensity": 50,
+          "range": 30,
+          "cast_shadows": false
+        }
+      }
+    }
+  ]
+}

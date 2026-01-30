@@ -1,0 +1,65 @@
+{
+  "package": {
+    "name": "demo.environment",
+    "type": "asset",
+    "version": "1.0.0",
+    "display_name": "Demo Environment",
+    "description": "Environment assets for the demo arena"
+  },
+  "meshes": [
+    { "id": "floor_mesh", "path": "models/floor.gltf" },
+    { "id": "wall_mesh", "path": "models/wall.gltf" },
+    { "id": "pillar_mesh", "path": "models/pillar.gltf" },
+    { "id": "crate_mesh", "path": "models/crate.gltf" }
+  ],
+  "textures": [
+    { "id": "floor_diffuse", "path": "textures/floor.png", "format": "rgba8" },
+    { "id": "wall_diffuse", "path": "textures/wall.png", "format": "rgba8" },
+    { "id": "crate_diffuse", "path": "textures/crate.png", "format": "rgba8" }
+  ],
+  "materials": [
+    {
+      "id": "floor_material",
+      "shader": "shaders/pbr_standard",
+      "textures": { "albedo": "floor_diffuse" },
+      "parameters": { "metallic": 0.0, "roughness": 0.9 }
+    },
+    {
+      "id": "wall_material",
+      "shader": "shaders/pbr_standard",
+      "textures": { "albedo": "wall_diffuse" },
+      "parameters": { "metallic": 0.0, "roughness": 0.8 }
+    }
+  ],
+  "prefabs": [
+    {
+      "id": "floor_tile",
+      "components": {
+        "Transform": {
+          "scale": [10, 1, 10]
+        }
+      },
+      "tags": ["static", "floor"]
+    },
+    {
+      "id": "wall_segment",
+      "components": {
+        "Transform": {
+          "scale": [1, 3, 10]
+        }
+      },
+      "tags": ["static", "wall", "collider"]
+    },
+    {
+      "id": "cover_crate",
+      "components": {
+        "Transform": {},
+        "Health": {
+          "current": 200,
+          "max": 200
+        }
+      },
+      "tags": ["destructible", "cover"]
+    }
+  ]
+}

@@ -273,6 +273,10 @@ void_core::Result<PackageManifest> PackageManifest::from_json_string(
         }
     }
 
+    // Set path information (required for resolving relative paths in derived manifests)
+    manifest.source_path = source_path;
+    manifest.base_path = source_path.parent_path();
+
     return void_core::Ok(std::move(manifest));
 }
 

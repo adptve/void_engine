@@ -3,7 +3,7 @@
 
 #include <void_engine/ui/theme.hpp>
 
-#include <toml++/toml.hpp>
+#include <nlohmann/json.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -493,64 +493,70 @@ bool ThemeRegistry::is_transitioning() const {
     return m_impl->transition_duration > 0.0f && !m_impl->transition_target.empty();
 }
 
-// Helper to parse Color from TOML array [r, g, b, a]
-static Color parse_color(const toml::array* arr) {
-    if (!arr || arr->size() < 3) return Color{};
+// Helper to parse Color from JSON array [r, g, b, a]
+static Color parse_color(const nlohmann::json& arr) {
+    if (!arr.is_array() || arr.size() < 3) return Color{};
     Color c;
-    c.r = arr->get(0)->value_or(0.0f);
-    c.g = arr->get(1)->value_or(0.0f);
-    c.b = arr->get(2)->value_or(0.0f);
-    c.a = arr->size() >= 4 ? arr->get(3)->value_or(1.0f) : 1.0f;
+    c.r = arr[0].get<float>();
+    c.g = arr[1].get<float>();
+    c.b = arr[2].get<float>();
+    c.a = arr.size() >= 4 ? arr[3].get<float>() : 1.0f;
     return c;
 }
 
-// Helper to serialize Color to TOML array
-static toml::array color_to_toml(const Color& c) {
-    return toml::array{c.r, c.g, c.b, c.a};
+// Helper to serialize Color to JSON array
+static nlohmann::json color_to_json(const Color& c) {
+    return nlohmann::json::array({c.r, c.g, c.b, c.a});
 }
 
 bool ThemeRegistry::load_theme_from_file(const std::string& path) {
     try {
-        auto tbl = toml::parse_file(path);
+        std::ifstream file(path);
+        if (!file.is_open()) return false;
+
+        nlohmann::json j;
+        file >> j;
 
         Theme theme;
-        theme.name = tbl["name"].value_or<std::string>("custom");
+        theme.name = j.value("name", "custom");
 
         // Parse colors
-        if (auto colors = tbl["colors"].as_table()) {
+        if (j.contains("colors") && j["colors"].is_object()) {
+            const auto& colors = j["colors"];
             auto& c = theme.colors;
-            if (auto v = colors->get_as<toml::array>("panel_bg")) c.panel_bg = parse_color(v);
-            if (auto v = colors->get_as<toml::array>("panel_border")) c.panel_border = parse_color(v);
-            if (auto v = colors->get_as<toml::array>("text")) c.text = parse_color(v);
-            if (auto v = colors->get_as<toml::array>("text_dim")) c.text_dim = parse_color(v);
-            if (auto v = colors->get_as<toml::array>("success")) c.success = parse_color(v);
-            if (auto v = colors->get_as<toml::array>("warning")) c.warning = parse_color(v);
-            if (auto v = colors->get_as<toml::array>("error")) c.error = parse_color(v);
-            if (auto v = colors->get_as<toml::array>("info")) c.info = parse_color(v);
-            if (auto v = colors->get_as<toml::array>("accent")) c.accent = parse_color(v);
-            if (auto v = colors->get_as<toml::array>("button_bg")) c.button_bg = parse_color(v);
-            if (auto v = colors->get_as<toml::array>("button_hover")) c.button_hover = parse_color(v);
-            if (auto v = colors->get_as<toml::array>("button_pressed")) c.button_pressed = parse_color(v);
-            if (auto v = colors->get_as<toml::array>("button_disabled")) c.button_disabled = parse_color(v);
-            if (auto v = colors->get_as<toml::array>("input_bg")) c.input_bg = parse_color(v);
-            if (auto v = colors->get_as<toml::array>("input_border")) c.input_border = parse_color(v);
-            if (auto v = colors->get_as<toml::array>("input_focus")) c.input_focus = parse_color(v);
-            if (auto v = colors->get_as<toml::array>("scrollbar_bg")) c.scrollbar_bg = parse_color(v);
-            if (auto v = colors->get_as<toml::array>("scrollbar_thumb")) c.scrollbar_thumb = parse_color(v);
-            if (auto v = colors->get_as<toml::array>("scrollbar_thumb_hover")) c.scrollbar_thumb_hover = parse_color(v);
-            if (auto v = colors->get_as<toml::array>("selection")) c.selection = parse_color(v);
-            if (auto v = colors->get_as<toml::array>("highlight")) c.highlight = parse_color(v);
+            if (colors.contains("panel_bg")) c.panel_bg = parse_color(colors["panel_bg"]);
+            if (colors.contains("panel_border")) c.panel_border = parse_color(colors["panel_border"]);
+            if (colors.contains("text")) c.text = parse_color(colors["text"]);
+            if (colors.contains("text_dim")) c.text_dim = parse_color(colors["text_dim"]);
+            if (colors.contains("success")) c.success = parse_color(colors["success"]);
+            if (colors.contains("warning")) c.warning = parse_color(colors["warning"]);
+            if (colors.contains("error")) c.error = parse_color(colors["error"]);
+            if (colors.contains("info")) c.info = parse_color(colors["info"]);
+            if (colors.contains("accent")) c.accent = parse_color(colors["accent"]);
+            if (colors.contains("button_bg")) c.button_bg = parse_color(colors["button_bg"]);
+            if (colors.contains("button_hover")) c.button_hover = parse_color(colors["button_hover"]);
+            if (colors.contains("button_pressed")) c.button_pressed = parse_color(colors["button_pressed"]);
+            if (colors.contains("button_disabled")) c.button_disabled = parse_color(colors["button_disabled"]);
+            if (colors.contains("input_bg")) c.input_bg = parse_color(colors["input_bg"]);
+            if (colors.contains("input_border")) c.input_border = parse_color(colors["input_border"]);
+            if (colors.contains("input_focus")) c.input_focus = parse_color(colors["input_focus"]);
+            if (colors.contains("scrollbar_bg")) c.scrollbar_bg = parse_color(colors["scrollbar_bg"]);
+            if (colors.contains("scrollbar_thumb")) c.scrollbar_thumb = parse_color(colors["scrollbar_thumb"]);
+            if (colors.contains("scrollbar_thumb_hover")) c.scrollbar_thumb_hover = parse_color(colors["scrollbar_thumb_hover"]);
+            if (colors.contains("selection")) c.selection = parse_color(colors["selection"]);
+            if (colors.contains("highlight")) c.highlight = parse_color(colors["highlight"]);
         }
 
         // Parse style values
-        if (auto style = tbl["style"].as_table()) {
-            theme.text_scale = style->get("text_scale")->value_or(1.0f);
-            theme.line_height = style->get("line_height")->value_or(1.4f);
-            theme.padding = style->get("padding")->value_or(8.0f);
-            theme.border_radius = style->get("border_radius")->value_or(4.0f);
-            theme.border_width = style->get("border_width")->value_or(1.0f);
-            theme.animation_duration = style->get("animation_duration")->value_or(0.15f);
-            theme.scrollbar_width = style->get("scrollbar_width")->value_or(8.0f);
+        if (j.contains("style") && j["style"].is_object()) {
+            const auto& style = j["style"];
+            theme.text_scale = style.value("text_scale", 1.0f);
+            theme.line_height = style.value("line_height", 1.4f);
+            theme.padding = style.value("padding", 8.0f);
+            theme.border_radius = style.value("border_radius", 4.0f);
+            theme.border_width = style.value("border_width", 1.0f);
+            theme.animation_duration = style.value("animation_duration", 0.15f);
+            theme.scrollbar_width = style.value("scrollbar_width", 8.0f);
         }
 
         // Register the theme
@@ -567,7 +573,7 @@ bool ThemeRegistry::load_theme_from_file(const std::string& path) {
         }
 
         return true;
-    } catch (const toml::parse_error&) {
+    } catch (const nlohmann::json::exception&) {
         return false;
     } catch (const std::exception&) {
         return false;
@@ -579,50 +585,50 @@ bool ThemeRegistry::save_theme_to_file(const std::string& name, const std::strin
     if (!theme) return false;
 
     try {
-        toml::table tbl;
-        tbl.insert("name", theme->name);
+        nlohmann::json j;
+        j["name"] = theme->name;
 
-        // Colors table
-        toml::table colors;
+        // Colors object
+        nlohmann::json colors;
         const auto& c = theme->colors;
-        colors.insert("panel_bg", color_to_toml(c.panel_bg));
-        colors.insert("panel_border", color_to_toml(c.panel_border));
-        colors.insert("text", color_to_toml(c.text));
-        colors.insert("text_dim", color_to_toml(c.text_dim));
-        colors.insert("success", color_to_toml(c.success));
-        colors.insert("warning", color_to_toml(c.warning));
-        colors.insert("error", color_to_toml(c.error));
-        colors.insert("info", color_to_toml(c.info));
-        colors.insert("accent", color_to_toml(c.accent));
-        colors.insert("button_bg", color_to_toml(c.button_bg));
-        colors.insert("button_hover", color_to_toml(c.button_hover));
-        colors.insert("button_pressed", color_to_toml(c.button_pressed));
-        colors.insert("button_disabled", color_to_toml(c.button_disabled));
-        colors.insert("input_bg", color_to_toml(c.input_bg));
-        colors.insert("input_border", color_to_toml(c.input_border));
-        colors.insert("input_focus", color_to_toml(c.input_focus));
-        colors.insert("scrollbar_bg", color_to_toml(c.scrollbar_bg));
-        colors.insert("scrollbar_thumb", color_to_toml(c.scrollbar_thumb));
-        colors.insert("scrollbar_thumb_hover", color_to_toml(c.scrollbar_thumb_hover));
-        colors.insert("selection", color_to_toml(c.selection));
-        colors.insert("highlight", color_to_toml(c.highlight));
-        tbl.insert("colors", std::move(colors));
+        colors["panel_bg"] = color_to_json(c.panel_bg);
+        colors["panel_border"] = color_to_json(c.panel_border);
+        colors["text"] = color_to_json(c.text);
+        colors["text_dim"] = color_to_json(c.text_dim);
+        colors["success"] = color_to_json(c.success);
+        colors["warning"] = color_to_json(c.warning);
+        colors["error"] = color_to_json(c.error);
+        colors["info"] = color_to_json(c.info);
+        colors["accent"] = color_to_json(c.accent);
+        colors["button_bg"] = color_to_json(c.button_bg);
+        colors["button_hover"] = color_to_json(c.button_hover);
+        colors["button_pressed"] = color_to_json(c.button_pressed);
+        colors["button_disabled"] = color_to_json(c.button_disabled);
+        colors["input_bg"] = color_to_json(c.input_bg);
+        colors["input_border"] = color_to_json(c.input_border);
+        colors["input_focus"] = color_to_json(c.input_focus);
+        colors["scrollbar_bg"] = color_to_json(c.scrollbar_bg);
+        colors["scrollbar_thumb"] = color_to_json(c.scrollbar_thumb);
+        colors["scrollbar_thumb_hover"] = color_to_json(c.scrollbar_thumb_hover);
+        colors["selection"] = color_to_json(c.selection);
+        colors["highlight"] = color_to_json(c.highlight);
+        j["colors"] = std::move(colors);
 
-        // Style table
-        toml::table style;
-        style.insert("text_scale", theme->text_scale);
-        style.insert("line_height", theme->line_height);
-        style.insert("padding", theme->padding);
-        style.insert("border_radius", theme->border_radius);
-        style.insert("border_width", theme->border_width);
-        style.insert("animation_duration", theme->animation_duration);
-        style.insert("scrollbar_width", theme->scrollbar_width);
-        tbl.insert("style", std::move(style));
+        // Style object
+        nlohmann::json style;
+        style["text_scale"] = theme->text_scale;
+        style["line_height"] = theme->line_height;
+        style["padding"] = theme->padding;
+        style["border_radius"] = theme->border_radius;
+        style["border_width"] = theme->border_width;
+        style["animation_duration"] = theme->animation_duration;
+        style["scrollbar_width"] = theme->scrollbar_width;
+        j["style"] = std::move(style);
 
-        // Write to file
+        // Write to file with pretty formatting
         std::ofstream file(path);
         if (!file.is_open()) return false;
-        file << tbl;
+        file << j.dump(2);
         return true;
     } catch (const std::exception&) {
         return false;
@@ -679,7 +685,7 @@ void ThemeRegistry::poll_changes() {
             if (!entry.is_regular_file()) continue;
 
             const auto& path = entry.path();
-            if (path.extension() != ".toml") continue;
+            if (path.extension() != ".json") continue;
 
             std::string path_str = path.string();
             auto current_mtime = fs::last_write_time(path, ec);
@@ -705,8 +711,12 @@ void ThemeRegistry::poll_changes() {
             // Get theme name and check if it's the active theme
             std::string theme_name;
             try {
-                auto tbl = toml::parse_file(file.path);
-                theme_name = tbl["name"].value_or<std::string>("");
+                std::ifstream ifs(file.path);
+                if (ifs.is_open()) {
+                    nlohmann::json j;
+                    ifs >> j;
+                    theme_name = j.value("name", "");
+                }
             } catch (...) {
                 continue;
             }

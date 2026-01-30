@@ -1,0 +1,101 @@
+{
+  "package": {
+    "name": "world.demo_arena",
+    "type": "world",
+    "version": "1.0.0",
+    "display_name": "Demo Arena",
+    "description": "A demonstration arena showing the package system"
+  },
+  "dependencies": {
+    "plugins": [
+      { "name": "base.health", "version": ">=1.0.0" },
+      { "name": "core.gameplay", "version": ">=1.0.0" },
+      { "name": "gameplay.combat", "version": ">=1.0.0" }
+    ],
+    "assets": [
+      { "name": "demo.characters", "version": ">=1.0.0" },
+      { "name": "demo.environment", "version": ">=1.0.0" }
+    ],
+    "widgets": [
+      { "name": "widget.game_hud", "version": ">=1.0.0" }
+    ],
+    "layers": [
+      { "name": "layer.night_mode", "version": ">=1.0.0", "optional": true },
+      { "name": "layer.hard_mode", "version": ">=1.0.0", "optional": true }
+    ]
+  },
+  "root_scene": {
+    "path": "scenes/arena.scene.json",
+    "spawn_points": ["spawn_north", "spawn_south", "spawn_east", "spawn_west"],
+    "world_bounds": {
+      "min": [-100, -10, -100],
+      "max": [100, 50, 100]
+    }
+  },
+  "camera": {
+    "position": [0, 15, 30],
+    "target": [0, 0, 0],
+    "fov": 60.0,
+    "near_plane": 0.1,
+    "far_plane": 1000.0,
+    "active": true
+  },
+  "player_spawn": {
+    "prefab": "player_prefab",
+    "spawn_selection": "random",
+    "initial_stats": {
+      "health": 100,
+      "armor": 25
+    },
+    "initial_inventory": {
+      "weapon": {
+        "damage": 15,
+        "fire_rate": 2,
+        "ammo": 30,
+        "max_ammo": 30
+      }
+    }
+  },
+  "environment": {
+    "time_of_day": 14.0,
+    "skybox": "skyboxes/day_sky",
+    "ambient_color": [0.3, 0.35, 0.4],
+    "ambient_intensity": 0.5,
+    "fog": {
+      "enabled": false,
+      "color": [0.7, 0.75, 0.8],
+      "density": 0.01
+    }
+  },
+  "gameplay": {
+    "difficulty": "normal",
+    "match_length_seconds": 300,
+    "score_limit": 20,
+    "friendly_fire": false,
+    "respawn_delay_seconds": 3,
+    "ruleset_flags": {
+      "allow_friendly_fire": false,
+      "enable_powerups": true
+    }
+  },
+  "world_logic": {
+    "win_conditions": [
+      {
+        "type": "score_limit",
+        "config": { "target": 20 }
+      },
+      {
+        "type": "time_limit",
+        "config": { "seconds": 300 }
+      }
+    ],
+    "lose_conditions": [],
+    "round_flow": {
+      "warmup_duration": 10,
+      "round_duration": 300,
+      "intermission_duration": 5
+    }
+  },
+  "layers": [],
+  "widgets": ["widget.game_hud"]
+}

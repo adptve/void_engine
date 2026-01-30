@@ -1,0 +1,37 @@
+{
+  "package": {
+    "name": "gameplay.combat",
+    "type": "plugin",
+    "version": "1.0.0",
+    "display_name": "Combat System",
+    "description": "Combat mechanics and damage system"
+  },
+  "dependencies": {
+    "plugins": [
+      { "name": "core.gameplay", "version": ">=1.0.0" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Weapon",
+      "fields": {
+        "damage": { "type": "f32", "default": 10 },
+        "fire_rate": { "type": "f32", "default": 1 },
+        "range": { "type": "f32", "default": 50 },
+        "ammo": { "type": "i32", "default": 30 },
+        "max_ammo": { "type": "i32", "default": 30 }
+      }
+    },
+    {
+      "name": "DamageReceiver",
+      "fields": {
+        "armor": { "type": "f32", "default": 0 },
+        "damage_multiplier": { "type": "f32", "default": 1 }
+      }
+    },
+    {
+      "name": "Attacker",
+      "is_tag": true
+    }
+  ]
+}

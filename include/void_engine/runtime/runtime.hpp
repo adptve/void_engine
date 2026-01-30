@@ -319,6 +319,11 @@ private:
     void shutdown_infrastructure();
     void shutdown_kernel();
 
+    // Engine core registration (Phase 2)
+    void register_engine_core_components();
+    void register_engine_render_systems();
+    void init_render_context();
+
     RuntimeConfig m_config;
     RuntimeState m_state{RuntimeState::Uninitialized};
 

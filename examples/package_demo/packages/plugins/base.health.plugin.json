@@ -1,0 +1,50 @@
+{
+    "package": {
+        "name": "base.health",
+        "type": "plugin",
+        "version": "1.0.0",
+        "display_name": "Base Health System",
+        "description": "Core health and damage system with DLL-based IPlugin implementation"
+    },
+    "library": "../../../../build/plugins/Debug/base.health.dll",
+    "plugin": {
+        "components": [
+            {
+                "name": "Health",
+                "description": "Current and maximum health values with optional regeneration",
+                "schema": {
+                    "current": { "type": "float", "default": 100.0 },
+                    "max": { "type": "float", "default": 100.0 },
+                    "regen_rate": { "type": "float", "default": 0.0 },
+                    "regen_delay": { "type": "float", "default": 0.0 }
+                }
+            },
+            {
+                "name": "DamageReceiver",
+                "description": "Entity can receive damage with optional armor and resistances",
+                "schema": {
+                    "armor": { "type": "float", "default": 0.0 },
+                    "damage_multiplier": { "type": "float", "default": 1.0 }
+                }
+            },
+            {
+                "name": "Dead",
+                "description": "Tag component marking entity as dead",
+                "schema": {}
+            }
+        ],
+        "systems": [
+            {
+                "name": "base.health.HealthRegenSystem",
+                "stage": "FixedUpdate",
+                "priority": 10
+            },
+            {
+                "name": "base.health.DeathSystem",
+                "stage": "PostFixed",
+                "priority": 0
+            }
+        ],
+        "supports_hot_reload": true
+    }
+}

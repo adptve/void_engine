@@ -1,0 +1,47 @@
+{
+  "package": {
+    "name": "widget.game_hud",
+    "type": "widget",
+    "version": "1.0.0",
+    "display_name": "Game HUD",
+    "description": "In-game heads-up display with debug info"
+  },
+  "dependencies": {
+    "plugins": [
+      { "name": "core.gameplay", "version": ">=1.0.0" }
+    ]
+  },
+  "widgets": [
+    {
+      "id": "debug_stats",
+      "type": "debug_hud",
+      "enabled_in_builds": ["debug", "development"],
+      "toggle_key": "F3",
+      "config": {
+        "show_fps": true,
+        "show_frame_time": true,
+        "show_entity_count": true,
+        "show_memory": false
+      }
+    },
+    {
+      "id": "game_console",
+      "type": "console",
+      "enabled_in_builds": ["debug", "development"],
+      "toggle_key": "Backquote",
+      "config": {
+        "max_history": 50
+      }
+    },
+    {
+      "id": "entity_inspector",
+      "type": "inspector",
+      "enabled_in_builds": ["debug"],
+      "toggle_key": "F4",
+      "config": {
+        "allow_edit": true,
+        "show_hidden": false
+      }
+    }
+  ]
+}

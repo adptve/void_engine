@@ -139,6 +139,13 @@ add_subdirectory(src/presenter)
 add_subdirectory(src/compositor)
 
 # ============================================================================
+# PHASE 4b: UI SYSTEM (ACTIVE)
+# Modules: ui
+# Dependencies: void_core, nlohmann_json, OpenGL
+# ============================================================================
+add_subdirectory(src/ui)
+
+# ============================================================================
 # PHASE 5: I/O (ACTIVE)
 # Modules: audio, input
 # Dependencies: miniaudio, dr_libs
@@ -205,8 +212,8 @@ add_subdirectory(src/shell)
 add_subdirectory(src/plugin_api)
 add_subdirectory(src/gamestate)
 
-# Example plugins (hot-swappable gameplay plugins)
-add_subdirectory(plugins/example_ai)
+# Plugins (hot-swappable gameplay plugins)
+add_subdirectory(plugins)
 
 # ============================================================================
 # PHASE 10: WIDGET SYSTEM (ACTIVE)
@@ -347,6 +354,13 @@ if(VOID_BUILD_TESTS)
     enable_testing()
     include(Testing)
     add_subdirectory(tests)
+endif()
+
+# ============================================================================
+# EXAMPLES
+# ============================================================================
+if(VOID_BUILD_EXAMPLES)
+    add_subdirectory(examples/package_demo)
 endif()
 
 # ============================================================================

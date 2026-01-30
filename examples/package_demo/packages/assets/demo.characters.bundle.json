@@ -1,0 +1,176 @@
+{
+  "package": {
+    "name": "demo.characters",
+    "type": "asset",
+    "version": "1.0.0",
+    "display_name": "Demo Characters",
+    "description": "Character models and prefabs for the demo"
+  },
+  "meshes": [
+    { "id": "player_mesh", "path": "models/player.gltf" },
+    { "id": "enemy_mesh", "path": "models/enemy.gltf" }
+  ],
+  "textures": [
+    { "id": "player_diffuse", "path": "textures/player_diffuse.png", "format": "rgba8" },
+    { "id": "enemy_diffuse", "path": "textures/enemy_diffuse.png", "format": "rgba8" }
+  ],
+  "materials": [
+    {
+      "id": "player_material",
+      "shader": "shaders/pbr_standard",
+      "textures": { "albedo": "player_diffuse" },
+      "parameters": { "metallic": 0.1, "roughness": 0.7 }
+    },
+    {
+      "id": "enemy_material",
+      "shader": "shaders/pbr_standard",
+      "textures": { "albedo": "enemy_diffuse" },
+      "parameters": { "metallic": 0.3, "roughness": 0.5 }
+    }
+  ],
+  "prefabs": [
+    {
+      "id": "player_prefab",
+      "components": {
+        "Transform": {
+          "position": [0, 0, 0],
+          "rotation": [0, 0, 0, 1],
+          "scale": [1, 1, 1]
+        },
+        "Mesh": {
+          "builtin": "capsule"
+        },
+        "Material": {
+          "albedo": [0.2, 0.6, 1.0, 1.0],
+          "metallic": 0.1,
+          "roughness": 0.7
+        },
+        "Renderable": {
+          "visible": true,
+          "cast_shadows": true,
+          "receive_shadows": true
+        },
+        "Health": {
+          "current": 100,
+          "max": 100,
+          "regen_rate": 5,
+          "regen_delay": 3.0
+        },
+        "DamageReceiver": {
+          "armor": 10,
+          "damage_multiplier": 1.0
+        },
+        "Velocity": {},
+        "Player": {}
+      },
+      "tags": ["player", "controllable"]
+    },
+    {
+      "id": "enemy_prefab",
+      "components": {
+        "Transform": {
+          "position": [0, 0, 0],
+          "rotation": [0, 0, 0, 1],
+          "scale": [0.8, 0.8, 0.8]
+        },
+        "Mesh": {
+          "builtin": "sphere"
+        },
+        "Material": {
+          "albedo": [1.0, 0.2, 0.2, 1.0],
+          "metallic": 0.3,
+          "roughness": 0.5
+        },
+        "Renderable": {
+          "visible": true,
+          "cast_shadows": true,
+          "receive_shadows": true
+        },
+        "Health": {
+          "current": 50,
+          "max": 50,
+          "regen_rate": 0
+        },
+        "DamageReceiver": {
+          "armor": 0,
+          "damage_multiplier": 1.5
+        },
+        "Velocity": {},
+        "Enemy": {}
+      },
+      "tags": ["enemy", "ai"]
+    },
+    {
+      "id": "floor_tile",
+      "components": {
+        "Transform": {
+          "position": [0, 0, 0],
+          "rotation": [0, 0, 0, 1],
+          "scale": [1, 1, 1]
+        },
+        "Mesh": {
+          "builtin": "cube"
+        },
+        "Material": {
+          "albedo": [0.4, 0.4, 0.45, 1.0],
+          "metallic": 0.0,
+          "roughness": 0.9
+        },
+        "Renderable": {
+          "visible": true,
+          "cast_shadows": false,
+          "receive_shadows": true
+        }
+      },
+      "tags": ["static", "environment"]
+    },
+    {
+      "id": "wall_segment",
+      "components": {
+        "Transform": {
+          "position": [0, 0, 0],
+          "rotation": [0, 0, 0, 1],
+          "scale": [100, 3, 0.5]
+        },
+        "Mesh": {
+          "builtin": "cube"
+        },
+        "Material": {
+          "albedo": [0.5, 0.5, 0.55, 1.0],
+          "metallic": 0.0,
+          "roughness": 0.85
+        },
+        "Renderable": {
+          "visible": true,
+          "cast_shadows": true,
+          "receive_shadows": true
+        }
+      },
+      "tags": ["static", "environment", "wall"]
+    },
+    {
+      "id": "cover_crate",
+      "components": {
+        "Transform": {
+          "position": [0, 0, 0],
+          "rotation": [0, 0, 0, 1],
+          "scale": [2, 2, 2]
+        },
+        "Mesh": {
+          "builtin": "cube"
+        },
+        "Material": {
+          "albedo": [0.6, 0.45, 0.3, 1.0],
+          "metallic": 0.0,
+          "roughness": 0.95
+        },
+        "Renderable": {
+          "visible": true,
+          "cast_shadows": true,
+          "receive_shadows": true
+        }
+      },
+      "tags": ["static", "environment", "cover"]
+    }
+  ]
+}

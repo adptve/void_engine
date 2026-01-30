@@ -105,14 +105,25 @@ void_core::Result<AssetBundleLoadResult> AssetBundleLoader::load_with_result(
     }
 
     // Find manifest file
-    std::filesystem::path manifest_path = package.path / "manifest.json";
-    if (!std::filesystem::exists(manifest_path)) {
-        // Try alternate names
-        manifest_path = package.path / "bundle.json";
+    // package.path can be either:
+    // 1. A .bundle.json file directly (e.g., demo.characters.bundle.json)
+    // 2. A directory containing manifest.json or bundle.json
+    std::filesystem::path manifest_path;
+    if (std::filesystem::is_regular_file(package.path)) {
+        // Direct file path
+        manifest_path = package.path;
+    } else if (std::filesystem::is_directory(package.path)) {
+        // Directory - look for manifest inside
+        manifest_path = package.path / "manifest.json";
         if (!std::filesystem::exists(manifest_path)) {
-            return void_core::Err<AssetBundleLoadResult>("No manifest found in bundle: " + bundle_name +
-                                   " (tried manifest.json, bundle.json)");
+            manifest_path = package.path / "bundle.json";
+            if (!std::filesystem::exists(manifest_path)) {
+                return void_core::Err<AssetBundleLoadResult>("No manifest found in bundle: " + bundle_name +
+                                       " (tried manifest.json, bundle.json)");
+            }
         }
+    } else {
+        return void_core::Err<AssetBundleLoadResult>("Bundle path does not exist: " + package.path.string());
     }
 
     // Load the asset bundle manifest

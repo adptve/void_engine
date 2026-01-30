@@ -1,0 +1,35 @@
+{
+    "package": {
+        "name": "base.health",
+        "type": "plugin",
+        "version": "1.0.0",
+        "display_name": "Base Health System",
+        "description": "Core health and damage system with DLL-based IPlugin implementation"
+    },
+    "library": "base.health.dll",
+    "components": [
+        {
+            "name": "Health",
+            "description": "Current and maximum health values with optional regeneration",
+            "fields": {
+                "current": { "type": "f32", "default": 100.0 },
+                "max": { "type": "f32", "default": 100.0 },
+                "regen_rate": { "type": "f32", "default": 0.0 },
+                "regen_delay": { "type": "f32", "default": 0.0 }
+            }
+        },
+        {
+            "name": "DamageReceiver",
+            "description": "Entity can receive damage with optional armor and resistances",
+            "fields": {
+                "armor": { "type": "f32", "default": 0.0 },
+                "damage_multiplier": { "type": "f32", "default": 1.0 }
+            }
+        },
+        {
+            "name": "Dead",
+            "description": "Tag component marking entity as dead",
+            "is_tag": true
+        }
+    ]
+}

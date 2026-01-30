@@ -34,6 +34,7 @@
 #include <void_engine/core/error.hpp>
 #include <void_engine/ecs/fwd.hpp>
 #include <void_engine/ecs/entity.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <string>
 #include <vector>
@@ -550,6 +551,25 @@ private:
     [[nodiscard]] void_core::Result<void> apply_initial_stats(
         void_ecs::Entity player,
         const nlohmann::json& stats);
+
+    // =========================================================================
+    // Scene Spawning Helpers
+    // =========================================================================
+
+    /// Spawn camera entity from scene data
+    [[nodiscard]] void_core::Result<void_ecs::Entity> spawn_camera_from_scene(
+        const nlohmann::json& camera_data,
+        void_ecs::World& world);
+
+    /// Spawn light entity from scene data
+    [[nodiscard]] void_core::Result<void_ecs::Entity> spawn_light_from_scene(
+        const nlohmann::json& light_data,
+        void_ecs::World& world);
+
+    /// Spawn entity from scene data (prefab or direct components)
+    [[nodiscard]] void_core::Result<void_ecs::Entity> spawn_entity_from_scene(
+        const nlohmann::json& entity_data,
+        void_ecs::World& world);
 
     // =========================================================================
     // Data Members

@@ -601,23 +601,99 @@ std::string ComponentSchemaRegistry::format_state() const {
 }
 
 ComponentFactory ComponentSchemaRegistry::create_default_factory(const ComponentSchema& schema) {
-    // For tag components
+    // For tag components - no data needed
     if (schema.is_tag || schema.size == 0) {
         return [](const nlohmann::json&) -> void_core::Result<std::vector<std::byte>> {
             return void_core::Ok(std::vector<std::byte>{});
         };
     }
 
-    // For fixed-size components, create a simple binary factory
-    std::size_t comp_size = schema.size;
-    std::vector<FieldSchema> fields = schema.fields;
+    // Pre-calculate field layout (offsets) for the lambda capture.
+    // This supports hot-reload: the layout is computed once at registration time
+    // and captured by value, so even if the schema registry is modified later,
+    // existing factories remain valid.
+    struct FieldLayout {
+        std::string name;
+        FieldType type;
+        std::size_t offset;
+        std::size_t size;
+        std::optional<nlohmann::json> default_value;
+    };
 
-    return [comp_size, fields]([[maybe_unused]] const nlohmann::json& data) -> void_core::Result<std::vector<std::byte>> {
+    std::vector<FieldLayout> field_layouts;
+    field_layouts.reserve(schema.fields.size());
+
+    std::size_t current_offset = 0;
+    for (const auto& field : schema.fields) {
+        std::size_t field_size = field_type_size(field.type);
+        std::size_t field_align = field_size > 0 ? field_size : sizeof(void*);
+
+        // Align offset to field's natural alignment
+        current_offset = (current_offset + field_align - 1) & ~(field_align - 1);
+
+        FieldLayout layout;
+        layout.name = field.name;
+        layout.type = field.type;
+        layout.offset = current_offset;
+        layout.size = field_size;
+        layout.default_value = field.default_value;
+
+        field_layouts.push_back(std::move(layout));
+
+        current_offset += field_size;
+    }
+
+    const std::size_t comp_size = schema.size;
+    const std::string comp_name = schema.name;
+
+    // Create the factory lambda that captures all layout information by value
+    return [comp_size, comp_name, field_layouts](const nlohmann::json& data)
+        -> void_core::Result<std::vector<std::byte>> {
+
+        // Allocate zero-initialized buffer for the component
         std::vector<std::byte> bytes(comp_size, std::byte{0});
 
-        // This is a simplified implementation - in production you'd want proper field layout
-        // For now, just validate and return zeroed bytes
-        // Real implementation would parse each field and place at correct offset
+        // Parse each field and place at its computed offset
+        for (const auto& layout : field_layouts) {
+            // Determine the value to use: provided data, default, or skip
+            const nlohmann::json* value_ptr = nullptr;
+            nlohmann::json default_holder;
+
+            if (data.is_object() && data.contains(layout.name)) {
+                value_ptr = &data[layout.name];
+            } else if (layout.default_value.has_value()) {
+                // Use default value if field not in data
+                default_holder = *layout.default_value;
+                value_ptr = &default_holder;
+            } else {
+                // No value provided and no default - field remains zero-initialized
+                // This is valid for optional fields
+                continue;
+            }
+
+            // Parse the JSON value into bytes according to field type
+            auto parse_result = parse_field_value(*value_ptr, layout.type);
+            if (!parse_result) {
+                return void_core::Err<std::vector<std::byte>>(
+                    "Component '" + comp_name + "', field '" + layout.name + "': " +
+                    parse_result.error().message());
+            }
+
+            const auto& field_bytes = *parse_result;
+
+            // Validate size matches expected
+            if (field_bytes.size() != layout.size) {
+                return void_core::Err<std::vector<std::byte>>(
+                    "Component '" + comp_name + "', field '" + layout.name +
+                    "': parsed size mismatch (expected " + std::to_string(layout.size) +
+                    ", got " + std::to_string(field_bytes.size()) + ")");
+            }
+
+            // Copy field bytes to the correct offset in the component buffer
+            if (layout.offset + layout.size <= bytes.size()) {
+                std::memcpy(bytes.data() + layout.offset, field_bytes.data(), field_bytes.size());
+            }
+        }
 
         return void_core::Ok(std::move(bytes));
     };
@@ -627,17 +703,46 @@ ComponentApplier ComponentSchemaRegistry::create_default_applier(
     const ComponentSchema& schema,
     void_ecs::ComponentId comp_id)
 {
-    std::size_t comp_size = schema.size;
+    // Create a factory for this schema - captures all field layout by value
+    // This is essential for hot-reload support: the applier remains valid even
+    // if the original schema is modified or the registry is reloaded.
+    ComponentFactory factory = create_default_factory(schema);
+    const std::string comp_name = schema.name;
+    const std::size_t comp_size = schema.size;
+    const bool is_tag = schema.is_tag;
 
-    return [comp_id, comp_size](void_ecs::World& world,
-                                 void_ecs::Entity entity,
-                                 [[maybe_unused]] const nlohmann::json& data) -> void_core::Result<void> {
-        // Create component bytes
-        std::vector<std::byte> bytes(comp_size, std::byte{0});
+    return [comp_id, comp_name, comp_size, is_tag, factory = std::move(factory)](
+               void_ecs::World& world,
+               void_ecs::Entity entity,
+               const nlohmann::json& data) -> void_core::Result<void> {
 
-        // Add to entity using raw API
+        // For tag components, just add the component marker with no data
+        if (is_tag || comp_size == 0) {
+            if (!world.add_component_raw(entity, comp_id, nullptr, 0)) {
+                return void_core::Err("Failed to add tag component '" + comp_name + "' to entity");
+            }
+            return void_core::Ok();
+        }
+
+        // Use the factory to create properly-initialized component bytes from JSON
+        auto factory_result = factory(data);
+        if (!factory_result) {
+            return void_core::Err("Failed to create '" + comp_name + "': " +
+                                  factory_result.error().message());
+        }
+
+        const auto& bytes = *factory_result;
+
+        // Validate factory produced expected size
+        if (bytes.size() != comp_size) {
+            return void_core::Err("Component '" + comp_name + "' factory produced " +
+                                  std::to_string(bytes.size()) + " bytes, expected " +
+                                  std::to_string(comp_size));
+        }
+
+        // Add the component to the entity using the raw ECS API
         if (!world.add_component_raw(entity, comp_id, bytes.data(), bytes.size())) {
-            return void_core::Err("Failed to add component to entity");
+            return void_core::Err("Failed to add component '" + comp_name + "' to entity (ECS rejected)");
         }
 
         return void_core::Ok();
@@ -730,8 +835,34 @@ void_core::Result<std::vector<std::byte>> parse_field_value(
             }
             break;
         }
+        case FieldType::Entity: {
+            // Entity references in JSON can be:
+            // - A numeric ID (direct entity value, for serialized state)
+            // - null (no entity referenced)
+            // - 0 (explicit null entity)
+            // For hot-reload and dynamic loading, we accept numeric values.
+            // String-based entity references (e.g., "player.main") require
+            // separate resolution through the entity registry.
+            std::uint64_t entity_id = 0;
+            if (value.is_number_unsigned()) {
+                entity_id = value.get<std::uint64_t>();
+            } else if (value.is_number_integer()) {
+                // Allow signed integers (will be 0 or positive in valid cases)
+                auto signed_val = value.get<std::int64_t>();
+                entity_id = signed_val >= 0 ? static_cast<std::uint64_t>(signed_val) : 0;
+            } else if (!value.is_null()) {
+                // For string references, store 0 (null entity) and let the caller
+                // resolve the reference separately. This supports deferred binding
+                // for entities that don't exist yet during prefab instantiation.
+                entity_id = 0;
+            }
+            push_value(entity_id);
+            break;
+        }
         default:
-            return void_core::Err<std::vector<std::byte>>("Unsupported field type for binary conversion");
+            return void_core::Err<std::vector<std::byte>>(
+                "Unsupported field type for binary conversion: " +
+                std::string(field_type_to_string(type)));
     }
 
     return void_core::Ok(std::move(result));
@@ -777,6 +908,15 @@ nlohmann::json serialize_field_value(
                 arr.push_back(f[i]);
             }
             return arr;
+        }
+        case FieldType::Entity: {
+            // Serialize entity as its numeric ID for state preservation during hot-reload.
+            // A value of 0 represents null/no entity.
+            std::uint64_t entity_id = *reinterpret_cast<const std::uint64_t*>(data);
+            if (entity_id == 0) {
+                return nullptr;  // null entity
+            }
+            return entity_id;
         }
         default:
             return nullptr;

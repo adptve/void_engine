@@ -77,7 +77,8 @@ void_core::Result<void> PackageRegistry::register_manifest(
         m_file_times[manifest_result->name] = mod_time;
     }
 
-    m_resolver.add_available(std::move(*manifest_result), manifest_path.parent_path());
+    // Pass the manifest file path directly - loaders handle both file and directory paths
+    m_resolver.add_available(std::move(*manifest_result), manifest_path);
 
     return void_core::Ok();
 }

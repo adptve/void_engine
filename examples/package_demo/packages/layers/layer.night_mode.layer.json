@@ -1,0 +1,57 @@
+{
+  "package": {
+    "name": "layer.night_mode",
+    "type": "layer",
+    "version": "1.0.0",
+    "display_name": "Night Mode",
+    "description": "Applies night-time lighting and atmosphere"
+  },
+  "dependencies": {
+    "plugins": [
+      { "name": "core.gameplay", "version": ">=1.0.0" }
+    ]
+  },
+  "priority": 100,
+  "additive_scenes": [],
+  "spawners": [
+    {
+      "id": "night_enemy_spawner",
+      "volume": {
+        "type": "sphere",
+        "center": [0, 0, 0],
+        "radius": 40
+      },
+      "prefab": "enemy_prefab",
+      "spawn_rate": 0.3,
+      "max_active": 8
+    }
+  ],
+  "lighting": {
+    "sun": {
+      "direction": [-0.3, -0.9, -0.2],
+      "color": [0.1, 0.1, 0.2],
+      "intensity": 0.2
+    },
+    "ambient": {
+      "color": [0.02, 0.02, 0.05],
+      "intensity": 0.3
+    }
+  },
+  "modifiers": [
+    {
+      "path": "gameplay.enemy_damage_multiplier",
+      "value": 1.5
+    },
+    {
+      "path": "gameplay.player_visibility_range",
+      "value": 30
+    }
+  ],
+  "post_process": {
+    "vignette": 0.4,
+    "color_grading": {
+      "shadows": [0.1, 0.1, 0.2],
+      "highlights": [0.8, 0.8, 0.9]
+    }
+  }
+}

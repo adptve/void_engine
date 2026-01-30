@@ -16,6 +16,14 @@
 
 // Package system
 #include <void_engine/package/package.hpp>
+#include <void_engine/package/asset_bundle_loader.hpp>
+
+// Render components and systems for ECS integration
+#include <void_engine/render/components.hpp>
+#include <void_engine/render/render_systems.hpp>
+
+// Plugin state for ECS (Phase 4)
+#include <void_engine/plugin_api/state.hpp>
 
 #include <spdlog/spdlog.h>
 #include <nlohmann/json.hpp>
@@ -68,6 +76,7 @@ struct Runtime::PackageContext {
     std::unique_ptr<void_package::DefinitionRegistry> definition_registry;
     std::unique_ptr<void_package::WidgetManager> widget_manager;
     std::unique_ptr<void_package::LayerApplier> layer_applier;
+    std::unique_ptr<void_ecs::World> ecs_world;  // ECS world for package system
     bool initialized{false};
 };
 
@@ -157,13 +166,19 @@ void_core::Result<void> Runtime::initialize() {
     }
 
     // Start the kernel
+    spdlog::info("Starting kernel...");
+    spdlog::default_logger()->flush();
     if (auto result = m_kernel->start(); !result) {
+        spdlog::error("Kernel start failed: {}", result.error().message());
+        spdlog::default_logger()->flush();
         m_state = RuntimeState::Uninitialized;
         return void_core::Error("Failed to start kernel: " + result.error().message());
     }
+    spdlog::info("Kernel started successfully");
 
     m_state = RuntimeState::Ready;
     spdlog::info("Runtime initialization complete");
+    spdlog::default_logger()->flush();
 
     return void_core::Ok();
 }
@@ -178,12 +193,25 @@ int Runtime::run() {
     m_state = RuntimeState::Running;
     spdlog::info("Runtime entering main loop");
 
+    // Debug: Check initial state
+    spdlog::info("  exit_requested: {}, platform valid: {}, should_quit: {}",
+                 m_exit_requested,
+                 m_platform->platform != nullptr,
+                 m_platform->platform ? m_platform->platform->should_quit() : false);
+    spdlog::default_logger()->flush();
+
     auto last_time = std::chrono::high_resolution_clock::now();
     m_accumulator = 0.0f;
 
     auto should_continue = [this]() {
-        if (m_exit_requested) return false;
-        if (m_platform->platform && m_platform->platform->should_quit()) return false;
+        if (m_exit_requested) {
+            spdlog::debug("Exiting: exit_requested");
+            return false;
+        }
+        if (m_platform->platform && m_platform->platform->should_quit()) {
+            spdlog::debug("Exiting: platform should_quit");
+            return false;
+        }
         return true;
     };
 
@@ -224,6 +252,7 @@ int Runtime::run() {
     }
 
     spdlog::info("Runtime exiting main loop (frame count: {})", m_frame_count);
+    spdlog::default_logger()->flush();
     return m_exit_code;
 }
 
@@ -437,15 +466,44 @@ void_core::Result<void> Runtime::init_packages() {
     m_packages->widget_manager = std::make_unique<void_package::WidgetManager>();
     m_packages->layer_applier = std::make_unique<void_package::LayerApplier>();
 
+    // Create the ECS world for the package system
+    m_packages->ecs_world = std::make_unique<void_ecs::World>(10000);  // Pre-allocate for 10k entities
+    spdlog::info("  [packages] Created ECS world");
+
+    // Connect ComponentSchemaRegistry to the ECS component registry.
+    // This allows plugins to register component schemas which allocate ECS component IDs.
+    // MUST happen before any packages are loaded since plugins register schemas during load.
+    m_packages->schema_registry->set_ecs_registry(&m_packages->ecs_world->component_registry_mut());
+    spdlog::info("  [packages] Shared schema registry address: {}",
+                 static_cast<void*>(m_packages->schema_registry.get()));
+
     // Configure LoadContext with ECS world and event bus
-    // Note: ECS world will be set when a world is loaded
+    m_packages->load_context->set_ecs_world(m_packages->ecs_world.get());
     m_packages->load_context->set_event_bus(m_event_bus.get());
 
     // Register package loaders into LoadContext
-    m_packages->load_context->register_loader(void_package::create_plugin_package_loader());
+    // The plugin loader uses the shared schema registry so component schemas
+    // are available to the prefab registry for instantiation.
+    // The kernel is passed so IPlugin-based plugins can register systems.
+    spdlog::info("  [packages] Creating plugin loader with shared schema registry and kernel");
+    m_packages->load_context->register_loader(
+        void_package::create_plugin_package_loader(m_packages->schema_registry.get(), m_kernel.get()));
     m_packages->load_context->register_loader(void_package::create_widget_package_loader());
-    m_packages->load_context->register_loader(void_package::create_layer_package_loader());
+
+    // The layer loader uses the shared layer_applier so layers staged during
+    // package loading are visible to WorldComposer for application.
+    spdlog::info("  [packages] Creating layer loader with shared layer applier");
+    m_packages->load_context->register_loader(
+        void_package::create_layer_package_loader(m_packages->layer_applier.get()));
+
     m_packages->load_context->register_loader(void_package::create_world_package_loader());
+
+    // Create and register asset bundle loader with registries
+    auto asset_loader = std::make_unique<void_package::AssetBundleLoader>(
+        m_packages->prefab_registry.get(),
+        m_packages->definition_registry.get(),
+        m_packages->schema_registry.get());
+    m_packages->load_context->register_loader(std::move(asset_loader));
 
     // Configure WorldComposer with all components
     m_packages->composer->set_package_registry(m_packages->registry.get());
@@ -456,6 +514,14 @@ void_core::Result<void> Runtime::init_packages() {
     m_packages->composer->set_widget_manager(m_packages->widget_manager.get());
     m_packages->composer->set_event_bus(m_event_bus.get());
     m_packages->composer->set_layer_applier(m_packages->layer_applier.get());
+
+    // Connect PrefabRegistry to ComponentSchemaRegistry for JSON->component conversion
+    // This enables prefabs to instantiate components using schema-based factories.
+    // Critical for hot-loaded packages: when a new plugin registers component schemas,
+    // the prefab registry can immediately use them to instantiate entities.
+    m_packages->prefab_registry->set_schema_registry(m_packages->schema_registry.get());
+    spdlog::info("  [packages] PrefabRegistry configured with schema registry: {}",
+                 static_cast<void*>(m_packages->schema_registry.get()));
 
     // Scan for packages if content path is specified
     if (!m_config.content_path.empty()) {
@@ -483,6 +549,32 @@ void_core::Result<void> Runtime::init_packages() {
             }
         }
     }
+
+    // Scan additional plugin paths (for built plugins, engine plugins, etc.)
+    for (const auto& plugin_path : m_config.plugin_paths) {
+        if (std::filesystem::exists(plugin_path)) {
+            auto scan_result = m_packages->registry->scan_directory(plugin_path, true);
+            if (scan_result) {
+                spdlog::info("  [packages] Discovered {} packages in plugin path: {}",
+                             *scan_result, plugin_path.string());
+            } else {
+                spdlog::warn("  [packages] Failed to scan plugin path {}: {}",
+                             plugin_path.string(), scan_result.error().message());
+            }
+        } else {
+            spdlog::debug("  [packages] Plugin path does not exist: {}", plugin_path.string());
+        }
+    }
+
+    // Insert PluginRegistry as ECS resource BEFORE any plugins load
+    // This allows plugins to discover each other and track state
+    m_packages->ecs_world->insert_resource(void_plugin_api::PluginRegistry{});
+    spdlog::info("  [packages] PluginRegistry resource inserted");
+
+    // Register engine core components BEFORE any packages load
+    // This ensures Transform, Mesh, Material, Light, Camera, Renderable, Hierarchy
+    // are available for prefab instantiation
+    register_engine_core_components();
 
     m_packages->initialized = true;
     spdlog::info("  [packages] Initialized ({} packages available)",
@@ -614,15 +706,21 @@ void_core::Result<void> Runtime::init_render() {
         }
     }
 
-    // Register render update into RenderPrepare stage
+    // Initialize RenderContext as ECS resource (must happen before render systems)
+    init_render_context();
+
+    // Register engine render systems with kernel
+    register_engine_render_systems();
+
+    // Register legacy scene renderer update into RenderPrepare stage
     m_kernel->register_system(void_kernel::Stage::RenderPrepare, "scene_update",
         [this](float dt) {
             if (m_render->renderer) {
                 m_render->renderer->update(dt);
             }
-        }, 0);
+        }, 200);  // After engine render prepare systems (100)
 
-    // Register scene rendering into Render stage (before platform_present)
+    // Register legacy scene rendering into Render stage (before platform_present)
     m_kernel->register_system(void_kernel::Stage::Render, "scene_render",
         [this](float) {
             if (m_render->renderer) {
@@ -911,6 +1009,537 @@ void Runtime::shutdown_kernel() {
         m_kernel.reset();
     }
     spdlog::info("  [kernel] Shutdown complete");
+}
+
+// =============================================================================
+// Engine Core Component Registration (Phase 2)
+// =============================================================================
+
+namespace {
+
+/// @brief Register TransformComponent with JSON factory
+void register_transform_component(void_package::ComponentSchemaRegistry& registry,
+                                   void_ecs::World& world) {
+    void_package::ComponentSchema schema;
+    schema.name = "Transform";
+    schema.source_plugin = "engine.core";
+    schema.size = sizeof(void_render::TransformComponent);
+    schema.alignment = alignof(void_render::TransformComponent);
+
+    // Define fields for documentation/validation
+    schema.fields = {
+        {.name = "position", .type = void_package::FieldType::Vec3, .default_value = nlohmann::json::array({0.0f, 0.0f, 0.0f})},
+        {.name = "rotation", .type = void_package::FieldType::Quat, .default_value = nlohmann::json::array({0.0f, 0.0f, 0.0f, 1.0f})},
+        {.name = "scale", .type = void_package::FieldType::Vec3, .default_value = nlohmann::json::array({1.0f, 1.0f, 1.0f})}
+    };
+
+    void_package::ComponentApplier applier = [](void_ecs::World& w, void_ecs::Entity e,
+                                                 const nlohmann::json& data) -> void_core::Result<void> {
+        void_render::TransformComponent transform;
+
+        if (data.contains("position") && data["position"].is_array() && data["position"].size() >= 3) {
+            transform.position = {
+                data["position"][0].get<float>(),
+                data["position"][1].get<float>(),
+                data["position"][2].get<float>()
+            };
+        }
+
+        if (data.contains("rotation") && data["rotation"].is_array() && data["rotation"].size() >= 4) {
+            transform.rotation = {
+                data["rotation"][0].get<float>(),
+                data["rotation"][1].get<float>(),
+                data["rotation"][2].get<float>(),
+                data["rotation"][3].get<float>()
+            };
+        }
+
+        if (data.contains("scale")) {
+            if (data["scale"].is_array() && data["scale"].size() >= 3) {
+                transform.scale = {
+                    data["scale"][0].get<float>(),
+                    data["scale"][1].get<float>(),
+                    data["scale"][2].get<float>()
+                };
+            } else if (data["scale"].is_number()) {
+                float s = data["scale"].get<float>();
+                transform.scale = {s, s, s};
+            }
+        }
+
+        transform.dirty = true;
+        w.add_component(e, transform);
+        return void_core::Ok();
+    };
+
+    // Register component type with ECS first
+    world.register_component<void_render::TransformComponent>();
+
+    auto result = registry.register_schema_with_factory(std::move(schema), nullptr, std::move(applier));
+    if (!result) {
+        spdlog::warn("Failed to register Transform schema: {}", result.error().message());
+    }
+}
+
+/// @brief Register MeshComponent with JSON factory
+void register_mesh_component(void_package::ComponentSchemaRegistry& registry,
+                              void_ecs::World& world) {
+    void_package::ComponentSchema schema;
+    schema.name = "Mesh";
+    schema.source_plugin = "engine.core";
+    schema.size = sizeof(void_render::MeshComponent);
+    schema.alignment = alignof(void_render::MeshComponent);
+
+    schema.fields = {
+        {.name = "builtin", .type = void_package::FieldType::String, .default_value = ""},
+        {.name = "asset", .type = void_package::FieldType::String, .default_value = ""},
+        {.name = "submesh_index", .type = void_package::FieldType::UInt32, .default_value = 0u}
+    };
+
+    void_package::ComponentApplier applier = [](void_ecs::World& w, void_ecs::Entity e,
+                                                 const nlohmann::json& data) -> void_core::Result<void> {
+        void_render::MeshComponent mesh;
+
+        if (data.contains("builtin") && data["builtin"].is_string()) {
+            mesh.builtin_mesh = data["builtin"].get<std::string>();
+        }
+
+        if (data.contains("submesh_index") && data["submesh_index"].is_number_unsigned()) {
+            mesh.submesh_index = data["submesh_index"].get<std::uint32_t>();
+        }
+
+        w.add_component(e, mesh);
+        return void_core::Ok();
+    };
+
+    world.register_component<void_render::MeshComponent>();
+
+    auto result = registry.register_schema_with_factory(std::move(schema), nullptr, std::move(applier));
+    if (!result) {
+        spdlog::warn("Failed to register Mesh schema: {}", result.error().message());
+    }
+}
+
+/// @brief Register MaterialComponent with JSON factory
+void register_material_component(void_package::ComponentSchemaRegistry& registry,
+                                  void_ecs::World& world) {
+    void_package::ComponentSchema schema;
+    schema.name = "Material";
+    schema.source_plugin = "engine.core";
+    schema.size = sizeof(void_render::MaterialComponent);
+    schema.alignment = alignof(void_render::MaterialComponent);
+
+    schema.fields = {
+        {.name = "albedo", .type = void_package::FieldType::Vec4, .default_value = nlohmann::json::array({0.8f, 0.8f, 0.8f, 1.0f})},
+        {.name = "metallic", .type = void_package::FieldType::Float32, .default_value = 0.0f},
+        {.name = "roughness", .type = void_package::FieldType::Float32, .default_value = 0.5f},
+        {.name = "emissive", .type = void_package::FieldType::Vec3, .default_value = nlohmann::json::array({0.0f, 0.0f, 0.0f})},
+        {.name = "emissive_strength", .type = void_package::FieldType::Float32, .default_value = 0.0f},
+        {.name = "double_sided", .type = void_package::FieldType::Bool, .default_value = false},
+        {.name = "alpha_blend", .type = void_package::FieldType::Bool, .default_value = false}
+    };
+
+    void_package::ComponentApplier applier = [](void_ecs::World& w, void_ecs::Entity e,
+                                                 const nlohmann::json& data) -> void_core::Result<void> {
+        void_render::MaterialComponent mat;
+
+        if (data.contains("albedo") && data["albedo"].is_array() && data["albedo"].size() >= 3) {
+            mat.albedo[0] = data["albedo"][0].get<float>();
+            mat.albedo[1] = data["albedo"][1].get<float>();
+            mat.albedo[2] = data["albedo"][2].get<float>();
+            mat.albedo[3] = data["albedo"].size() >= 4 ? data["albedo"][3].get<float>() : 1.0f;
+        }
+
+        if (data.contains("metallic") && data["metallic"].is_number()) {
+            mat.metallic_value = data["metallic"].get<float>();
+        }
+
+        if (data.contains("roughness") && data["roughness"].is_number()) {
+            mat.roughness_value = data["roughness"].get<float>();
+        }
+
+        if (data.contains("ao") && data["ao"].is_number()) {
+            mat.ao_value = data["ao"].get<float>();
+        }
+
+        if (data.contains("emissive") && data["emissive"].is_array() && data["emissive"].size() >= 3) {
+            mat.emissive = {
+                data["emissive"][0].get<float>(),
+                data["emissive"][1].get<float>(),
+                data["emissive"][2].get<float>()
+            };
+        }
+
+        if (data.contains("emissive_strength") && data["emissive_strength"].is_number()) {
+            mat.emissive_strength = data["emissive_strength"].get<float>();
+        }
+
+        if (data.contains("double_sided") && data["double_sided"].is_boolean()) {
+            mat.double_sided = data["double_sided"].get<bool>();
+        }
+
+        if (data.contains("alpha_blend") && data["alpha_blend"].is_boolean()) {
+            mat.alpha_blend = data["alpha_blend"].get<bool>();
+        }
+
+        if (data.contains("alpha_cutoff") && data["alpha_cutoff"].is_number()) {
+            mat.alpha_cutoff = data["alpha_cutoff"].get<float>();
+        }
+
+        w.add_component(e, mat);
+        return void_core::Ok();
+    };
+
+    world.register_component<void_render::MaterialComponent>();
+
+    auto result = registry.register_schema_with_factory(std::move(schema), nullptr, std::move(applier));
+    if (!result) {
+        spdlog::warn("Failed to register Material schema: {}", result.error().message());
+    }
+}
+
+/// @brief Register LightComponent with JSON factory
+void register_light_component(void_package::ComponentSchemaRegistry& registry,
+                               void_ecs::World& world) {
+    void_package::ComponentSchema schema;
+    schema.name = "Light";
+    schema.source_plugin = "engine.core";
+    schema.size = sizeof(void_render::LightComponent);
+    schema.alignment = alignof(void_render::LightComponent);
+
+    schema.fields = {
+        {.name = "type", .type = void_package::FieldType::String, .default_value = "point"},
+        {.name = "color", .type = void_package::FieldType::Vec3, .default_value = nlohmann::json::array({1.0f, 1.0f, 1.0f})},
+        {.name = "intensity", .type = void_package::FieldType::Float32, .default_value = 1.0f},
+        {.name = "range", .type = void_package::FieldType::Float32, .default_value = 10.0f},
+        {.name = "inner_cone_angle", .type = void_package::FieldType::Float32, .default_value = 30.0f},
+        {.name = "outer_cone_angle", .type = void_package::FieldType::Float32, .default_value = 45.0f},
+        {.name = "cast_shadows", .type = void_package::FieldType::Bool, .default_value = false}
+    };
+
+    void_package::ComponentApplier applier = [](void_ecs::World& w, void_ecs::Entity e,
+                                                 const nlohmann::json& data) -> void_core::Result<void> {
+        void_render::LightComponent light;
+
+        if (data.contains("type") && data["type"].is_string()) {
+            std::string type_str = data["type"].get<std::string>();
+            if (type_str == "directional") {
+                light.type = void_render::LightComponent::Type::Directional;
+            } else if (type_str == "spot") {
+                light.type = void_render::LightComponent::Type::Spot;
+            } else {
+                light.type = void_render::LightComponent::Type::Point;
+            }
+        }
+
+        if (data.contains("color") && data["color"].is_array() && data["color"].size() >= 3) {
+            light.color = {
+                data["color"][0].get<float>(),
+                data["color"][1].get<float>(),
+                data["color"][2].get<float>()
+            };
+        }
+
+        if (data.contains("intensity") && data["intensity"].is_number()) {
+            light.intensity = data["intensity"].get<float>();
+        }
+
+        if (data.contains("range") && data["range"].is_number()) {
+            light.range = data["range"].get<float>();
+        }
+
+        if (data.contains("inner_cone_angle") && data["inner_cone_angle"].is_number()) {
+            light.inner_cone_angle = data["inner_cone_angle"].get<float>();
+        }
+
+        if (data.contains("outer_cone_angle") && data["outer_cone_angle"].is_number()) {
+            light.outer_cone_angle = data["outer_cone_angle"].get<float>();
+        }
+
+        if (data.contains("cast_shadows") && data["cast_shadows"].is_boolean()) {
+            light.cast_shadows = data["cast_shadows"].get<bool>();
+        }
+
+        if (data.contains("shadow_resolution") && data["shadow_resolution"].is_number_unsigned()) {
+            light.shadow_resolution = data["shadow_resolution"].get<std::uint32_t>();
+        }
+
+        w.add_component(e, light);
+        return void_core::Ok();
+    };
+
+    world.register_component<void_render::LightComponent>();
+
+    auto result = registry.register_schema_with_factory(std::move(schema), nullptr, std::move(applier));
+    if (!result) {
+        spdlog::warn("Failed to register Light schema: {}", result.error().message());
+    }
+}
+
+/// @brief Register CameraComponent with JSON factory
+void register_camera_component(void_package::ComponentSchemaRegistry& registry,
+                                void_ecs::World& world) {
+    void_package::ComponentSchema schema;
+    schema.name = "Camera";
+    schema.source_plugin = "engine.core";
+    schema.size = sizeof(void_render::CameraComponent);
+    schema.alignment = alignof(void_render::CameraComponent);
+
+    schema.fields = {
+        {.name = "projection", .type = void_package::FieldType::String, .default_value = "perspective"},
+        {.name = "fov", .type = void_package::FieldType::Float32, .default_value = 60.0f},
+        {.name = "near", .type = void_package::FieldType::Float32, .default_value = 0.1f},
+        {.name = "far", .type = void_package::FieldType::Float32, .default_value = 1000.0f},
+        {.name = "ortho_size", .type = void_package::FieldType::Float32, .default_value = 10.0f},
+        {.name = "active", .type = void_package::FieldType::Bool, .default_value = true},
+        {.name = "priority", .type = void_package::FieldType::Int32, .default_value = 0}
+    };
+
+    void_package::ComponentApplier applier = [](void_ecs::World& w, void_ecs::Entity e,
+                                                 const nlohmann::json& data) -> void_core::Result<void> {
+        void_render::CameraComponent camera;
+
+        if (data.contains("projection") && data["projection"].is_string()) {
+            std::string proj_str = data["projection"].get<std::string>();
+            if (proj_str == "orthographic") {
+                camera.projection = void_render::CameraComponent::Projection::Orthographic;
+            } else {
+                camera.projection = void_render::CameraComponent::Projection::Perspective;
+            }
+        }
+
+        if (data.contains("fov") && data["fov"].is_number()) {
+            camera.fov = data["fov"].get<float>();
+        }
+
+        if (data.contains("near") && data["near"].is_number()) {
+            camera.near_plane = data["near"].get<float>();
+        }
+
+        if (data.contains("far") && data["far"].is_number()) {
+            camera.far_plane = data["far"].get<float>();
+        }
+
+        if (data.contains("ortho_size") && data["ortho_size"].is_number()) {
+            camera.ortho_size = data["ortho_size"].get<float>();
+        }
+
+        if (data.contains("active") && data["active"].is_boolean()) {
+            camera.active = data["active"].get<bool>();
+        }
+
+        if (data.contains("priority") && data["priority"].is_number_integer()) {
+            camera.priority = data["priority"].get<std::int32_t>();
+        }
+
+        if (data.contains("render_target") && data["render_target"].is_number_unsigned()) {
+            camera.render_target = data["render_target"].get<std::uint32_t>();
+        }
+
+        w.add_component(e, camera);
+        return void_core::Ok();
+    };
+
+    world.register_component<void_render::CameraComponent>();
+
+    auto result = registry.register_schema_with_factory(std::move(schema), nullptr, std::move(applier));
+    if (!result) {
+        spdlog::warn("Failed to register Camera schema: {}", result.error().message());
+    }
+}
+
+/// @brief Register RenderableTag with JSON factory
+void register_renderable_component(void_package::ComponentSchemaRegistry& registry,
+                                    void_ecs::World& world) {
+    void_package::ComponentSchema schema;
+    schema.name = "Renderable";
+    schema.source_plugin = "engine.core";
+    schema.size = sizeof(void_render::RenderableTag);
+    schema.alignment = alignof(void_render::RenderableTag);
+
+    schema.fields = {
+        {.name = "visible", .type = void_package::FieldType::Bool, .default_value = true},
+        {.name = "layer_mask", .type = void_package::FieldType::UInt32, .default_value = 0xFFFFFFFF},
+        {.name = "render_order", .type = void_package::FieldType::Int32, .default_value = 0}
+    };
+
+    void_package::ComponentApplier applier = [](void_ecs::World& w, void_ecs::Entity e,
+                                                 const nlohmann::json& data) -> void_core::Result<void> {
+        void_render::RenderableTag tag;
+
+        if (data.contains("visible") && data["visible"].is_boolean()) {
+            tag.visible = data["visible"].get<bool>();
+        }
+
+        if (data.contains("layer_mask") && data["layer_mask"].is_number_unsigned()) {
+            tag.layer_mask = data["layer_mask"].get<std::uint32_t>();
+        }
+
+        if (data.contains("render_order") && data["render_order"].is_number_integer()) {
+            tag.render_order = data["render_order"].get<std::int32_t>();
+        }
+
+        w.add_component(e, tag);
+        return void_core::Ok();
+    };
+
+    world.register_component<void_render::RenderableTag>();
+
+    auto result = registry.register_schema_with_factory(std::move(schema), nullptr, std::move(applier));
+    if (!result) {
+        spdlog::warn("Failed to register Renderable schema: {}", result.error().message());
+    }
+}
+
+/// @brief Register HierarchyComponent with JSON factory
+void register_hierarchy_component(void_package::ComponentSchemaRegistry& registry,
+                                   void_ecs::World& world) {
+    void_package::ComponentSchema schema;
+    schema.name = "Hierarchy";
+    schema.source_plugin = "engine.core";
+    schema.size = sizeof(void_render::HierarchyComponent);
+    schema.alignment = alignof(void_render::HierarchyComponent);
+
+    schema.fields = {
+        {.name = "parent_id", .type = void_package::FieldType::UInt64, .default_value = 0u},
+        {.name = "parent_generation", .type = void_package::FieldType::UInt32, .default_value = 0u}
+    };
+
+    void_package::ComponentApplier applier = [](void_ecs::World& w, void_ecs::Entity e,
+                                                 const nlohmann::json& data) -> void_core::Result<void> {
+        void_render::HierarchyComponent hierarchy;
+
+        if (data.contains("parent_id") && data["parent_id"].is_number_unsigned()) {
+            hierarchy.parent_id = data["parent_id"].get<std::uint64_t>();
+        }
+
+        if (data.contains("parent_generation") && data["parent_generation"].is_number_unsigned()) {
+            hierarchy.parent_generation = data["parent_generation"].get<std::uint32_t>();
+        }
+
+        w.add_component(e, hierarchy);
+        return void_core::Ok();
+    };
+
+    world.register_component<void_render::HierarchyComponent>();
+
+    auto result = registry.register_schema_with_factory(std::move(schema), nullptr, std::move(applier));
+    if (!result) {
+        spdlog::warn("Failed to register Hierarchy schema: {}", result.error().message());
+    }
+}
+
+} // anonymous namespace
+
+/// @brief Register all engine core render components with the schema registry
+///
+/// This is called during init_packages() to ensure engine render components
+/// are available before any plugins load. Plugins can use these component
+/// names in prefabs and the WorldComposer will instantiate them correctly.
+void Runtime::register_engine_core_components() {
+    if (!m_packages || !m_packages->schema_registry || !m_packages->ecs_world) {
+        spdlog::error("Cannot register engine components: package system not initialized");
+        return;
+    }
+
+    auto& registry = *m_packages->schema_registry;
+    auto& world = *m_packages->ecs_world;
+
+    spdlog::info("  [packages] Registering engine core render components...");
+
+    register_transform_component(registry, world);
+    register_mesh_component(registry, world);
+    register_material_component(registry, world);
+    register_light_component(registry, world);
+    register_camera_component(registry, world);
+    register_renderable_component(registry, world);
+    register_hierarchy_component(registry, world);
+
+    spdlog::info("  [packages] Registered 7 engine core render components");
+}
+
+/// @brief Register engine render systems with the kernel
+///
+/// Called during init_render() to set up the render pipeline.
+/// Systems are registered with appropriate stages and priorities:
+/// - TransformSystem: Update stage, priority -100 (runs early)
+/// - CameraSystem: RenderPrepare stage, priority 0
+/// - LightSystem: RenderPrepare stage, priority 10
+/// - RenderPrepareSystem: RenderPrepare stage, priority 100
+/// - RenderSystem: Render stage, priority 0 (before platform_present)
+void Runtime::register_engine_render_systems() {
+    if (!m_kernel || !m_packages || !m_packages->ecs_world) {
+        spdlog::error("Cannot register render systems: kernel or ECS world not initialized");
+        return;
+    }
+
+    auto& world = *m_packages->ecs_world;
+
+    spdlog::info("  [render] Registering engine render systems...");
+
+    // TransformSystem - Updates world matrices from local transforms
+    m_kernel->register_system(void_kernel::Stage::Update, "engine.TransformSystem",
+        [&world](float dt) {
+            void_render::TransformSystem::run(world, dt);
+        }, -100);  // Early in Update stage
+
+    // CameraSystem - Updates RenderContext with camera data
+    m_kernel->register_system(void_kernel::Stage::RenderPrepare, "engine.CameraSystem",
+        [&world](float dt) {
+            void_render::CameraSystem::run(world, dt);
+        }, 0);
+
+    // LightSystem - Collects light data for rendering
+    m_kernel->register_system(void_kernel::Stage::RenderPrepare, "engine.LightSystem",
+        [&world](float dt) {
+            void_render::LightSystem::run(world, dt);
+        }, 10);
+
+    // RenderPrepareSystem - Builds render queue from entities
+    m_kernel->register_system(void_kernel::Stage::RenderPrepare, "engine.RenderPrepareSystem",
+        [&world](float dt) {
+            void_render::RenderPrepareSystem::run(world, dt);
+        }, 100);
+
+    // RenderSystem - Executes draw calls
+    m_kernel->register_system(void_kernel::Stage::Render, "engine.RenderSystem",
+        [&world](float dt) {
+            void_render::RenderSystem::run(world, dt);
+        }, -10);  // Before scene_render (0) and platform_present (1000)
+
+    spdlog::info("  [render] Registered 5 engine render systems");
+}
+
+/// @brief Add RenderContext as ECS resource
+///
+/// RenderContext must be available as an ECS resource before render systems run.
+/// This is called during init_render() after window dimensions are known.
+void Runtime::init_render_context() {
+    if (!m_packages || !m_packages->ecs_world) {
+        spdlog::error("Cannot init RenderContext: ECS world not available");
+        return;
+    }
+
+    // Get window dimensions
+    std::uint32_t width = m_config.window_width;
+    std::uint32_t height = m_config.window_height;
+
+    if (m_platform && m_platform->platform) {
+        m_platform->platform->get_window_size(width, height);
+    }
+
+    // Create and initialize RenderContext
+    void_render::RenderContext render_ctx;
+    auto init_result = render_ctx.initialize(width, height);
+    if (!init_result) {
+        spdlog::error("Failed to initialize RenderContext: {}", init_result.error().message());
+        return;
+    }
+
+    // Insert as ECS resource (move semantics)
+    m_packages->ecs_world->insert_resource(std::move(render_ctx));
+
+    spdlog::info("  [render] RenderContext added as ECS resource ({}x{})", width, height);
 }
 
 // =============================================================================

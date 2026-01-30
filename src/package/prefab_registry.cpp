@@ -5,6 +5,8 @@
 #include <void_engine/package/component_schema.hpp>
 #include <void_engine/ecs/world.hpp>
 
+#include <spdlog/spdlog.h>
+
 #include <sstream>
 
 namespace void_package {
@@ -146,16 +148,27 @@ void_core::Result<void_ecs::Entity> PrefabRegistry::instantiate(
     void_ecs::World& world,
     const std::optional<TransformData>& transform_override)
 {
+    spdlog::info("[PrefabRegistry] instantiate('{}') called, this={}", prefab_id, static_cast<void*>(this));
+    spdlog::default_logger()->flush();
+
+    spdlog::info("[PrefabRegistry] Creating InstantiationContext...");
+    spdlog::default_logger()->flush();
+
     InstantiationContext ctx;
     ctx.world = &world;
     ctx.schema_registry = m_schema_registry;
     ctx.transform_override = transform_override;
 
+    spdlog::info("[PrefabRegistry] Calling instantiate_with_context...");
+    spdlog::default_logger()->flush();
+
     auto result = instantiate_with_context(prefab_id, ctx);
     if (!result) {
+        spdlog::warn("[PrefabRegistry] instantiate_with_context failed: {}", result.error().message());
         return void_core::Err<void_ecs::Entity>(result.error());
     }
 
+    spdlog::info("[PrefabRegistry] instantiate succeeded, entity index: {}", result->entity.index);
     return void_core::Ok(result->entity);
 }
 
@@ -163,17 +176,27 @@ void_core::Result<InstantiationResult> PrefabRegistry::instantiate_with_context(
     const std::string& prefab_id,
     InstantiationContext& ctx)
 {
+    spdlog::info("[PrefabRegistry] instantiate_with_context('{}') called", prefab_id);
+    spdlog::default_logger()->flush();
+
     // Validate context
+    spdlog::info("[PrefabRegistry] Validating context...");
+    spdlog::default_logger()->flush();
     auto ctx_valid = ctx.validate();
     if (!ctx_valid) {
         return void_core::Err<InstantiationResult>(ctx_valid.error());
     }
 
     // Find prefab
+    spdlog::info("[PrefabRegistry] Looking up prefab '{}', prefab count: {}", prefab_id, m_prefabs.size());
+    spdlog::default_logger()->flush();
     const PrefabDefinition* prefab = get(prefab_id);
     if (!prefab) {
+        spdlog::warn("[PrefabRegistry] Prefab '{}' not found!", prefab_id);
         return void_core::Err<InstantiationResult>("Prefab not found: " + prefab_id);
     }
+    spdlog::info("[PrefabRegistry] Found prefab '{}', spawning entity...", prefab_id);
+    spdlog::default_logger()->flush();
 
     // Spawn entity
     void_ecs::Entity entity = ctx.world->spawn();
@@ -271,9 +294,14 @@ void_core::Result<bool> PrefabRegistry::apply_component(
     const std::string& component_name,
     const nlohmann::json& component_data)
 {
+    spdlog::debug("[PrefabRegistry] apply_component '{}' to entity {}v{} (schema_registry: {})",
+                  component_name, entity.index, entity.generation,
+                  static_cast<void*>(m_schema_registry));
+
     // First, try registered instantiator
     auto inst_it = m_instantiators.find(component_name);
     if (inst_it != m_instantiators.end()) {
+        spdlog::debug("[PrefabRegistry] Using custom instantiator for '{}'", component_name);
         auto result = inst_it->second(component_data, world, entity);
         if (!result) {
             return void_core::Err<bool>(result.error());
@@ -283,25 +311,74 @@ void_core::Result<bool> PrefabRegistry::apply_component(
 
     // Second, try schema registry
     if (m_schema_registry) {
-        auto result = m_schema_registry->apply_to_entity(world, entity, component_name, component_data);
-        if (result) {
-            return void_core::Ok(true);
+        // Check if the schema is registered before attempting to apply
+        bool has_schema = m_schema_registry->has_schema(component_name);
+        spdlog::debug("[PrefabRegistry] Schema registry has '{}': {}", component_name, has_schema);
+
+        if (has_schema) {
+            auto result = m_schema_registry->apply_to_entity(world, entity, component_name, component_data);
+            if (result) {
+                spdlog::debug("[PrefabRegistry] Successfully applied '{}' via schema registry", component_name);
+                return void_core::Ok(true);
+            }
+            // Schema exists but application failed - propagate the actual error
+            spdlog::error("[PrefabRegistry] Schema application failed for '{}': {}",
+                         component_name, result.error().message());
+            return void_core::Err<bool>("Schema application failed for '" + component_name +
+                                   "': " + result.error().message());
         }
-        // If schema registry didn't have it, fall through to ECS lookup
+        // Schema not found in schema registry - check ECS registry for diagnostic purposes
+        spdlog::warn("[PrefabRegistry] Component '{}' not found in schema registry", component_name);
+    } else {
+        spdlog::warn("[PrefabRegistry] No schema registry configured");
     }
 
     // Third, try ECS component registry by name
     auto comp_id = world.component_id_by_name(component_name);
     if (!comp_id) {
         // Component not registered anywhere
-        return void_core::Err<bool>("Unknown component: " + component_name +
-                               " (not registered in ECS or schema registry)");
+        std::string diag_msg = "Unknown component: " + component_name;
+        if (m_schema_registry) {
+            // Provide diagnostic information about what IS registered
+            auto all_schemas = m_schema_registry->all_schema_names();
+            if (!all_schemas.empty()) {
+                diag_msg += " (schema registry has " + std::to_string(all_schemas.size()) + " schemas";
+                if (all_schemas.size() <= 10) {
+                    diag_msg += ": ";
+                    for (std::size_t i = 0; i < all_schemas.size(); ++i) {
+                        if (i > 0) diag_msg += ", ";
+                        diag_msg += all_schemas[i];
+                    }
+                }
+                diag_msg += ")";
+            } else {
+                diag_msg += " (schema registry is EMPTY - plugins may not have loaded)";
+            }
+        }
+        return void_core::Err<bool>(diag_msg);
     }
 
-    // We have a component ID but no way to create from JSON without a schema
-    // This means the component exists but we can't instantiate it dynamically
-    return void_core::Err<bool>("Component '" + component_name +
-                           "' is registered but has no JSON instantiator");
+    // Component is in ECS registry but not in schema registry
+    // This indicates a registration path that bypassed the schema system.
+    // Possible causes:
+    // 1. Plugin loader used internal registry instead of external/shared registry
+    // 2. Component was registered directly to ECS without going through ComponentSchemaRegistry
+    // 3. Different schema registry instances are being used
+    std::string diag_msg = "Component '" + component_name + "' found in ECS registry (id=" +
+                           std::to_string(comp_id->value()) + ") but has no JSON instantiator in schema registry";
+    if (m_schema_registry) {
+        auto all_schemas = m_schema_registry->all_schema_names();
+        diag_msg += " (schema registry has " + std::to_string(all_schemas.size()) + " schemas";
+        if (!all_schemas.empty() && all_schemas.size() <= 10) {
+            diag_msg += ": ";
+            for (std::size_t i = 0; i < all_schemas.size(); ++i) {
+                if (i > 0) diag_msg += ", ";
+                diag_msg += all_schemas[i];
+            }
+        }
+        diag_msg += ")";
+    }
+    return void_core::Err<bool>(diag_msg);
 }
 
 std::string PrefabRegistry::format_state() const {

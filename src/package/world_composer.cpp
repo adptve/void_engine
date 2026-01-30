@@ -13,7 +13,10 @@
 #include <void_engine/ecs/world.hpp>
 #include <void_engine/ecs/system.hpp>
 
+#include <spdlog/spdlog.h>
+
 #include <sstream>
+#include <fstream>
 #include <random>
 #include <algorithm>
 
@@ -190,16 +193,18 @@ void_core::Result<void> WorldComposer::execute_boot_sequence(
         return deps_result;
     }
 
-    // Step 2: Load asset bundles
-    auto assets_result = load_assets(info.manifest, info);
-    if (!assets_result) {
-        return assets_result;
-    }
-
-    // Step 3: Load plugins
+    // Step 2: Load plugins FIRST - they define component schemas
+    // Component schemas must be registered before asset bundles containing
+    // prefabs that reference those components are loaded.
     auto plugins_result = load_plugins(info.manifest, info);
     if (!plugins_result) {
         return plugins_result;
+    }
+
+    // Step 3: Load asset bundles (which may contain prefabs using plugin components)
+    auto assets_result = load_assets(info.manifest, info);
+    if (!assets_result) {
+        return assets_result;
     }
 
     // Step 4: Load widgets
@@ -419,14 +424,19 @@ void_core::Result<void> WorldComposer::load_assets(
     const WorldPackageManifest& manifest,
     LoadedWorldInfo& info) {
 
+    spdlog::info("[WorldComposer] load_assets called, asset_deps count: {}", manifest.base.asset_deps.size());
+
     if (!m_package_registry || !m_load_context) {
+        spdlog::warn("[WorldComposer] load_assets: registry or context is null");
         return void_core::Ok();  // Nothing to load
     }
 
     // Load asset bundle dependencies
     for (const auto& dep : manifest.base.asset_deps) {
+        spdlog::info("[WorldComposer]   Loading asset bundle: {}", dep.name);
         auto result = m_package_registry->load_package(dep.name, *m_load_context);
         if (!result) {
+            spdlog::error("[WorldComposer]   Failed to load asset bundle '{}': {}", dep.name, result.error().message());
             if (!dep.optional) {
                 return void_core::Err("Failed to load asset bundle '" + dep.name + "': " +
                                       result.error().message());
@@ -434,9 +444,11 @@ void_core::Result<void> WorldComposer::load_assets(
             // Optional dependency failed, continue
             continue;
         }
+        spdlog::info("[WorldComposer]   Loaded asset bundle: {}", dep.name);
         info.loaded_assets.push_back(dep.name);
     }
 
+    spdlog::info("[WorldComposer] load_assets complete, loaded {} assets", info.loaded_assets.size());
     return void_core::Ok();
 }
 
@@ -534,14 +546,75 @@ void_core::Result<void> WorldComposer::instantiate_root_scene(
     // Resolve scene path
     auto scene_path = manifest.resolve_scene_path(manifest.root_scene.path);
 
-    // TODO: Use SceneInstantiator to load the scene
-    // For now, just create a placeholder entity to indicate scene is loaded
-    auto root_entity = world->spawn();
-    info.scene_entities.push_back(root_entity);
+    // Load and parse scene file
+    std::ifstream scene_file(scene_path);
+    if (!scene_file.is_open()) {
+        spdlog::warn("Could not open scene file: {}", scene_path.string());
+        // Not a fatal error - scene file may not exist yet
+        return void_core::Ok();
+    }
 
-    // TODO: Instantiate all entities from scene file
-    // This would use PrefabRegistry for prefab-based entities
+    nlohmann::json scene_data;
+    try {
+        scene_file >> scene_data;
+    } catch (const std::exception& e) {
+        return void_core::Err("Failed to parse scene file: " + std::string(e.what()));
+    }
 
+    spdlog::info("[WorldComposer] Loading scene: {}", scene_path.string());
+
+    // Step 1: Spawn camera if defined
+    if (scene_data.contains("camera") && m_schema_registry) {
+        auto camera_result = spawn_camera_from_scene(scene_data["camera"], *world);
+        if (camera_result) {
+            info.scene_entities.push_back(*camera_result);
+            spdlog::info("[WorldComposer]   Spawned camera entity");
+        } else {
+            spdlog::warn("[WorldComposer]   Failed to spawn camera: {}", camera_result.error().message());
+        }
+    }
+
+    // Step 2: Spawn lights if defined
+    if (scene_data.contains("lights") && scene_data["lights"].is_array()) {
+        for (const auto& light_data : scene_data["lights"]) {
+            auto light_result = spawn_light_from_scene(light_data, *world);
+            if (light_result) {
+                info.scene_entities.push_back(*light_result);
+            } else {
+                spdlog::warn("[WorldComposer]   Failed to spawn light: {}", light_result.error().message());
+            }
+        }
+        spdlog::info("[WorldComposer]   Spawned {} light entities", scene_data["lights"].size());
+    }
+
+    // Step 3: Spawn entities (using prefabs or direct components)
+    if (scene_data.contains("entities") && scene_data["entities"].is_array()) {
+        spdlog::info("[WorldComposer]   Starting entity spawn ({} entities to spawn)...", scene_data["entities"].size());
+        spdlog::default_logger()->flush();
+
+        std::size_t spawned_count = 0;
+        std::size_t entity_index = 0;
+        for (const auto& entity_data : scene_data["entities"]) {
+            spdlog::info("[WorldComposer]     [{}/{}] Getting entity name...", entity_index + 1, scene_data["entities"].size());
+            spdlog::default_logger()->flush();
+
+            std::string entity_name = entity_data.value("name", "unknown");
+            spdlog::info("[WorldComposer]     [{}/{}] Spawning entity: {}", entity_index + 1, scene_data["entities"].size(), entity_name);
+            spdlog::default_logger()->flush();
+
+            auto entity_result = spawn_entity_from_scene(entity_data, *world);
+            entity_index++;
+            if (entity_result) {
+                info.scene_entities.push_back(*entity_result);
+                spawned_count++;
+            } else {
+                spdlog::warn("[WorldComposer]   Failed to spawn entity '{}': {}", entity_name, entity_result.error().message());
+            }
+        }
+        spdlog::info("[WorldComposer]   Spawned {} scene entities", spawned_count);
+    }
+
+    spdlog::info("[WorldComposer] Scene loaded: {} total entities", info.scene_entities.size());
     return void_core::Ok();
 }
 
@@ -642,16 +715,67 @@ void_core::Result<void> WorldComposer::spawn_player_internal(
     const WorldLoadOptions& options,
     LoadedWorldInfo& info) {
 
+    // Early exit if no player spawn configured
     if (!manifest.player_spawn.has_value()) {
         return void_core::Ok();
     }
 
-    auto spawn_result = spawn_player(options.player_spawn_override);
-    if (!spawn_result) {
-        return void_core::Err("Failed to spawn player: " + spawn_result.error().message());
+    // Validate required dependencies
+    // NOTE: We don't check has_world() here because this is called DURING the boot
+    // sequence before m_current_world is set. That's intentional - we use the
+    // manifest and info parameters directly instead.
+    if (!m_prefab_registry) {
+        return void_core::Err("Prefab registry not configured");
+    }
+    if (!m_load_context || !m_load_context->ecs_world()) {
+        return void_core::Err("ECS world not available in load context");
     }
 
-    info.player_entity = *spawn_result;
+    const auto& spawn_config = *manifest.player_spawn;
+    auto* ecs_world = m_load_context->ecs_world();
+
+    // Determine spawn position
+    // First check for explicit override from load options
+    std::optional<TransformData> spawn_pos = options.player_spawn_override;
+
+    // If no override, select from manifest's spawn points
+    if (!spawn_pos) {
+        spawn_pos = get_next_spawn_point(manifest);
+    }
+
+    // Instantiate player prefab
+    auto result = m_prefab_registry->instantiate(
+        spawn_config.prefab,
+        *ecs_world,
+        spawn_pos);
+
+    if (!result) {
+        return void_core::Err("Failed to instantiate player prefab '" +
+                              spawn_config.prefab + "': " + result.error().message());
+    }
+
+    auto player = *result;
+
+    // Apply initial inventory if configured
+    if (spawn_config.has_initial_inventory()) {
+        auto inv_result = apply_initial_inventory(player, *spawn_config.initial_inventory);
+        if (!inv_result) {
+            // Log warning but don't fail - player can still function without inventory
+            // The game can populate inventory later through gameplay
+        }
+    }
+
+    // Apply initial stats if configured
+    if (spawn_config.has_initial_stats()) {
+        auto stats_result = apply_initial_stats(player, *spawn_config.initial_stats);
+        if (!stats_result) {
+            // Log warning but don't fail - defaults will be used
+        }
+    }
+
+    // Store player entity in the world info being loaded
+    // (NOT in m_current_world which doesn't exist yet during boot)
+    info.player_entity = player;
 
     return void_core::Ok();
 }
@@ -1008,6 +1132,167 @@ void WorldComposer::update(float /*dt*/) {
     // Run ECS systems if a world is loaded
     if (m_load_context && m_load_context->ecs_world() && has_world()) {
         m_load_context->ecs_world()->run_systems();
+    }
+}
+
+// =============================================================================
+// Scene Spawning Helpers
+// =============================================================================
+
+void_core::Result<void_ecs::Entity> WorldComposer::spawn_camera_from_scene(
+    const nlohmann::json& camera_data,
+    void_ecs::World& world) {
+
+    auto entity = world.spawn();
+
+    // Apply components if defined
+    if (camera_data.contains("components") && m_schema_registry) {
+        const auto& components = camera_data["components"];
+
+        // Apply Transform component
+        if (components.contains("Transform") && m_schema_registry->has_schema("Transform")) {
+            auto result = m_schema_registry->apply_to_entity(world, entity, "Transform", components["Transform"]);
+            if (!result) {
+                world.despawn(entity);
+                return void_core::Err<void_ecs::Entity>("Failed to apply Transform: " + result.error().message());
+            }
+        }
+
+        // Apply Camera component
+        if (components.contains("Camera") && m_schema_registry->has_schema("Camera")) {
+            auto result = m_schema_registry->apply_to_entity(world, entity, "Camera", components["Camera"]);
+            if (!result) {
+                world.despawn(entity);
+                return void_core::Err<void_ecs::Entity>("Failed to apply Camera: " + result.error().message());
+            }
+        }
+    }
+
+    return void_core::Ok(entity);
+}
+
+void_core::Result<void_ecs::Entity> WorldComposer::spawn_light_from_scene(
+    const nlohmann::json& light_data,
+    void_ecs::World& world) {
+
+    auto entity = world.spawn();
+
+    // Apply components if defined
+    if (light_data.contains("components") && m_schema_registry) {
+        const auto& components = light_data["components"];
+
+        // Apply Transform component
+        if (components.contains("Transform") && m_schema_registry->has_schema("Transform")) {
+            auto result = m_schema_registry->apply_to_entity(world, entity, "Transform", components["Transform"]);
+            if (!result) {
+                world.despawn(entity);
+                return void_core::Err<void_ecs::Entity>("Failed to apply Transform: " + result.error().message());
+            }
+        }
+
+        // Apply Light component
+        if (components.contains("Light") && m_schema_registry->has_schema("Light")) {
+            auto result = m_schema_registry->apply_to_entity(world, entity, "Light", components["Light"]);
+            if (!result) {
+                world.despawn(entity);
+                return void_core::Err<void_ecs::Entity>("Failed to apply Light: " + result.error().message());
+            }
+        }
+    }
+
+    return void_core::Ok(entity);
+}
+
+void_core::Result<void_ecs::Entity> WorldComposer::spawn_entity_from_scene(
+    const nlohmann::json& entity_data,
+    void_ecs::World& world) {
+
+    spdlog::info("[WorldComposer] spawn_entity_from_scene entered");
+    spdlog::default_logger()->flush();
+
+    try {
+    // Check if this entity is based on a prefab
+    if (entity_data.contains("prefab") && m_prefab_registry) {
+        std::string prefab_name = entity_data["prefab"].get<std::string>();
+        spdlog::info("[WorldComposer] Instantiating prefab: {} (registry: {})", prefab_name, static_cast<void*>(m_prefab_registry));
+        spdlog::default_logger()->flush();
+
+        // Prepare transform override if provided
+        std::optional<TransformData> transform_override;
+        if (entity_data.contains("transform")) {
+            TransformData transform;
+            const auto& t = entity_data["transform"];
+
+            if (t.contains("position") && t["position"].is_array() && t["position"].size() >= 3) {
+                transform.position = {
+                    t["position"][0].get<float>(),
+                    t["position"][1].get<float>(),
+                    t["position"][2].get<float>()
+                };
+            }
+
+            if (t.contains("rotation") && t["rotation"].is_array() && t["rotation"].size() >= 4) {
+                transform.rotation = {
+                    t["rotation"][0].get<float>(),
+                    t["rotation"][1].get<float>(),
+                    t["rotation"][2].get<float>(),
+                    t["rotation"][3].get<float>()
+                };
+            }
+
+            if (t.contains("scale") && t["scale"].is_array() && t["scale"].size() >= 3) {
+                transform.scale = {
+                    t["scale"][0].get<float>(),
+                    t["scale"][1].get<float>(),
+                    t["scale"][2].get<float>()
+                };
+            }
+
+            transform_override = transform;
+        }
+
+        // Instantiate prefab
+        spdlog::info("[WorldComposer] About to call instantiate...");
+        spdlog::default_logger()->flush();
+        auto result = m_prefab_registry->instantiate(prefab_name, world, transform_override);
+        spdlog::info("[WorldComposer] instantiate returned");
+        spdlog::default_logger()->flush();
+        if (!result) {
+            return void_core::Err<void_ecs::Entity>("Failed to instantiate prefab '" + prefab_name + "': " + result.error().message());
+        }
+
+        return void_core::Ok(*result);
+    }
+
+    // Non-prefab entity - spawn directly with components
+    auto entity = world.spawn();
+
+    // Apply components directly
+    if (entity_data.contains("components") && m_schema_registry) {
+        const auto& components = entity_data["components"];
+        for (auto it = components.begin(); it != components.end(); ++it) {
+            std::string comp_name = it.key();
+            if (m_schema_registry->has_schema(comp_name)) {
+                auto result = m_schema_registry->apply_to_entity(world, entity, comp_name, it.value());
+                if (!result) {
+                    spdlog::warn("Failed to apply component '{}': {}", comp_name, result.error().message());
+                }
+            } else {
+                spdlog::warn("No schema registered for component '{}'", comp_name);
+            }
+        }
+    }
+
+    return void_core::Ok(entity);
+
+    } catch (const std::exception& e) {
+        spdlog::error("[WorldComposer] Exception in spawn_entity_from_scene: {}", e.what());
+        spdlog::default_logger()->flush();
+        return void_core::Err<void_ecs::Entity>(std::string("Exception: ") + e.what());
+    } catch (...) {
+        spdlog::error("[WorldComposer] Unknown exception in spawn_entity_from_scene");
+        spdlog::default_logger()->flush();
+        return void_core::Err<void_ecs::Entity>("Unknown exception in spawn_entity_from_scene");
     }
 }
 

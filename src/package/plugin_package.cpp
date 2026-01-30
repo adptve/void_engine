@@ -657,8 +657,21 @@ void_core::Result<PluginPackageManifest> PluginPackageManifest::from_json(
         }
     }
 
-    // Collect library paths
+    // Check for top-level library field (for IPlugin-based plugins)
+    if (j.contains("library")) {
+        auto lib_path = j["library"].get<std::string>();
+        if (!lib_path.empty()) {
+            manifest.main_library = manifest.resolve_library_path(lib_path);
+        }
+    }
+
+    // Collect library paths (from systems and event handlers)
     manifest.libraries = manifest.collect_library_paths();
+
+    // Add main library to the list if specified
+    if (!manifest.main_library.empty()) {
+        manifest.libraries.insert(manifest.libraries.begin(), manifest.main_library);
+    }
 
     return manifest;
 }

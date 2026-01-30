@@ -233,6 +233,9 @@ struct PluginPackageManifest {
     // Library paths (resolved relative to package)
     std::vector<std::filesystem::path> libraries;
 
+    // Main library for IPlugin-based plugins (from top-level "library" field)
+    std::filesystem::path main_library;
+
     // =========================================================================
     // Parsing
     // =========================================================================

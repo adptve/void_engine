@@ -1,0 +1,34 @@
+{
+  "package": {
+    "name": "core.gameplay",
+    "type": "plugin",
+    "version": "1.0.0",
+    "display_name": "Core Gameplay",
+    "description": "Core gameplay components and systems"
+  },
+  "components": [
+    {
+      "name": "Transform",
+      "fields": {
+        "position": { "type": "vec3", "default": [0, 0, 0] },
+        "rotation": { "type": "quat", "default": [0, 0, 0, 1] },
+        "scale": { "type": "vec3", "default": [1, 1, 1] }
+      }
+    },
+    {
+      "name": "Velocity",
+      "fields": {
+        "linear": { "type": "vec3", "default": [0, 0, 0] },
+        "angular": { "type": "vec3", "default": [0, 0, 0] }
+      }
+    },
+    {
+      "name": "Player",
+      "is_tag": true
+    },
+    {
+      "name": "Enemy",
+      "is_tag": true
+    }
+  ]
+}

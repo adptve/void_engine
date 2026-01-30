@@ -1,0 +1,43 @@
+{
+  "package": {
+    "name": "layer.hard_mode",
+    "type": "layer",
+    "version": "1.0.0",
+    "display_name": "Hard Mode",
+    "description": "Increases difficulty with more enemies and damage"
+  },
+  "dependencies": {
+    "plugins": [
+      { "name": "core.gameplay", "version": ">=1.0.0" },
+      { "name": "gameplay.combat", "version": ">=1.0.0" }
+    ]
+  },
+  "priority": 50,
+  "spawners": [
+    {
+      "id": "extra_enemy_spawner",
+      "volume": {
+        "type": "box",
+        "min": [-50, 0, -50],
+        "max": [50, 5, 50]
+      },
+      "prefab": "enemy_prefab",
+      "spawn_rate": 0.5,
+      "max_active": 12
+    }
+  ],
+  "modifiers": [
+    {
+      "path": "gameplay.enemy_health_multiplier",
+      "value": 2.0
+    },
+    {
+      "path": "gameplay.enemy_damage_multiplier",
+      "value": 1.75
+    },
+    {
+      "path": "gameplay.player_regen_rate",
+      "value": 0
+    }
+  ]
+}

@@ -16,12 +16,35 @@ namespace void_plugin_api {
 // Use canonical EntityId from void_core
 using EntityId = void_core::EntityId;
 
+// =============================================================================
+// Forward Declarations - Package Plugin API (plugin.hpp, context.hpp, renderable.hpp)
+// =============================================================================
+
+class IPlugin;
+class PluginContext;
+struct PluginSnapshot;
+struct Dependency;
+struct RenderableDesc;
+struct MaterialDesc;
+struct ComponentRegistration;
+struct SystemRegistration;
+struct SubscriptionHandle;
+struct RenderComponentIds;
+
 /// @brief Command identifier for tracking
 struct CommandId {
     std::uint64_t value{0};
     bool operator==(const CommandId&) const = default;
     explicit operator bool() const { return value != 0; }
 };
+
+// =============================================================================
+// Forward Declarations - Plugin State (state.hpp)
+// =============================================================================
+
+enum class PluginStatus : std::uint8_t;
+struct PluginState;
+struct PluginRegistry;
 
 // =============================================================================
 // Forward Declarations - Plugin API

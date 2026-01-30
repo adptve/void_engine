@@ -132,7 +132,9 @@
       "WebSearch",
       "WebFetch(domain:www.gameenginebook.com)",
       "Bash(curl:*)",
-      "Bash(\"/c/Program Files/CMake/bin/cmake.exe\" --build build)"
+      "Bash(\"/c/Program Files/CMake/bin/cmake.exe\" --build build)",
+      "Bash(cmake.exe --build:*)",
+      "Bash(del \"C:\\\\Users\\\\ShaneRobinson\\\\Documents\\\\GitHub\\\\void_engine\\\\examples\\\\package_demo\\\\packages\\\\plugins\\\\base.health.plugin.json\")"
     ]
   }
 }

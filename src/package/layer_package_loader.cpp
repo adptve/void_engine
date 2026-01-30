@@ -780,7 +780,17 @@ public:
     // Construction
     // =========================================================================
 
-    LayerPackageLoader() : m_applier(create_layer_applier()) {}
+    /// Construct with internal applier
+    LayerPackageLoader()
+        : m_internal_applier(create_layer_applier())
+        , m_applier(m_internal_applier.get())
+        , m_external_applier(nullptr) {}
+
+    /// Construct with external applier (for sharing with WorldComposer)
+    explicit LayerPackageLoader(LayerApplier* external_applier)
+        : m_internal_applier(nullptr)
+        , m_applier(external_applier)
+        , m_external_applier(external_applier) {}
 
     // =========================================================================
     // PackageLoader Interface
@@ -869,6 +879,9 @@ public:
     [[nodiscard]] LayerApplier& applier() { return *m_applier; }
     [[nodiscard]] const LayerApplier& applier() const { return *m_applier; }
 
+    /// Check if using external applier
+    [[nodiscard]] bool uses_external_applier() const { return m_external_applier != nullptr; }
+
     /// Apply a loaded layer to the world
     [[nodiscard]] void_core::Result<void> apply_layer(
         const std::string& layer_name,
@@ -901,17 +914,28 @@ public:
     }
 
 private:
-    std::unique_ptr<LayerApplier> m_applier;
+    std::unique_ptr<LayerApplier> m_internal_applier;  // Owned applier (if not external)
+    LayerApplier* m_applier;                           // Active applier (internal or external)
+    LayerApplier* m_external_applier;                  // External applier (if provided)
     std::set<std::string> m_loaded_packages;
 };
 
 // =============================================================================
-// Factory Function
+// Factory Functions
 // =============================================================================
 
-/// Create a layer package loader
+/// Create a layer package loader with internal applier
 std::unique_ptr<PackageLoader> create_layer_package_loader() {
     return std::make_unique<LayerPackageLoader>();
+}
+
+/// Create a layer package loader with external applier
+std::unique_ptr<PackageLoader> create_layer_package_loader(LayerApplier* layer_applier) {
+    if (!layer_applier) {
+        // Fall back to internal applier if null passed
+        return std::make_unique<LayerPackageLoader>();
+    }
+    return std::make_unique<LayerPackageLoader>(layer_applier);
 }
 
 } // namespace void_package
