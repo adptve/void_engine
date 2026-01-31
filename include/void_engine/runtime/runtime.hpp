@@ -46,8 +46,7 @@
 namespace void_kernel { class Kernel; }
 namespace void_event { class EventBus; }
 namespace void_ecs { class World; }
-namespace void_scene { class World; struct SceneData; }
-namespace void_render { class SceneRenderer; }
+namespace void_scene { class World; }
 namespace void_package {
     class PackageRegistry;
     class LoadContext;
@@ -265,9 +264,6 @@ public:
 
     /// @brief Get the platform interface
     [[nodiscard]] IPlatform* platform() const;
-
-    /// @brief Get the scene renderer
-    [[nodiscard]] void_render::SceneRenderer* renderer() const;
 
     // -------------------------------------------------------------------------
     // Configuration
