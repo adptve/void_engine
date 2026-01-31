@@ -361,6 +361,7 @@ endif()
 # ============================================================================
 if(VOID_BUILD_EXAMPLES)
     add_subdirectory(examples/package_demo)
+    add_subdirectory(examples/package_primitives)
 endif()
 
 # ============================================================================
