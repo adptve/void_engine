@@ -1,0 +1,71 @@
+{
+  "name": "Primitives Scene",
+  "camera": {
+    "name": "main_camera",
+    "components": {
+      "Transform": {
+        "position": [0, 2.5, 6],
+        "rotation": [0, 0, 0, 1]
+      },
+      "Camera": {
+        "fov": 60.0,
+        "near_plane": 0.1,
+        "far_plane": 100.0,
+        "active": true,
+        "projection": "perspective",
+        "clear_color": [0.08, 0.08, 0.1, 1.0]
+      }
+    }
+  },
+  "lights": [
+    {
+      "name": "sun",
+      "components": {
+        "Transform": {
+          "position": [0, 6, 0],
+          "rotation": [-0.382683, 0, 0, 0.92388]
+        },
+        "Light": {
+          "type": "directional",
+          "color": [1.0, 0.95, 0.9],
+          "intensity": 1.2,
+          "cast_shadows": false
+        }
+      }
+    },
+    {
+      "name": "fill_light",
+      "components": {
+        "Transform": {
+          "position": [3, 3, 3]
+        },
+        "Light": {
+          "type": "point",
+          "color": [0.6, 0.7, 1.0],
+          "intensity": 25.0,
+          "range": 10.0
+        }
+      }
+    }
+  ],
+  "entities": [
+    {
+      "name": "demo_cube",
+      "prefab": "demo_cube",
+      "transform": {
+        "position": [-1.5, 0.5, 0],
+        "rotation": [0, 0, 0, 1],
+        "scale": [1.2, 1.2, 1.2]
+      }
+    },
+    {
+      "name": "demo_sphere",
+      "prefab": "demo_sphere",
+      "transform": {
+        "position": [1.5, 0.8, 0],
+        "rotation": [0, 0, 0, 1],
+        "scale": [1.2, 1.2, 1.2]
+      }
+    }
+  ]
+}

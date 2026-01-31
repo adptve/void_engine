@@ -542,6 +542,59 @@ void RenderPrepareSystem::run(void_ecs::World& world, float) {
         render_ctx->render_queue().push(cmd);
     }
 
+    // Render entities that use ModelComponent (non-built-in meshes)
+    auto model_query = world.query_with<RenderableTag, TransformComponent, ModelComponent>();
+
+    for (auto iter = world.query_iter(model_query); !iter.empty(); iter.next()) {
+        auto* renderable = iter.get<RenderableTag>();
+        auto* transform = iter.get<TransformComponent>();
+        auto* model_comp = iter.get<ModelComponent>();
+        if (!renderable || !transform || !model_comp || !renderable->visible) continue;
+
+        if (world.has_component<MeshComponent>(iter.entity())) {
+            continue;
+        }
+
+        if (!model_comp->model_handle.is_valid()) {
+            continue;
+        }
+
+        auto* model = assets.get_model(model_comp->model_handle);
+        if (!model || model->meshes.empty()) {
+            continue;
+        }
+
+        for (auto& mesh : model->meshes) {
+            if (!mesh.is_valid()) {
+                continue;
+            }
+
+            DrawCommand cmd;
+            cmd.mesh = &mesh;
+            cmd.model_matrix = transform->world_matrix;
+            cmd.normal_matrix = {{
+                transform->world_matrix[0], transform->world_matrix[1], transform->world_matrix[2],
+                transform->world_matrix[4], transform->world_matrix[5], transform->world_matrix[6],
+                transform->world_matrix[8], transform->world_matrix[9], transform->world_matrix[10]
+            }};
+
+            auto* material = iter.get<MaterialComponent>();
+            if (material) {
+                cmd.albedo = material->albedo;
+                cmd.metallic = material->metallic_value;
+                cmd.roughness = material->roughness_value;
+                cmd.ao = material->ao_value;
+                cmd.emissive = material->emissive;
+                cmd.emissive_strength = material->emissive_strength;
+                cmd.double_sided = material->double_sided;
+                cmd.alpha_blend = material->alpha_blend;
+            }
+
+            cmd.sort_key = cmd.alpha_blend ? 0x8000000000000000ULL : 0;
+            render_ctx->render_queue().push(cmd);
+        }
+    }
+
     // Sort the queue
     render_ctx->render_queue().sort();
 

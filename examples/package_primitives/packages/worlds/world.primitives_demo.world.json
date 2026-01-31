@@ -1,0 +1,23 @@
+{
+  "package": {
+    "name": "world.primitives_demo",
+    "type": "world",
+    "version": "1.0.0",
+    "display_name": "Primitives Demo",
+    "description": "Package-driven world with cube and sphere models"
+  },
+  "dependencies": {
+    "assets": [
+      { "name": "demo.primitives", "version": ">=1.0.0" }
+    ]
+  },
+  "root_scene": {
+    "path": "scenes/primitives.scene.json"
+  },
+  "environment": {
+    "ambient_color": [0.15, 0.18, 0.2],
+    "ambient_intensity": 0.35
+  },
+  "layers": [],
+  "widgets": []
+}

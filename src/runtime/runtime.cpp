@@ -1035,6 +1035,54 @@ void register_mesh_component(void_package::ComponentSchemaRegistry& registry,
     }
 }
 
+/// @brief Register ModelComponent with JSON factory
+void register_model_component(void_package::ComponentSchemaRegistry& registry,
+                               void_ecs::World& world) {
+    void_package::ComponentSchema schema;
+    schema.name = "Model";
+    schema.source_plugin = "engine.core";
+    schema.size = sizeof(void_render::ModelComponent);
+    schema.alignment = alignof(void_render::ModelComponent);
+
+    schema.fields = {
+        {.name = "path", .type = void_package::FieldType::String, .default_value = ""},
+        {.name = "generate_tangents", .type = void_package::FieldType::Bool, .default_value = true},
+        {.name = "flip_uvs", .type = void_package::FieldType::Bool, .default_value = false},
+        {.name = "scale_factor", .type = void_package::FieldType::Float32, .default_value = 1.0f}
+    };
+
+    void_package::ComponentApplier applier = [](void_ecs::World& w, void_ecs::Entity e,
+                                                 const nlohmann::json& data) -> void_core::Result<void> {
+        void_render::ModelComponent model;
+
+        if (data.contains("path") && data["path"].is_string()) {
+            model.path = data["path"].get<std::string>();
+        }
+
+        if (data.contains("generate_tangents") && data["generate_tangents"].is_boolean()) {
+            model.generate_tangents = data["generate_tangents"].get<bool>();
+        }
+
+        if (data.contains("flip_uvs") && data["flip_uvs"].is_boolean()) {
+            model.flip_uvs = data["flip_uvs"].get<bool>();
+        }
+
+        if (data.contains("scale_factor") && data["scale_factor"].is_number()) {
+            model.scale_factor = data["scale_factor"].get<float>();
+        }
+
+        w.add_component(e, model);
+        return void_core::Ok();
+    };
+
+    world.register_component<void_render::ModelComponent>();
+
+    auto result = registry.register_schema_with_factory(std::move(schema), nullptr, std::move(applier));
+    if (!result) {
+        spdlog::warn("Failed to register Model schema: {}", result.error().message());
+    }
+}
+
 /// @brief Register MaterialComponent with JSON factory
 void register_material_component(void_package::ComponentSchemaRegistry& registry,
                                   void_ecs::World& world) {
@@ -1364,13 +1412,14 @@ void Runtime::register_engine_core_components() {
 
     register_transform_component(registry, world);
     register_mesh_component(registry, world);
+    register_model_component(registry, world);
     register_material_component(registry, world);
     register_light_component(registry, world);
     register_camera_component(registry, world);
     register_renderable_component(registry, world);
     register_hierarchy_component(registry, world);
 
-    spdlog::info("  [packages] Registered 7 engine core render components");
+    spdlog::info("  [packages] Registered 8 engine core render components");
 }
 
 /// @brief Register engine render systems with the kernel
