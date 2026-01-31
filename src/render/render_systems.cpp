@@ -74,6 +74,10 @@ void_core::Result<void> RenderContext::initialize(std::uint32_t width, std::uint
     m_width = width;
     m_height = height;
 
+    if (!load_opengl_functions()) {
+        return void_core::Error("Failed to load OpenGL functions");
+    }
+
     // Initialize asset manager
     auto result = m_assets->initialize(std::filesystem::current_path() / "assets");
     if (!result) {

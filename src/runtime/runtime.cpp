@@ -9,9 +9,6 @@
 #include <void_engine/kernel/kernel.hpp>
 #include <void_engine/event/event_bus.hpp>
 #include <void_engine/scene/world.hpp>
-#include <void_engine/scene/scene_data.hpp>
-#include <void_engine/scene/scene_parser.hpp>
-#include <void_engine/render/gl_renderer.hpp>
 #include <void_engine/ecs/world.hpp>
 
 // Package system
@@ -30,7 +27,6 @@
 
 #include <chrono>
 #include <filesystem>
-#include <fstream>
 #include <thread>
 
 namespace void_runtime {
@@ -57,10 +53,7 @@ struct Runtime::PlatformContext {
 // =============================================================================
 
 struct Runtime::RenderContext {
-    std::unique_ptr<void_render::SceneRenderer> renderer;
-    std::unique_ptr<void_scene::SceneData> scene_data;
     bool initialized{false};
-    std::filesystem::path scene_path;
 };
 
 // =============================================================================
@@ -652,81 +645,11 @@ void_core::Result<void> Runtime::init_platform() {
 void_core::Result<void> Runtime::init_render() {
     spdlog::info("  [render] Initializing...");
 
-    // Get window dimensions
-    std::uint32_t width, height;
-    m_platform->platform->get_window_size(width, height);
-
-    // Create and initialize the scene renderer
-    m_render->renderer = std::make_unique<void_render::SceneRenderer>();
-    if (!m_render->renderer->initialize(width, height)) {
-        return void_core::Error("Failed to initialize SceneRenderer");
-    }
-
-    // Load scene from manifest if specified
-    if (!m_config.manifest_path.empty()) {
-        std::filesystem::path manifest_path(m_config.manifest_path);
-        std::filesystem::path manifest_dir = manifest_path.parent_path();
-
-        // Read manifest to find scene file
-        std::ifstream manifest_file(manifest_path);
-        if (manifest_file.is_open()) {
-            try {
-                nlohmann::json manifest;
-                manifest_file >> manifest;
-
-                // Get scene file from manifest
-                std::string scene_file;
-                if (manifest.contains("app") && manifest["app"].contains("scene")) {
-                    scene_file = manifest["app"]["scene"].get<std::string>();
-                }
-
-                if (!scene_file.empty()) {
-                    std::filesystem::path scene_path = manifest_dir / scene_file;
-                    m_render->scene_path = scene_path;
-
-                    spdlog::info("  [render] Loading scene: {}", scene_path.string());
-
-                    // Parse the scene file
-                    void_scene::SceneParser parser;
-                    auto result = parser.parse(scene_path);
-
-                    if (result) {
-                        m_render->scene_data = std::make_unique<void_scene::SceneData>(std::move(*result));
-                        m_render->renderer->load_scene(*m_render->scene_data);
-                        spdlog::info("  [render] Scene loaded: {} entities, {} lights",
-                                     m_render->scene_data->entities.size(),
-                                     m_render->scene_data->lights.size());
-                    } else {
-                        spdlog::warn("  [render] Failed to parse scene: {}", parser.last_error());
-                    }
-                }
-            } catch (const std::exception& e) {
-                spdlog::warn("  [render] Failed to parse manifest: {}", e.what());
-            }
-        }
-    }
-
     // Initialize RenderContext as ECS resource (must happen before render systems)
     init_render_context();
 
     // Register engine render systems with kernel
     register_engine_render_systems();
-
-    // Register legacy scene renderer update into RenderPrepare stage
-    m_kernel->register_system(void_kernel::Stage::RenderPrepare, "scene_update",
-        [this](float dt) {
-            if (m_render->renderer) {
-                m_render->renderer->update(dt);
-            }
-        }, 200);  // After engine render prepare systems (100)
-
-    // Register legacy scene rendering into Render stage (before platform_present)
-    m_kernel->register_system(void_kernel::Stage::Render, "scene_render",
-        [this](float) {
-            if (m_render->renderer) {
-                m_render->renderer->render();
-            }
-        }, 0);  // Before platform_present (which is at 1000)
 
     m_render->initialized = true;
     spdlog::info("  [render] Initialized successfully");
@@ -795,10 +718,6 @@ void_package::PrefabRegistry* Runtime::prefab_registry() const {
 
 IPlatform* Runtime::platform() const {
     return m_platform ? m_platform->platform.get() : nullptr;
-}
-
-void_render::SceneRenderer* Runtime::renderer() const {
-    return m_render ? m_render->renderer.get() : nullptr;
 }
 
 // =============================================================================
@@ -932,17 +851,13 @@ void Runtime::shutdown_io() {
 void Runtime::shutdown_render() {
     spdlog::info("  [render] Shutting down...");
 
-    // Unregister render systems
-    m_kernel->unregister_system(void_kernel::Stage::RenderPrepare, "scene_update");
-    m_kernel->unregister_system(void_kernel::Stage::Render, "scene_render");
+    m_kernel->unregister_system(void_kernel::Stage::HotReloadPoll, "engine.RenderAssetsHotReload");
+    m_kernel->unregister_system(void_kernel::Stage::Render, "engine.RenderSystem");
+    m_kernel->unregister_system(void_kernel::Stage::RenderPrepare, "engine.RenderPrepareSystem");
+    m_kernel->unregister_system(void_kernel::Stage::RenderPrepare, "engine.LightSystem");
+    m_kernel->unregister_system(void_kernel::Stage::RenderPrepare, "engine.CameraSystem");
+    m_kernel->unregister_system(void_kernel::Stage::Update, "engine.TransformSystem");
 
-    // Shutdown renderer
-    if (m_render->renderer) {
-        m_render->renderer->shutdown();
-        m_render->renderer.reset();
-    }
-
-    m_render->scene_data.reset();
     m_render->initialized = false;
     spdlog::info("  [render] Shutdown complete");
 }
@@ -1505,9 +1420,18 @@ void Runtime::register_engine_render_systems() {
     m_kernel->register_system(void_kernel::Stage::Render, "engine.RenderSystem",
         [&world](float dt) {
             void_render::RenderSystem::run(world, dt);
-        }, -10);  // Before scene_render (0) and platform_present (1000)
+        }, -10);  // Before platform_present (1000)
 
-    spdlog::info("  [render] Registered 5 engine render systems");
+    // RenderAssetManager hot-reload polling
+    m_kernel->register_system(void_kernel::Stage::HotReloadPoll, "engine.RenderAssetsHotReload",
+        [&world](float) {
+            auto* render_ctx = world.resource<void_render::RenderContext>();
+            if (render_ctx) {
+                render_ctx->assets().poll_hot_reload();
+            }
+        }, 0);
+
+    spdlog::info("  [render] Registered 6 engine render systems");
 }
 
 /// @brief Add RenderContext as ECS resource

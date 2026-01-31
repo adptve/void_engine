@@ -14,8 +14,11 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <cmath>
 #include <fstream>
+#include <limits>
 #include <mutex>
+#include <numbers>
 #include <sstream>
 #include <unordered_map>
 
@@ -99,6 +102,171 @@ namespace {
 #endif // _WIN32
 
 namespace void_render {
+
+namespace {
+
+constexpr const char* kDefaultPbrVertexShader = R"(
+#version 330 core
+
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec3 aNormal;
+layout (location = 2) in vec2 aUV;
+layout (location = 3) in vec4 aColor;
+
+out vec3 WorldPos;
+out vec3 Normal;
+out vec2 TexCoords;
+out vec4 VertexColor;
+
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+uniform mat3 normalMatrix;
+
+void main() {
+    WorldPos = vec3(model * vec4(aPos, 1.0));
+    Normal = normalMatrix * aNormal;
+    TexCoords = aUV;
+    VertexColor = aColor;
+    gl_Position = projection * view * vec4(WorldPos, 1.0);
+}
+)";
+
+constexpr const char* kDefaultPbrFragmentShader = R"(
+#version 330 core
+
+in vec3 WorldPos;
+in vec3 Normal;
+in vec2 TexCoords;
+in vec4 VertexColor;
+
+out vec4 FragColor;
+
+uniform vec3 albedo;
+uniform float metallic;
+uniform float roughness;
+uniform float ao;
+uniform vec3 emissive;
+uniform float emissiveStrength;
+
+uniform vec3 camPos;
+
+uniform vec3 lightPositions[4];
+uniform vec3 lightColors[4];
+uniform float lightIntensities[4];
+uniform int numLights;
+
+uniform vec3 ambientColor;
+uniform float ambientIntensity;
+
+const float PI = 3.14159265359;
+
+float DistributionGGX(vec3 N, vec3 H, float roughness) {
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float NdotH = max(dot(N, H), 0.0);
+    float NdotH2 = NdotH * NdotH;
+
+    float nom = a2;
+    float denom = (NdotH2 * (a2 - 1.0) + 1.0);
+    denom = PI * denom * denom;
+
+    return nom / max(denom, 0.0001);
+}
+
+float GeometrySchlickGGX(float NdotV, float roughness) {
+    float r = (roughness + 1.0);
+    float k = (r * r) / 8.0;
+
+    float nom = NdotV;
+    float denom = NdotV * (1.0 - k) + k;
+
+    return nom / max(denom, 0.0001);
+}
+
+float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
+    float NdotV = max(dot(N, V), 0.0);
+    float NdotL = max(dot(N, L), 0.0);
+    float ggx2 = GeometrySchlickGGX(NdotV, roughness);
+    float ggx1 = GeometrySchlickGGX(NdotL, roughness);
+
+    return ggx1 * ggx2;
+}
+
+vec3 fresnelSchlick(float cosTheta, vec3 F0) {
+    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+void main() {
+    vec3 N = normalize(Normal);
+    vec3 V = normalize(camPos - WorldPos);
+
+    vec3 F0 = vec3(0.04);
+    F0 = mix(F0, albedo, metallic);
+
+    vec3 Lo = vec3(0.0);
+    for (int i = 0; i < numLights; ++i) {
+        vec3 L = normalize(lightPositions[i] - WorldPos);
+        vec3 H = normalize(V + L);
+        float distance = length(lightPositions[i] - WorldPos);
+        float attenuation = 1.0 / (distance * distance);
+        vec3 radiance = lightColors[i] * lightIntensities[i] * attenuation;
+
+        float NDF = DistributionGGX(N, H, roughness);
+        float G = GeometrySmith(N, V, L, roughness);
+        vec3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);
+
+        vec3 numerator = NDF * G * F;
+        float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
+        vec3 specular = numerator / denominator;
+
+        vec3 kS = F;
+        vec3 kD = vec3(1.0) - kS;
+        kD *= 1.0 - metallic;
+
+        float NdotL = max(dot(N, L), 0.0);
+
+        Lo += (kD * albedo / PI + specular) * radiance * NdotL;
+    }
+
+    vec3 ambient = ambientColor * ambientIntensity * albedo * ao;
+    vec3 emission = emissive * emissiveStrength;
+    vec3 color = ambient + Lo + emission;
+
+    FragColor = vec4(color, 1.0);
+}
+)";
+
+std::array<float, 3> vec3_sub(const std::array<float, 3>& a, const std::array<float, 3>& b) {
+    return {a[0] - b[0], a[1] - b[1], a[2] - b[2]};
+}
+
+std::array<float, 3> vec3_cross(const std::array<float, 3>& a, const std::array<float, 3>& b) {
+    return {
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0]
+    };
+}
+
+std::array<float, 3> vec3_normalize(const std::array<float, 3>& v) {
+    float len = std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+    if (len <= 0.0f) {
+        return {0.0f, 1.0f, 0.0f};
+    }
+    return {v[0] / len, v[1] / len, v[2] / len};
+}
+
+void update_bounds(std::array<float, 3>& min_bounds,
+                   std::array<float, 3>& max_bounds,
+                   const std::array<float, 3>& position) {
+    for (int i = 0; i < 3; ++i) {
+        min_bounds[i] = std::min(min_bounds[i], position[i]);
+        max_bounds[i] = std::max(max_bounds[i], position[i]);
+    }
+}
+
+} // namespace
 
 // GpuMesh::destroy() is implemented in gl_renderer.cpp
 // We use the existing implementation from gl_renderer.hpp
@@ -253,7 +421,7 @@ public:
     // Model index to scene manager index mapping
     std::unordered_map<std::uint64_t, std::size_t> model_to_scene_idx;
 
-    // Built-in meshes (shared with SceneRenderer)
+    // Built-in meshes for ECS render pipeline
     std::unordered_map<std::string, GpuMesh> builtin_meshes;
 
     // Default shader
@@ -288,6 +456,353 @@ public:
         if (on_error_cb) {
             on_error_cb(path, error);
         }
+    }
+
+    Vertex make_vertex(float px, float py, float pz,
+                       float nx, float ny, float nz,
+                       float u, float v) const {
+        Vertex vertex;
+        vertex.position = {px, py, pz};
+        vertex.normal = {nx, ny, nz};
+        vertex.tangent = {1.0f, 0.0f, 0.0f, 1.0f};
+        vertex.uv0 = {u, v};
+        vertex.uv1 = {u, v};
+        vertex.color = {1.0f, 1.0f, 1.0f, 1.0f};
+        return vertex;
+    }
+
+    MeshData create_sphere_mesh_data(int segments, int rings) const {
+        MeshData mesh(PrimitiveTopology::TriangleList);
+        mesh.reserve_vertices(static_cast<std::size_t>((segments + 1) * (rings + 1)));
+        mesh.reserve_indices(static_cast<std::size_t>(segments * rings * 6));
+
+        for (int y = 0; y <= rings; ++y) {
+            for (int x = 0; x <= segments; ++x) {
+                float u = static_cast<float>(x) / static_cast<float>(segments);
+                float v = static_cast<float>(y) / static_cast<float>(rings);
+
+                float theta = u * 2.0f * std::numbers::pi_v<float>;
+                float phi = v * std::numbers::pi_v<float>;
+
+                float px = std::sin(phi) * std::cos(theta);
+                float py = std::cos(phi);
+                float pz = std::sin(phi) * std::sin(theta);
+
+                auto normal = vec3_normalize({px, py, pz});
+                mesh.vertices().push_back(make_vertex(
+                    px * 0.5f, py * 0.5f, pz * 0.5f,
+                    normal[0], normal[1], normal[2],
+                    u, 1.0f - v));
+            }
+        }
+
+        for (int y = 0; y < rings; ++y) {
+            for (int x = 0; x < segments; ++x) {
+                std::uint32_t a = static_cast<std::uint32_t>(y * (segments + 1) + x);
+                std::uint32_t b = a + 1;
+                std::uint32_t c = static_cast<std::uint32_t>((y + 1) * (segments + 1) + x);
+                std::uint32_t d = c + 1;
+
+                mesh.indices().push_back(a);
+                mesh.indices().push_back(c);
+                mesh.indices().push_back(b);
+
+                mesh.indices().push_back(b);
+                mesh.indices().push_back(c);
+                mesh.indices().push_back(d);
+            }
+        }
+
+        return mesh;
+    }
+
+    MeshData create_cube_mesh_data() const {
+        MeshData mesh(PrimitiveTopology::TriangleList);
+
+        const std::array<std::array<float, 3>, 6> normals = {{
+            {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, -1.0f},
+            {0.0f, 1.0f, 0.0f}, {0.0f, -1.0f, 0.0f},
+            {1.0f, 0.0f, 0.0f}, {-1.0f, 0.0f, 0.0f}
+        }};
+
+        const std::array<std::array<float, 3>, 8> corners = {{
+            {-0.5f, -0.5f, -0.5f}, {0.5f, -0.5f, -0.5f},
+            {0.5f, 0.5f, -0.5f}, {-0.5f, 0.5f, -0.5f},
+            {-0.5f, -0.5f, 0.5f}, {0.5f, -0.5f, 0.5f},
+            {0.5f, 0.5f, 0.5f}, {-0.5f, 0.5f, 0.5f}
+        }};
+
+        const int face_indices[6][4] = {
+            {4, 5, 6, 7},  // Front
+            {1, 0, 3, 2},  // Back
+            {3, 7, 6, 2},  // Top
+            {0, 4, 5, 1},  // Bottom
+            {5, 1, 2, 6},  // Right
+            {0, 4, 7, 3}   // Left
+        };
+
+        const std::array<std::array<float, 2>, 4> uvs = {{
+            {0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}
+        }};
+
+        for (int f = 0; f < 6; ++f) {
+            std::uint32_t base = static_cast<std::uint32_t>(mesh.vertices().size());
+            const auto& normal = normals[f];
+
+            for (int i = 0; i < 4; ++i) {
+                const auto& pos = corners[face_indices[f][i]];
+                const auto& uv = uvs[i];
+                mesh.vertices().push_back(make_vertex(
+                    pos[0], pos[1], pos[2],
+                    normal[0], normal[1], normal[2],
+                    uv[0], uv[1]));
+            }
+
+            mesh.indices().push_back(base + 0);
+            mesh.indices().push_back(base + 1);
+            mesh.indices().push_back(base + 2);
+            mesh.indices().push_back(base + 0);
+            mesh.indices().push_back(base + 2);
+            mesh.indices().push_back(base + 3);
+        }
+
+        return mesh;
+    }
+
+    MeshData create_torus_mesh_data(float inner_radius, float outer_radius, int segments, int rings) const {
+        MeshData mesh(PrimitiveTopology::TriangleList);
+        mesh.reserve_vertices(static_cast<std::size_t>((rings + 1) * (segments + 1)));
+        mesh.reserve_indices(static_cast<std::size_t>(rings * segments * 6));
+
+        float tube_radius = (outer_radius - inner_radius) * 0.5f;
+        float ring_radius = inner_radius + tube_radius;
+
+        for (int i = 0; i <= rings; ++i) {
+            float theta = static_cast<float>(i) / static_cast<float>(rings) * 2.0f * std::numbers::pi_v<float>;
+            float cos_theta = std::cos(theta);
+            float sin_theta = std::sin(theta);
+
+            for (int j = 0; j <= segments; ++j) {
+                float phi = static_cast<float>(j) / static_cast<float>(segments) * 2.0f * std::numbers::pi_v<float>;
+                float cos_phi = std::cos(phi);
+                float sin_phi = std::sin(phi);
+
+                float x = (ring_radius + tube_radius * cos_phi) * cos_theta;
+                float y = tube_radius * sin_phi;
+                float z = (ring_radius + tube_radius * cos_phi) * sin_theta;
+
+                float nx = cos_phi * cos_theta;
+                float ny = sin_phi;
+                float nz = cos_phi * sin_theta;
+                auto normal = vec3_normalize({nx, ny, nz});
+
+                mesh.vertices().push_back(make_vertex(
+                    x, y, z,
+                    normal[0], normal[1], normal[2],
+                    static_cast<float>(i) / static_cast<float>(rings),
+                    static_cast<float>(j) / static_cast<float>(segments)));
+            }
+        }
+
+        for (int i = 0; i < rings; ++i) {
+            for (int j = 0; j < segments; ++j) {
+                std::uint32_t a = static_cast<std::uint32_t>(i * (segments + 1) + j);
+                std::uint32_t b = a + 1;
+                std::uint32_t c = static_cast<std::uint32_t>((i + 1) * (segments + 1) + j);
+                std::uint32_t d = c + 1;
+
+                mesh.indices().push_back(a);
+                mesh.indices().push_back(c);
+                mesh.indices().push_back(b);
+
+                mesh.indices().push_back(b);
+                mesh.indices().push_back(c);
+                mesh.indices().push_back(d);
+            }
+        }
+
+        return mesh;
+    }
+
+    MeshData create_plane_mesh_data(float size) const {
+        MeshData mesh(PrimitiveTopology::TriangleList);
+        float h = size * 0.5f;
+
+        mesh.vertices().push_back(make_vertex(-h, 0.0f, -h, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f));
+        mesh.vertices().push_back(make_vertex(h, 0.0f, -h, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f));
+        mesh.vertices().push_back(make_vertex(h, 0.0f, h, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f));
+        mesh.vertices().push_back(make_vertex(-h, 0.0f, h, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f));
+
+        mesh.indices() = {0, 1, 2, 0, 2, 3};
+
+        return mesh;
+    }
+
+    MeshData create_cylinder_mesh_data(float radius, float height, int segments) const {
+        MeshData mesh(PrimitiveTopology::TriangleList);
+        float half_h = height * 0.5f;
+
+        for (int i = 0; i <= segments; ++i) {
+            float theta = static_cast<float>(i) / static_cast<float>(segments) * 2.0f * std::numbers::pi_v<float>;
+            float c = std::cos(theta);
+            float s = std::sin(theta);
+
+            mesh.vertices().push_back(make_vertex(c * radius, -half_h, s * radius, c, 0.0f, s,
+                                                 static_cast<float>(i) / static_cast<float>(segments), 0.0f));
+            mesh.vertices().push_back(make_vertex(c * radius, half_h, s * radius, c, 0.0f, s,
+                                                 static_cast<float>(i) / static_cast<float>(segments), 1.0f));
+        }
+
+        for (int i = 0; i < segments; ++i) {
+            std::uint32_t base = static_cast<std::uint32_t>(i * 2);
+            mesh.indices().push_back(base);
+            mesh.indices().push_back(base + 1);
+            mesh.indices().push_back(base + 3);
+            mesh.indices().push_back(base);
+            mesh.indices().push_back(base + 3);
+            mesh.indices().push_back(base + 2);
+        }
+
+        std::uint32_t top_center = static_cast<std::uint32_t>(mesh.vertices().size());
+        mesh.vertices().push_back(make_vertex(0.0f, half_h, 0.0f, 0.0f, 1.0f, 0.0f, 0.5f, 0.5f));
+
+        for (int i = 0; i <= segments; ++i) {
+            float theta = static_cast<float>(i) / static_cast<float>(segments) * 2.0f * std::numbers::pi_v<float>;
+            float c = std::cos(theta);
+            float s = std::sin(theta);
+            mesh.vertices().push_back(make_vertex(c * radius, half_h, s * radius, 0.0f, 1.0f, 0.0f,
+                                                 c * 0.5f + 0.5f, s * 0.5f + 0.5f));
+        }
+
+        for (int i = 0; i < segments; ++i) {
+            mesh.indices().push_back(top_center);
+            mesh.indices().push_back(top_center + 1 + static_cast<std::uint32_t>(i));
+            mesh.indices().push_back(top_center + 2 + static_cast<std::uint32_t>(i));
+        }
+
+        std::uint32_t bottom_center = static_cast<std::uint32_t>(mesh.vertices().size());
+        mesh.vertices().push_back(make_vertex(0.0f, -half_h, 0.0f, 0.0f, -1.0f, 0.0f, 0.5f, 0.5f));
+
+        for (int i = 0; i <= segments; ++i) {
+            float theta = static_cast<float>(i) / static_cast<float>(segments) * 2.0f * std::numbers::pi_v<float>;
+            float c = std::cos(theta);
+            float s = std::sin(theta);
+            mesh.vertices().push_back(make_vertex(c * radius, -half_h, s * radius, 0.0f, -1.0f, 0.0f,
+                                                 c * 0.5f + 0.5f, s * 0.5f + 0.5f));
+        }
+
+        for (int i = 0; i < segments; ++i) {
+            mesh.indices().push_back(bottom_center);
+            mesh.indices().push_back(bottom_center + 2 + static_cast<std::uint32_t>(i));
+            mesh.indices().push_back(bottom_center + 1 + static_cast<std::uint32_t>(i));
+        }
+
+        return mesh;
+    }
+
+    MeshData create_diamond_mesh_data() const {
+        MeshData mesh(PrimitiveTopology::TriangleList);
+
+        const std::array<float, 3> top = {0.0f, 0.5f, 0.0f};
+        const std::array<float, 3> bottom = {0.0f, -0.5f, 0.0f};
+        const std::array<std::array<float, 3>, 4> mid = {{
+            {0.5f, 0.0f, 0.0f},
+            {0.0f, 0.0f, 0.5f},
+            {-0.5f, 0.0f, 0.0f},
+            {0.0f, 0.0f, -0.5f}
+        }};
+
+        for (int i = 0; i < 4; ++i) {
+            int next = (i + 1) % 4;
+            auto normal = vec3_normalize(vec3_cross(vec3_sub(mid[next], top), vec3_sub(mid[i], top)));
+
+            mesh.vertices().push_back(make_vertex(top[0], top[1], top[2],
+                                                 normal[0], normal[1], normal[2], 0.5f, 1.0f));
+            mesh.vertices().push_back(make_vertex(mid[i][0], mid[i][1], mid[i][2],
+                                                 normal[0], normal[1], normal[2], 0.0f, 0.0f));
+            mesh.vertices().push_back(make_vertex(mid[next][0], mid[next][1], mid[next][2],
+                                                 normal[0], normal[1], normal[2], 1.0f, 0.0f));
+
+            std::uint32_t base = static_cast<std::uint32_t>(mesh.vertices().size()) - 3;
+            mesh.indices().push_back(base);
+            mesh.indices().push_back(base + 1);
+            mesh.indices().push_back(base + 2);
+        }
+
+        for (int i = 0; i < 4; ++i) {
+            int next = (i + 1) % 4;
+            auto normal = vec3_normalize(vec3_cross(vec3_sub(mid[i], bottom), vec3_sub(mid[next], bottom)));
+
+            mesh.vertices().push_back(make_vertex(bottom[0], bottom[1], bottom[2],
+                                                 normal[0], normal[1], normal[2], 0.5f, 0.0f));
+            mesh.vertices().push_back(make_vertex(mid[next][0], mid[next][1], mid[next][2],
+                                                 normal[0], normal[1], normal[2], 1.0f, 1.0f));
+            mesh.vertices().push_back(make_vertex(mid[i][0], mid[i][1], mid[i][2],
+                                                 normal[0], normal[1], normal[2], 0.0f, 1.0f));
+
+            std::uint32_t base = static_cast<std::uint32_t>(mesh.vertices().size()) - 3;
+            mesh.indices().push_back(base);
+            mesh.indices().push_back(base + 1);
+            mesh.indices().push_back(base + 2);
+        }
+
+        return mesh;
+    }
+
+    MeshData create_quad_mesh_data() const {
+        MeshData mesh(PrimitiveTopology::TriangleList);
+
+        mesh.vertices().push_back(make_vertex(-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f));
+        mesh.vertices().push_back(make_vertex(1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f));
+        mesh.vertices().push_back(make_vertex(1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f));
+        mesh.vertices().push_back(make_vertex(-1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f));
+
+        mesh.indices() = {0, 1, 2, 0, 2, 3};
+
+        return mesh;
+    }
+
+    GpuMesh upload_mesh_with_bounds(const MeshData& mesh_data) {
+        GpuMesh mesh = upload_mesh_data(mesh_data);
+        if (!mesh.is_valid()) {
+            return mesh;
+        }
+
+        std::array<float, 3> min_bounds = {
+            std::numeric_limits<float>::max(),
+            std::numeric_limits<float>::max(),
+            std::numeric_limits<float>::max()
+        };
+        std::array<float, 3> max_bounds = {
+            std::numeric_limits<float>::lowest(),
+            std::numeric_limits<float>::lowest(),
+            std::numeric_limits<float>::lowest()
+        };
+
+        for (const auto& vertex : mesh_data.vertices()) {
+            update_bounds(min_bounds, max_bounds, vertex.position);
+        }
+
+        mesh.min_bounds = min_bounds;
+        mesh.max_bounds = max_bounds;
+        return mesh;
+    }
+
+    void create_builtin_meshes() {
+        for (auto& [name, mesh] : builtin_meshes) {
+            mesh.destroy();
+        }
+        builtin_meshes.clear();
+
+        builtin_meshes.emplace("sphere", upload_mesh_with_bounds(create_sphere_mesh_data(32, 16)));
+        builtin_meshes.emplace("cube", upload_mesh_with_bounds(create_cube_mesh_data()));
+        builtin_meshes.emplace("torus", upload_mesh_with_bounds(create_torus_mesh_data(0.3f, 1.0f, 32, 16)));
+        builtin_meshes.emplace("plane", upload_mesh_with_bounds(create_plane_mesh_data(10.0f)));
+        builtin_meshes.emplace("cylinder", upload_mesh_with_bounds(create_cylinder_mesh_data(0.5f, 2.0f, 32)));
+        builtin_meshes.emplace("diamond", upload_mesh_with_bounds(create_diamond_mesh_data()));
+        builtin_meshes.emplace("quad", upload_mesh_with_bounds(create_quad_mesh_data()));
+
+        spdlog::info("Created {} built-in meshes", builtin_meshes.size());
     }
 
     // =========================================================================
@@ -534,7 +1049,22 @@ RenderAssetManager::RenderAssetManager(RenderAssetManager&&) noexcept = default;
 RenderAssetManager& RenderAssetManager::operator=(RenderAssetManager&&) noexcept = default;
 
 void_core::Result<void> RenderAssetManager::initialize(const std::filesystem::path& asset_root_path) {
-    m_impl->asset_root = asset_root_path;
+    {
+        std::lock_guard<std::mutex> lock(m_impl->mutex);
+        m_impl->asset_root = asset_root_path;
+        m_impl->create_builtin_meshes();
+    }
+
+    if (!m_impl->default_shader_handle.is_valid()) {
+        auto handle = load_shader_from_source("default_pbr", kDefaultPbrVertexShader, kDefaultPbrFragmentShader);
+        if (handle.is_valid()) {
+            std::lock_guard<std::mutex> lock(m_impl->mutex);
+            m_impl->default_shader_handle = handle;
+        } else {
+            spdlog::warn("RenderAssetManager failed to create default PBR shader");
+        }
+    }
+
     spdlog::info("RenderAssetManager initialized: {}", asset_root_path.string());
     return void_core::Ok();
 }

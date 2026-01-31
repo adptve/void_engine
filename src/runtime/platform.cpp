@@ -535,7 +535,7 @@ public:
         // Set viewport to match window
         glViewport(0, 0, static_cast<GLsizei>(width), static_cast<GLsizei>(height));
 
-        // Note: Screen clearing is handled by SceneRenderer::render()
+        // Note: Screen clearing is handled by ECS RenderSystem
     }
 
     void end_frame() override {
