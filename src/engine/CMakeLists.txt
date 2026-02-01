@@ -14,5 +14,5 @@ void_add_module(NAME void_engine
         void_event
         void_asset
         void_services
-        spdlog::spdlog
+        void_spdlog
 )

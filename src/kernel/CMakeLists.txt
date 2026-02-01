@@ -11,7 +11,7 @@ void_add_module(NAME void_kernel
         void_core
         void_services
         void_event
-        spdlog::spdlog
+        void_spdlog
 )
 
 if(VOID_HOT_RELOAD)

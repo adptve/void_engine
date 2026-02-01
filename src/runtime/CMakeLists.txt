@@ -12,7 +12,7 @@ void_add_module(NAME void_runtime
         void_ecs
         void_scene
         void_render
-        spdlog::spdlog
+        void_spdlog
         nlohmann_json::nlohmann_json
 )
 
@@ -48,7 +48,7 @@ void_add_module(NAME void_runtime_legacy
     DEPENDENCIES
         void_core
         void_event
-        spdlog::spdlog
+        void_spdlog
 )
 
 # Platform-specific libraries for legacy runtime

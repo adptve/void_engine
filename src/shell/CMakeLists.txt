@@ -11,7 +11,7 @@ void_add_module(NAME void_shell
     DEPENDENCIES
         void_core
         void_event
-        spdlog::spdlog
+        void_spdlog
 )
 
 # Platform-specific socket libraries

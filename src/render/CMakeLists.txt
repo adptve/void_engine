@@ -66,7 +66,7 @@ target_link_libraries(void_render
     PUBLIC
         glfw
         OpenGL::GL
-        glm::glm
+        void_glm
 )
 
 # Add stb for image loading (header-only)

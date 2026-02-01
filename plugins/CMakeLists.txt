@@ -50,7 +50,7 @@ function(add_void_plugin)
         void_package
         void_kernel
         nlohmann_json::nlohmann_json
-        spdlog::spdlog
+        void_spdlog
     )
 
     # Include directories

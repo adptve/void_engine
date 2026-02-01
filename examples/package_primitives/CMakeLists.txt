@@ -12,7 +12,7 @@ target_link_libraries(package_primitives
         void_package
         void_ecs
         void_core
-        spdlog::spdlog
+        void_spdlog
 )
 
 target_compile_features(package_primitives PRIVATE cxx_std_20)
