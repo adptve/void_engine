@@ -32,5 +32,8 @@ void_add_module(NAME void_package
     DEPENDENCIES
         void_core
         void_ecs
+        void_kernel
+        void_render
+        void_event
         nlohmann_json::nlohmann_json
 )

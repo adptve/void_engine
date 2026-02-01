@@ -134,7 +134,8 @@
       "Bash(curl:*)",
       "Bash(\"/c/Program Files/CMake/bin/cmake.exe\" --build build)",
       "Bash(cmake.exe --build:*)",
-      "Bash(del \"C:\\\\Users\\\\ShaneRobinson\\\\Documents\\\\GitHub\\\\void_engine\\\\examples\\\\package_demo\\\\packages\\\\plugins\\\\base.health.plugin.json\")"
+      "Bash(del \"C:\\\\Users\\\\ShaneRobinson\\\\Documents\\\\GitHub\\\\void_engine\\\\examples\\\\package_demo\\\\packages\\\\plugins\\\\base.health.plugin.json\")",
+      "Bash(C:/msys64/mingw64/lib/gcc/x86_64-w64-mingw32/15.2.0/cc1plus.exe:*)"
     ]
   }
 }

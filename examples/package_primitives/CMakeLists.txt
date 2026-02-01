@@ -10,6 +10,7 @@ target_link_libraries(package_primitives
     PRIVATE
         void_runtime
         void_package
+        void_plugin_api
         void_ecs
         void_core
         void_spdlog
