@@ -453,7 +453,11 @@ public:
     void push_raw_bytes(const void* src) {
         size_type offset = len_ * info_.size;
         data_.resize(offset + info_.size);
-        std::memcpy(data_.data() + offset, src, info_.size);
+        if (info_.move_fn) {
+            info_.move_fn(const_cast<void*>(src), data_.data() + offset);
+        } else {
+            std::memcpy(data_.data() + offset, src, info_.size);
+        }
         ++len_;
     }
 
