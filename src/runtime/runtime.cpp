@@ -1447,6 +1447,12 @@ void Runtime::register_engine_render_systems() {
             void_render::TransformSystem::run(world, dt);
         }, -100);  // Early in Update stage
 
+    // ModelLoaderSystem - Loads model assets referenced by ModelComponent
+    m_kernel->register_system(void_kernel::Stage::Update, "engine.ModelLoaderSystem",
+        [&world](float dt) {
+            void_render::ModelLoaderSystem::run(world, dt);
+        }, -50);
+
     // CameraSystem - Updates RenderContext with camera data
     m_kernel->register_system(void_kernel::Stage::RenderPrepare, "engine.CameraSystem",
         [&world](float dt) {
@@ -1480,7 +1486,7 @@ void Runtime::register_engine_render_systems() {
             }
         }, 0);
 
-    spdlog::info("  [render] Registered 6 engine render systems");
+    spdlog::info("  [render] Registered 7 engine render systems");
 }
 
 /// @brief Add RenderContext as ECS resource
