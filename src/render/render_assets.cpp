@@ -14,6 +14,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <fstream>
 #include <limits>
@@ -1116,6 +1117,17 @@ ModelHandle RenderAssetManager::load_model(const std::string& path, const ModelL
     auto it = m_impl->model_path_to_handle.find(path);
     if (it != m_impl->model_path_to_handle.end()) {
         return it->second;
+    }
+
+    auto extension = std::filesystem::path(path).extension().string();
+    std::string extension_lower = extension;
+    std::transform(extension_lower.begin(), extension_lower.end(), extension_lower.begin(),
+                   [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    if (extension_lower != ".gltf" && extension_lower != ".glb") {
+        m_impl->report_error(
+            path,
+            "Unsupported model format '" + extension + "'. Only .gltf/.glb are supported.");
+        return ModelHandle::invalid();
     }
 
     // Use existing GltfSceneManager
