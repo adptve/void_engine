@@ -11,6 +11,7 @@
 #include <utility>
 #include <map>
 #include <stdexcept>
+#include <type_traits>
 
 namespace void_core {
 
