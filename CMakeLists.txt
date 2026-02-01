@@ -33,6 +33,11 @@ option(VOID_BUILD_TESTS "Build unit tests" OFF)
 option(VOID_BUILD_EXAMPLES "Build examples" OFF)
 option(VOID_BUILD_BENCHMARKS "Build benchmarks" OFF)
 option(VOID_BUILD_TOOLS "Build tools" OFF)
+set(VOID_DEPENDENCIES_HEADER_ONLY_DEFAULT OFF)
+if(MINGW)
+    set(VOID_DEPENDENCIES_HEADER_ONLY_DEFAULT ON)
+endif()
+option(VOID_DEPENDENCIES_HEADER_ONLY "Prefer header-only variants of dependencies where available" ${VOID_DEPENDENCIES_HEADER_ONLY_DEFAULT})
 
 # ============================================================================
 # CMake Modules
@@ -52,6 +57,13 @@ FetchContent_Declare(spdlog
 )
 set(SPDLOG_FMT_EXTERNAL OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(spdlog)
+if(VOID_DEPENDENCIES_HEADER_ONLY)
+    set(VOID_SPDLOG_TARGET spdlog::spdlog_header_only)
+else()
+    set(VOID_SPDLOG_TARGET spdlog::spdlog)
+endif()
+add_library(void_spdlog INTERFACE)
+target_link_libraries(void_spdlog INTERFACE ${VOID_SPDLOG_TARGET})
 
 FetchContent_Declare(nlohmann_json
     GIT_REPOSITORY https://github.com/nlohmann/json.git
@@ -71,10 +83,21 @@ FetchContent_Declare(glm
     GIT_TAG        1.0.1
     GIT_SHALLOW    TRUE
 )
+if(VOID_DEPENDENCIES_HEADER_ONLY)
+    set(GLM_BUILD_LIBRARY OFF CACHE BOOL "" FORCE)
+    set(GLM_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+endif()
 FetchContent_MakeAvailable(glm)
+if(VOID_DEPENDENCIES_HEADER_ONLY)
+    set(VOID_GLM_TARGET glm::glm-header-only)
+else()
+    set(VOID_GLM_TARGET glm::glm)
+endif()
+add_library(void_glm INTERFACE)
+target_link_libraries(void_glm INTERFACE ${VOID_GLM_TARGET})
 
 include(Modules)
-void_add_header_module(NAME void_math DEPENDENCIES glm::glm)
+void_add_header_module(NAME void_math DEPENDENCIES void_glm)
 void_add_header_module(NAME void_structures)
 
 add_subdirectory(src/memory)
@@ -254,12 +277,12 @@ add_executable(void_engine_bootstrap src/main-bootstrap.cpp)
 
 # Phase 0 dependencies only
 target_link_libraries(void_engine PRIVATE
-    spdlog::spdlog
+    void_spdlog
     nlohmann_json::nlohmann_json
 )
 
 # Phase 1 dependencies
-target_link_libraries(void_engine PRIVATE glm::glm)
+target_link_libraries(void_engine PRIVATE void_glm)
 target_link_libraries(void_engine PRIVATE void_math)
 target_link_libraries(void_engine PRIVATE void_structures)
 target_link_libraries(void_engine PRIVATE void_memory)
@@ -304,9 +327,9 @@ target_include_directories(void_engine PRIVATE ${CMAKE_SOURCE_DIR}/include)
 
 # Bootstrap executable - validation harness with all phase dependencies
 target_link_libraries(void_engine_bootstrap PRIVATE
-    spdlog::spdlog
+    void_spdlog
     nlohmann_json::nlohmann_json
-    glm::glm
+    void_glm
     void_math
     void_structures
     void_memory

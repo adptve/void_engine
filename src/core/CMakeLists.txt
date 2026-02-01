@@ -13,5 +13,5 @@ void_add_module(NAME void_core
     DEPENDENCIES
         void_math
         void_memory
-        spdlog::spdlog
+        void_spdlog
 )

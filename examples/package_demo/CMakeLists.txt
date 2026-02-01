@@ -18,7 +18,7 @@ target_link_libraries(package_demo
         void_plugin_api
         void_ecs
         void_core
-        spdlog::spdlog
+        void_spdlog
 )
 
 target_compile_features(package_demo PRIVATE cxx_std_20)

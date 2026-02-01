@@ -15,5 +15,5 @@ void_add_module(NAME void_scene
         void_event
         void_render
         nlohmann_json::nlohmann_json
-        spdlog::spdlog
+        void_spdlog
 )

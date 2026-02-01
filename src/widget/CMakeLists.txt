@@ -21,7 +21,7 @@ target_include_directories(void_widget PUBLIC
 target_link_libraries(void_widget PUBLIC
     void_core
     void_event
-    spdlog::spdlog
+    void_spdlog
     nlohmann_json::nlohmann_json
 )
 
